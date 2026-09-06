@@ -10,16 +10,17 @@ write, code, or browse.
 
 ## Current vertical slice
 
-- An original, code-drawn 128 px Mochi in a transparent, undecorated window
-- Three quiet click reactions: blink, bounce, and squish
+- An original pixel-art Mochi in a transparent, undecorated 128 px window
+- A real pixel-art sprite atlas with idle, blink, walk, reaction, and sleep poses
+- Three quiet click reactions: bounce, squish, and excited
 - A right-click menu with **Sleep/Wake**, **Reset Position**, and **Quit Mochi**
 - Bounded layer-shell dragging with position restored between launches
 - A focused animation player and explicit state machine ready for more states
 - JSON configuration support at `~/.config/mochi/config.json`
 - Debug state-transition logging with `--debug`
 
-Automatic sleep, autonomous behavior, and walking are the next v0.1 increments;
-they are not in this first slice.
+Mochi also chooses occasional quiet idle actions, walks a bounded horizontal
+distance, and falls asleep after two minutes without interaction.
 
 ## Installation
 
@@ -47,23 +48,33 @@ Useful options:
 ```bash
 mochi --debug
 mochi --reset-position
+mochi --preview-animations
 ```
 
 ## How the first slice works
 
-`app.py` creates a borderless, non-focusable GTK window and applies transparent
-CSS. `buddy.py` draws only the character and shadow with Cairo, so the compact
-128 px window visually disappears around it.
+`app.py` creates a borderless, non-focusable GTK window and removes GTK's themed
+background with transparent CSS. `sprites.py` loads the 1448×1086 RGBA sheet
+once, crops the 25 explicit (non-grid) frame rectangles in memory, and keeps the
+resulting Cairo surfaces cached for Mochi's lifetime. Caching avoids decoding the PNG
+and allocating new crops on every frame.
 
-GTK calls the animation player every 16 ms. The player changes frames according
-to each animation's own frame duration, while the drawing widget only renders
-the current frame. A finished reaction moves the explicit state machine back to
-`IDLE`. This separation is what will let PNG frames replace the Cairo drawing.
+GTK calls the animation player every 16 ms. Elapsed time accumulates until the
+animation's frame duration is reached; only then does the player advance. The
+drawing widget renders the cached crop at exactly ½ scale with Cairo's `NEAREST`
+filter, keeping pixel edges crisp instead of interpolating them.
+
+Animation definitions contain a name, ordered frames, duration, loop flag, and
+next animation. The state machine describes behavior (`WALKING`, `SLEEPING`, and
+so on), while the player describes what is visible. A blink decision changes the
+behavior state to `BLINKING`; the completed `blink` animation then selects its
+declared `idle` successor.
 
 A small pointer movement begins a drag. With layer shell, the drag updates
-lower-left edge margins and clamps them to the monitor. Mochi saves those margins
-on release and restores them at launch. A release without movement is a click and
-randomly selects a blink, bounce, or squish.
+lower-left edge margins; on GNOME/XWayland it uses the compositor's native move.
+Both paths save the final position. Walking interpolates between a clamped start
+and target while the six-frame walk loop plays. A release without movement is a
+click and randomly selects bounce, squish, or excited.
 
 ## Wayland notes
 
@@ -84,8 +95,8 @@ Layer shell remains available on supporting Wayland compositors.
 If layer shell is unavailable, the GTK fallback still launches and:
 
 - user-initiated dragging works;
-- always-on-top placement is not guaranteed;
-- absolute position save/restore and programmatic walking cannot be reliable;
+- always-on-top placement is not guaranteed on native Wayland;
+- absolute position save/restore and walking need layer shell or XWayland;
 - the compositor may show the window in its normal placement policy at launch.
 
 On X11, layer shell reports unsupported and Mochi uses that fallback. X11
@@ -94,24 +105,36 @@ compositor-managed movement.
 
 ## Development
 
-The non-GUI tests use only the standard library:
+Run the test suite with:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
+To preview the sprite animations, launch the developer mode and left-click Mochi
+to advance through Idle, Blink, Walk, Bounce, Squish, Excited, Sleep, and Wake:
+
+```bash
+PYTHONPATH=src python3 -m mochi --preview-animations --debug
+```
+
+When adding new art later, edit `FRAME_RECTANGLES` and `ANIMATIONS` in
+`src/mochi/sprites.py`. Input, timing, and behavior code do not need to know where
+a pose lives in the sheet.
+
 Key modules are deliberately small:
 
 - `state.py`: named states and logged transitions
 - `animation.py`: frames and time-based playback
-- `behavior.py`: reaction definitions and choices
-- `buddy.py`: input and placeholder rendering
+- `sprites.py`: atlas rectangles, animation definitions, loading, and rendering
+- `behavior.py`: randomized behavior choices
+- `buddy.py`: input, behavior timing, and animation/state coordination
 - `app.py`: GTK application/window setup
 - `config.py`: robust JSON persistence
 
 ## Roadmap
 
-- **v0.1:** safe walking, sleep and idle behavior, and a right-click menu
+- **v0.1:** refine timing and clean source-art edge artifacts if desired
 - **v0.2:** richer sprites and moods, configurable idle timing, sound toggle
 - **v0.3:** screen-edge sitting and gentle window awareness
 - **v0.4:** character skins and accessories
