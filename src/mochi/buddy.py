@@ -26,14 +26,20 @@ from mochi.windowing import WindowPlacement
 class Buddy(Gtk.DrawingArea):
     SIZE = 128
     TICK_MS = 16
+    BLINK_INTERVAL_SECONDS = (4.0, 12.0)
+    DOUBLE_BLINK_CHANCE = 0.075
+    DOUBLE_BLINK_PAUSE_MS = (120, 250)
     PREVIEW_ANIMATIONS = (
+        "default",
         "idle",
         "blink",
+        "dragged",
         "walk",
         "bounce",
         "squish",
         "excited",
         "sleep",
+        "sleeping",
         "wake",
     )
 
@@ -57,16 +63,20 @@ class Buddy(Gtk.DrawingArea):
         self.player.play(ANIMATIONS["idle"])
         self._current_animation = "idle"
         self._pending_animation: str | None = None
+        self._idle_resume_position: tuple[int, int] | None = None
+        self._recent_click_reactions: tuple[str, ...] = ()
         self._last_interaction = time.monotonic()
-        self._walk_origin_x = 0
-        self._walk_target_x = 0
+        self._walk_origin = placement.position
+        self._walk_target = placement.position
         self._walk_elapsed_ms = 0
+        self._walk_duration_ms = 0
         self._press: tuple[float, float] | None = None
         self._drag_origin = placement.position
         self._drag_started = False
+        self._size = self._config.load_size()
 
-        self.set_content_width(self.SIZE)
-        self.set_content_height(self.SIZE)
+        self.set_content_width(self._size)
+        self.set_content_height(self._size)
         self.set_draw_func(self._draw)
 
         click = Gtk.GestureClick.new()
@@ -94,6 +104,7 @@ class Buddy(Gtk.DrawingArea):
         GLib.timeout_add(self.TICK_MS, self._tick)
         if not self._preview_mode:
             self._schedule_idle_action()
+            self._schedule_blink()
 
         self._context_menu = self._build_context_menu()
 
@@ -117,6 +128,33 @@ class Buddy(Gtk.DrawingArea):
         self._sleep_button.connect("clicked", self._toggle_sleep)
         menu_box.append(self._sleep_button)
 
+        options_label = Gtk.Label(label="Options")
+        options_label.set_xalign(0)
+        options_label.add_css_class("heading")
+        options_label.set_margin_top(4)
+        menu_box.append(options_label)
+
+        size_label = Gtk.Label(label="Mochi size")
+        size_label.set_xalign(0)
+        menu_box.append(size_label)
+
+        adjustment = Gtk.Adjustment(
+            value=self._size,
+            lower=ConfigStore.MIN_SIZE,
+            upper=ConfigStore.MAX_SIZE,
+            step_increment=64,
+            page_increment=64,
+        )
+        size_scale = Gtk.Scale(
+            orientation=Gtk.Orientation.HORIZONTAL, adjustment=adjustment
+        )
+        size_scale.set_digits(0)
+        size_scale.set_draw_value(True)
+        size_scale.set_value_pos(Gtk.PositionType.RIGHT)
+        size_scale.set_size_request(180, -1)
+        size_scale.connect("value-changed", self._change_size)
+        menu_box.append(size_scale)
+
         reset_button = Gtk.Button(label="Reset Position")
         reset_button.add_css_class("flat")
         reset_button.connect("clicked", self._reset_position)
@@ -128,6 +166,18 @@ class Buddy(Gtk.DrawingArea):
         menu_box.append(quit_button)
         popover.set_child(menu_box)
         return popover
+
+    def _change_size(self, scale: Gtk.Scale) -> None:
+        size = round(scale.get_value() / 64) * 64
+        if size == self._size:
+            return
+        self._size = size
+        self.set_content_width(size)
+        self.set_content_height(size)
+        self._window.set_default_size(size, size)
+        self._config.save_size(size)
+        self._placement.move_to(self._placement.position.x, self._placement.position.y)
+        self.queue_draw()
 
     def _show_context_menu(
         self, _gesture: Gtk.GestureClick, _presses: int, x: float, y: float
@@ -245,11 +295,17 @@ class Buddy(Gtk.DrawingArea):
         if self.state.current is MochiState.SLEEPING:
             self._wake_up(after="bounce")
             return
-        animation = choose_click_reaction()
+        if self.state.current is not MochiState.IDLE:
+            return
+        animation = choose_click_reaction(self._recent_click_reactions)
+        self._recent_click_reactions = (
+            *self._recent_click_reactions[-1:],
+            animation.name,
+        )
+        self._logger.debug("Click reaction selected: %s", animation.name)
         state = {
             "bounce": MochiState.BOUNCING,
             "squish": MochiState.SQUISHING,
-            "excited": MochiState.EXCITED,
         }[animation.name]
         self.state.transition_to(state)
         self._play_animation(animation.name)
@@ -260,18 +316,30 @@ class Buddy(Gtk.DrawingArea):
             self.PREVIEW_ANIMATIONS
         )
         name = self.PREVIEW_ANIMATIONS[self._preview_index]
-        self._logger.info("Preview animation: %s", name)
-        if name == "idle":
+        animation = ANIMATIONS[name]
+        self._logger.info(
+            "Preview animation: %s | frame 1/%d | duration=%dms | loop=%s | interruptible=%s",
+            name,
+            len(animation.frames),
+            animation.frames[0].duration_ms or animation.frame_duration_ms,
+            animation.looping,
+            name not in ("bounce", "squish", "sleep", "wake"),
+        )
+        if name in ("default", "idle"):
             self.state.transition_to(MochiState.IDLE)
-            self._play_animation("idle")
+            self._play_animation(name)
         elif name == "sleep":
             self._begin_sleep()
+        elif name == "sleeping":
+            self.state.transition_to(MochiState.SLEEPING)
+            self._play_animation("sleeping")
         elif name == "wake":
             self.state.transition_to(MochiState.WAKING)
             self._play_animation("wake")
         else:
             state = {
                 "blink": MochiState.BLINKING,
+                "dragged": MochiState.DRAGGED,
                 "walk": MochiState.WALKING,
                 "bounce": MochiState.BOUNCING,
                 "squish": MochiState.SQUISHING,
@@ -294,17 +362,39 @@ class Buddy(Gtk.DrawingArea):
         elif next_animation == "bounce":
             self.state.transition_to(MochiState.BOUNCING)
             self._play_animation("bounce", after="idle")
+        elif self._current_animation == "blink":
+            self._resume_idle()
         else:
             self.state.transition_to(MochiState.IDLE)
             self._play_animation("idle")
 
     def _play_animation(self, name: str, after: str | None = None) -> None:
         previous = self._current_animation
+        if name == "blink" and self.player.animation is ANIMATIONS["idle"]:
+            self._idle_resume_position = (
+                self.player.frame_index,
+                self.player.elapsed_ms,
+            )
+        elif name != "blink":
+            self._idle_resume_position = None
         self._current_animation = name
         animation = ANIMATIONS[name]
         self._pending_animation = after if after is not None else animation.next_state
         self.player.play(animation)
         self._logger.debug("Animation: %s -> %s", previous, name)
+        self.queue_draw()
+
+    def _resume_idle(self) -> None:
+        frame_index, elapsed_ms = self._idle_resume_position or (0, 0)
+        self._idle_resume_position = None
+        previous = self._current_animation
+        self._current_animation = "idle"
+        self.player.play(
+            ANIMATIONS["idle"],
+            frame_index=frame_index,
+            elapsed_ms=elapsed_ms,
+        )
+        self._logger.debug("Animation: %s -> idle (resumed)", previous)
         self.queue_draw()
 
     def _begin_sleep(self) -> None:
@@ -324,6 +414,45 @@ class Buddy(Gtk.DrawingArea):
     def _schedule_idle_action(self) -> None:
         GLib.timeout_add_seconds(random.randint(5, 15), self._choose_idle_action)
 
+    def _schedule_blink(self) -> None:
+        delay_seconds = random.uniform(*self.BLINK_INTERVAL_SECONDS)
+        self._logger.debug("Blink scheduled in: %.1f seconds", delay_seconds)
+        GLib.timeout_add(round(delay_seconds * 1_000), self._try_blink)
+
+    def _try_blink(self) -> bool:
+        try:
+            if (
+                self.state.current is MochiState.IDLE
+                and self.player.animation is ANIMATIONS["idle"]
+            ):
+                self._play_blink()
+            return GLib.SOURCE_REMOVE
+        finally:
+            self._schedule_blink()
+
+    def _play_blink(self) -> None:
+        self._idle_resume_position = (
+            self.player.frame_index,
+            self.player.elapsed_ms,
+        )
+        blink = ANIMATIONS["blink"]
+        if random.random() < self.DOUBLE_BLINK_CHANCE:
+            pause = replace(
+                blink.frames[-1],
+                duration_ms=random.randint(*self.DOUBLE_BLINK_PAUSE_MS),
+            )
+            blink = replace(
+                blink,
+                frames=blink.frames + (pause,) + blink.frames[1:],
+            )
+            self._logger.debug("Double blink triggered")
+        previous = self._current_animation
+        self._current_animation = "blink"
+        self._pending_animation = "idle"
+        self.player.play(blink)
+        self._logger.debug("Animation: %s -> blink", previous)
+        self.queue_draw()
+
     def _choose_idle_action(self) -> bool:
         try:
             if self.state.current is not MochiState.IDLE:
@@ -332,11 +461,8 @@ class Buddy(Gtk.DrawingArea):
                 self._begin_sleep()
                 return GLib.SOURCE_REMOVE
 
-            action = random.choice(("blink", "walk", "squish", None, None))
-            if action == "blink":
-                self.state.transition_to(MochiState.BLINKING)
-                self._play_animation("blink")
-            elif action == "squish":
+            action = random.choice(("walk", "squish", None, None))
+            if action == "squish":
                 self.state.transition_to(MochiState.SQUISHING)
                 self._play_animation("squish")
             elif action == "walk":
@@ -346,29 +472,39 @@ class Buddy(Gtk.DrawingArea):
             self._schedule_idle_action()
 
     def _start_walk(self) -> None:
-        distance = random.randint(20, 100)
-        direction = random.choice((-1, 1))
         origin = self._placement.sync_from_window()
-        target = self._placement.clamp_position(origin.x + direction * distance, origin.y)
-        if target.x == origin.x:
-            target = self._placement.clamp_position(origin.x - direction * distance, origin.y)
-        if target.x == origin.x:
+        distance = random.randint(60, 240)
+        angle = random.uniform(0, math.tau)
+        target = self._placement.clamp_position(
+            origin.x + round(math.cos(angle) * distance),
+            origin.y + round(math.sin(angle) * distance),
+        )
+        actual_distance = math.hypot(target.x - origin.x, target.y - origin.y)
+        if actual_distance < 8:
             return
-        self._walk_origin_x = origin.x
-        self._walk_target_x = target.x
+        self._walk_origin = origin
+        self._walk_target = target
         self._walk_elapsed_ms = 0
+        animation_cycle_ms = (
+            len(ANIMATIONS["walk"].frames)
+            * ANIMATIONS["walk"].frame_duration_ms
+        )
+        self._walk_duration_ms = max(animation_cycle_ms, round(actual_distance / 0.08))
         self.state.transition_to(MochiState.WALKING)
-        self._play_animation("walk")
+        self._play_animation("walk_left" if target.x < origin.x else "walk")
 
     def _advance_walk(self) -> None:
         self._walk_elapsed_ms += self.TICK_MS
-        duration_ms = len(ANIMATIONS["walk"].frames) * ANIMATIONS["walk"].frame_duration_ms
-        progress = min(1.0, self._walk_elapsed_ms / duration_ms)
+        progress = min(1.0, self._walk_elapsed_ms / self._walk_duration_ms)
         x = round(
-            self._walk_origin_x
-            + (self._walk_target_x - self._walk_origin_x) * progress
+            self._walk_origin.x
+            + (self._walk_target.x - self._walk_origin.x) * progress
         )
-        self._placement.move_to(x, self._placement.position.y)
+        y = round(
+            self._walk_origin.y
+            + (self._walk_target.y - self._walk_origin.y) * progress
+        )
+        self._placement.move_to(x, y)
         if progress >= 1.0:
             self._config.save_position(self._placement.position)
             self.state.transition_to(MochiState.IDLE)
@@ -385,5 +521,6 @@ class Buddy(Gtk.DrawingArea):
         self, _area: Gtk.DrawingArea, context: cairo.Context, width: int, height: int
     ) -> None:
         frame = self.player.frame
-        if frame is not None:
-            self.atlas.draw(context, frame, width, height)
+        if frame is None:
+            frame = ANIMATIONS["default"].frames[0]
+        self.atlas.draw(context, frame, width, height)

@@ -38,6 +38,43 @@ class AnimationPlayerTests(unittest.TestCase):
         self.assertIsNone(player.animation)
         self.assertIsNone(player.frame)
 
+    def test_animation_can_resume_at_a_saved_playhead(self) -> None:
+        animation = Animation(
+            "loop",
+            (AnimationFrame("first"), AnimationFrame("second")),
+            100,
+            True,
+        )
+        player = AnimationPlayer()
+
+        player.play(animation, frame_index=1, elapsed_ms=40)
+
+        self.assertEqual(player.frame, AnimationFrame("second"))
+        self.assertEqual(player.elapsed_ms, 40)
+        self.assertFalse(player.tick(59))
+        self.assertTrue(player.tick(1))
+        self.assertEqual(player.frame, AnimationFrame("first"))
+
+    def test_frame_duration_can_override_animation_default(self) -> None:
+        animation = Animation(
+            "varied",
+            (
+                AnimationFrame("brief", duration_ms=40),
+                AnimationFrame("held", duration_ms=180),
+                AnimationFrame("default"),
+            ),
+            100,
+        )
+        player = AnimationPlayer()
+        player.play(animation)
+
+        self.assertEqual(player.frame_duration_ms, 40)
+        self.assertTrue(player.tick(40))
+        self.assertEqual(player.frame_duration_ms, 180)
+        self.assertFalse(player.tick(179))
+        self.assertTrue(player.tick(1))
+        self.assertEqual(player.frame_duration_ms, 100)
+
 
 if __name__ == "__main__":
     unittest.main()

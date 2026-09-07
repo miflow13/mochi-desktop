@@ -42,7 +42,8 @@ class MochiApplication(Gtk.Application):
         window.set_decorated(False)
         window.set_resizable(False)
         window.set_focusable(False)
-        window.set_default_size(Buddy.SIZE, Buddy.SIZE)
+        size = self.config.load_size()
+        window.set_default_size(size, size)
 
         placement = WindowPlacement(window, self.config.load_position())
         window.connect("map", self._configure_mapped_window, placement)

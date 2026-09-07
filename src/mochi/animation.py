@@ -8,10 +8,11 @@ from typing import Callable
 
 @dataclass(frozen=True)
 class AnimationFrame:
-    """One cached atlas sprite plus an optional whole-frame movement offset."""
+    """One cached manifest frame plus an optional whole-frame movement offset."""
 
     sprite: str
     vertical_offset: float = 0.0
+    duration_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -38,12 +39,30 @@ class AnimationPlayer:
             return None
         return self.animation.frames[self.frame_index]
 
-    def play(self, animation: Animation) -> None:
+    @property
+    def elapsed_ms(self) -> int:
+        """Elapsed time within the current frame, useful when resuming a loop."""
+        return self._elapsed_ms
+
+    @property
+    def frame_duration_ms(self) -> int:
+        if self.animation is None:
+            return 0
+        return self.frame.duration_ms or self.animation.frame_duration_ms
+
+    def play(
+        self,
+        animation: Animation,
+        frame_index: int = 0,
+        elapsed_ms: int = 0,
+    ) -> None:
         if not animation.frames:
             raise ValueError("An animation needs at least one frame")
+        if not 0 <= frame_index < len(animation.frames):
+            raise ValueError("Frame index is outside the animation")
         self.animation = animation
-        self.frame_index = 0
-        self._elapsed_ms = 0
+        self.frame_index = frame_index
+        self._elapsed_ms = elapsed_ms % self.frame_duration_ms
 
     def stop(self) -> None:
         self.animation = None
@@ -58,8 +77,8 @@ class AnimationPlayer:
 
         self._elapsed_ms += elapsed_ms
         changed = False
-        while self._elapsed_ms >= animation.frame_duration_ms:
-            self._elapsed_ms -= animation.frame_duration_ms
+        while self._elapsed_ms >= self.frame_duration_ms:
+            self._elapsed_ms -= self.frame_duration_ms
             if self.frame_index + 1 < len(animation.frames):
                 self.frame_index += 1
                 changed = True

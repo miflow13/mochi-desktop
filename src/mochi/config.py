@@ -16,6 +16,10 @@ class Position:
 
 
 class ConfigStore:
+    DEFAULT_SIZE = 128
+    MIN_SIZE = 64
+    MAX_SIZE = 256
+
     def __init__(self, path: Path | None = None) -> None:
         config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
         self.path = path or config_home / "mochi" / "config.json"
@@ -23,7 +27,9 @@ class ConfigStore:
 
     def load_position(self) -> Position | None:
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            data = self._load()
+            if "x" not in data and "y" not in data:
+                return None
             return Position(x=int(data["x"]), y=int(data["y"]))
         except FileNotFoundError:
             return None
@@ -32,18 +38,56 @@ class ConfigStore:
             return None
 
     def save_position(self, position: Position) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.path.with_suffix(".tmp")
-        temporary_path.write_text(
-            json.dumps({"x": position.x, "y": position.y}, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        temporary_path.replace(self.path)
+        data = self._load_or_empty()
+        data.update({"x": position.x, "y": position.y})
+        self._save(data)
         self._logger.debug("Position saved: %d, %d", position.x, position.y)
+
+    def load_size(self) -> int:
+        try:
+            size = int(self._load()["size"])
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return self.DEFAULT_SIZE
+        return max(self.MIN_SIZE, min(size, self.MAX_SIZE))
+
+    def save_size(self, size: int) -> None:
+        size = max(self.MIN_SIZE, min(round(size), self.MAX_SIZE))
+        data = self._load_or_empty()
+        data["size"] = size
+        self._save(data)
+        self._logger.debug("Size saved: %d", size)
 
     def reset_position(self) -> None:
         try:
-            self.path.unlink()
+            data = self._load()
+            data.pop("x", None)
+            data.pop("y", None)
+            if data:
+                self._save(data)
+            else:
+                self.path.unlink()
             self._logger.info("Saved Mochi position reset")
         except FileNotFoundError:
             pass
+        except (TypeError, ValueError, json.JSONDecodeError):
+            self.path.unlink(missing_ok=True)
+
+    def _load(self) -> dict[str, object]:
+        data = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise TypeError("configuration root must be an object")
+        return data
+
+    def _load_or_empty(self) -> dict[str, object]:
+        try:
+            return self._load()
+        except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError):
+            return {}
+
+    def _save(self, data: dict[str, object]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = self.path.with_suffix(".tmp")
+        temporary_path.write_text(
+            json.dumps(data, indent=2) + "\n", encoding="utf-8"
+        )
+        temporary_path.replace(self.path)
