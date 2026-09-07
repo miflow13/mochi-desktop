@@ -1,10 +1,33 @@
 # Mochi 🌱
-
 > Private development repository.
+<p align="center">
+  <img
+    width="220"
+    height="220"
+    alt="Mochi squish animation"
+    src="https://github.com/user-attachments/assets/e1f84167-e764-4fd3-842e-298931eecabd"
+  />
+  &nbsp;&nbsp;
+  <img
+    width="220"
+    height="220"
+    alt="Mochi excited animation"
+    src="https://github.com/user-attachments/assets/bcb10dbd-b4d6-4de0-a6eb-000125ccebe4"
+  />
+  &nbsp;&nbsp;
+  <img
+    width="220"
+    height="220"
+    alt="Mochi wake animation"
+    src="https://github.com/user-attachments/assets/843a02ed-8ad6-4221-9a47-3a892d141d19"
+  />
+</p>
+
+
 
 Mochi is a small Linux desktop companion currently under active development.
-<img width="512" height="512" alt="squish" src="https://github.com/user-attachments/assets/e1f84167-e764-4fd3-842e-298931eecabd" />
 
+<br clear="both">
 
 The project is still experimental and is **not ready for public release yet**. Features, artwork, behavior, architecture, and documentation may change significantly while development continues.
 
