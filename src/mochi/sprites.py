@@ -32,7 +32,7 @@ ANIMATIONS["blink"] = replace(
         for frame, duration in zip(blink_frames, blink_durations, strict=True)
     ),
 )
-bounce_durations = (70, 100, 90, 120, 130, 110, 80)
+bounce_durations = (50, 75, 85, 95, 135, 145, 110)
 ANIMATIONS["bounce"] = replace(
     ANIMATIONS["bounce"],
     frames=tuple(
@@ -42,7 +42,43 @@ ANIMATIONS["bounce"] = replace(
         )
     ),
 )
-squish_durations = (70, 85, 125, 95, 115, 80)
+walk_bounce_durations = (80, 110, 125, 135, 180, 170, 130)
+walk_bounce = replace(
+    ANIMATIONS["bounce"],
+    name="walk",
+    frames=tuple(
+        replace(frame, duration_ms=duration)
+        for frame, duration in zip(
+            ANIMATIONS["bounce"].frames, walk_bounce_durations, strict=True
+        )
+    ),
+    looping=True,
+    next_state=None,
+)
+ANIMATIONS["walk"] = walk_bounce
+ANIMATIONS["walk_left"] = replace(walk_bounce, name="walk_left")
+sleep_durations = (90, 100, 120, 140, 160, 180)
+ANIMATIONS["sleep"] = replace(
+    ANIMATIONS["sleep"],
+    frames=tuple(
+        replace(frame, duration_ms=duration)
+        for frame, duration in zip(
+            ANIMATIONS["sleep"].frames, sleep_durations, strict=True
+        )
+    ),
+    next_state="sleeping",
+)
+wake_durations = (70, 80, 90, 100, 100, 90)
+ANIMATIONS["wake"] = replace(
+    ANIMATIONS["wake"],
+    frames=tuple(
+        replace(frame, duration_ms=duration)
+        for frame, duration in zip(
+            ANIMATIONS["wake"].frames, wake_durations, strict=True
+        )
+    ),
+)
+squish_durations = (45, 70, 105, 120, 145, 125)
 ANIMATIONS["squish"] = replace(
     ANIMATIONS["squish"],
     frames=tuple(
@@ -52,7 +88,6 @@ ANIMATIONS["squish"] = replace(
         )
     ),
 )
-ANIMATIONS["sleep"] = replace(ANIMATIONS["sleep"], next_state="sleeping")
 ANIMATIONS["excited"] = replace(ANIMATIONS["bounce"], name="excited")
 
 
@@ -71,7 +106,7 @@ class SpriteAtlas:
     ) -> None:
         sprite = self.frames[frame.sprite]
         scale = min(width / 128, height / 128)
-        x = round((width - 128 * scale) / 2)
+        x = round((width - 128 * scale) / 2 + frame.horizontal_offset * scale)
         y = round((height - 128 * scale) / 2 + frame.vertical_offset * height / 128)
         context.save()
         context.translate(x, y)

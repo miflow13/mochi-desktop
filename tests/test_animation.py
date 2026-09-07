@@ -1,15 +1,22 @@
 import unittest
 
 from mochi.animation import Animation, AnimationFrame, AnimationPlayer
+from mochi.state import MochiState
 
 
 class AnimationPlayerTests(unittest.TestCase):
     def test_non_looping_animation_finishes(self) -> None:
         finished: list[bool] = []
+        state = [MochiState.BOUNCING]
         animation = Animation(
             "test", (AnimationFrame("first"), AnimationFrame("second")), 100
         )
-        player = AnimationPlayer(lambda: finished.append(True))
+
+        def finish_reaction(completed: Animation) -> None:
+            finished.append(completed is animation)
+            state[0] = MochiState.IDLE
+
+        player = AnimationPlayer(finish_reaction)
 
         player.play(animation)
         self.assertFalse(player.tick(99))
@@ -17,6 +24,7 @@ class AnimationPlayerTests(unittest.TestCase):
         self.assertEqual(player.frame, AnimationFrame("second"))
         self.assertTrue(player.tick(100))
         self.assertEqual(finished, [True])
+        self.assertEqual(state[0], MochiState.IDLE)
 
     def test_looping_animation_wraps(self) -> None:
         animation = Animation(
@@ -74,6 +82,25 @@ class AnimationPlayerTests(unittest.TestCase):
         self.assertFalse(player.tick(179))
         self.assertTrue(player.tick(1))
         self.assertEqual(player.frame_duration_ms, 100)
+
+    def test_seek_progress_controls_looping_animation(self) -> None:
+        animation = Animation(
+            "walk",
+            (
+                AnimationFrame("first", duration_ms=100),
+                AnimationFrame("second", duration_ms=200),
+            ),
+            100,
+            looping=True,
+        )
+        player = AnimationPlayer()
+        player.play(animation)
+
+        self.assertTrue(player.seek_progress(0.5))
+        self.assertEqual(player.frame, AnimationFrame("second", duration_ms=200))
+        self.assertEqual(player.elapsed_ms, 50)
+        self.assertTrue(player.seek_progress(1.0))
+        self.assertEqual(player.frame, AnimationFrame("first", duration_ms=100))
 
 
 if __name__ == "__main__":

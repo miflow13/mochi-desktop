@@ -15,32 +15,46 @@ TARGETS = (
 )
 
 
-def _dangling_frame(horizontal_offset: int, foot_offset: int) -> Image.Image:
+def _dangling_frame(horizontal_offset: int, leg_sway: int, body_lean: int) -> Image.Image:
     source = Image.open(SOURCE).convert("RGBA")
-    sprite = source.crop((11, 26, 116, 128))
-    # A narrow, slightly longer silhouette reads as gravity without making Mochi
-    # look stretched or replacing the established face and palette.
-    sprite = sprite.resize((97, 98), Image.Resampling.NEAREST)
+    sprite = source.crop((11, 26, 116, 128)).resize(
+        (100, 96), Image.Resampling.NEAREST
+    )
     frame = Image.new("RGBA", (128, 128))
     x = (128 - sprite.width) // 2 + horizontal_offset
-    frame.alpha_composite(sprite, (x, 21))
+    y = 23
+
+    # Keep the lower body anchored while shifting the upper bands opposite
+    # travel. The stepped bands preserve crisp pixels while reading as squash.
+    bands = (
+        (0, 0, sprite.width, 34, body_lean),
+        (0, 30, sprite.width, 68, body_lean // 2),
+        (0, 64, sprite.width, sprite.height, 0),
+    )
+    for left, top, right, bottom, offset in bands:
+        frame.alpha_composite(
+            sprite.crop((left, top, right, bottom)),
+            (x + offset, y + top),
+        )
 
     draw = ImageDraw.Draw(frame)
-    leg_color = source.getpixel((64, 121))
-    shadow_color = source.getpixel((64, 126))
-    left = 47 + horizontal_offset + foot_offset
-    right = 75 + horizontal_offset - foot_offset
+    leg_outline = (1, 50, 5, 255)
+    leg_color = (55, 202, 92, 255)
+    leg_highlight = (112, 232, 124, 255)
+    left = 47 + horizontal_offset + leg_sway
+    right = 75 + horizontal_offset + leg_sway
     for leg_x in (left, right):
-        draw.rectangle((leg_x, 116, leg_x + 6, 126), fill=leg_color)
-        draw.rectangle((leg_x + 1, 126, leg_x + 5, 127), fill=shadow_color)
+        draw.rectangle((leg_x - 1, 117, leg_x + 7, 127), fill=leg_outline)
+        draw.rectangle((leg_x, 118, leg_x + 6, 125), fill=leg_color)
+        draw.rectangle((leg_x + 1, 118, leg_x + 3, 120), fill=leg_highlight)
     return frame
 
 
 def build_frames() -> tuple[Image.Image, ...]:
     return (
-        _dangling_frame(-1, -1),
-        _dangling_frame(0, 0),
-        _dangling_frame(1, 1),
+        _dangling_frame(-2, -5, -8),
+        _dangling_frame(0, 0, 0),
+        _dangling_frame(2, 5, 8),
     )
 
 

@@ -42,6 +42,14 @@ class SpriteDefinitionsTests(unittest.TestCase):
     def test_sleep_transitions_to_sleeping(self) -> None:
         self.assertEqual(ANIMATIONS["sleep"].next_state, "sleeping")
         self.assertTrue(ANIMATIONS["sleeping"].looping)
+        self.assertEqual(
+            tuple(frame.duration_ms for frame in ANIMATIONS["sleep"].frames),
+            (90, 100, 120, 140, 160, 180),
+        )
+        self.assertEqual(
+            tuple(frame.duration_ms for frame in ANIMATIONS["wake"].frames),
+            (70, 80, 90, 100, 100, 90),
+        )
 
     def test_idle_breathing_uses_slow_per_frame_timing(self) -> None:
         idle = ANIMATIONS["idle"]
@@ -64,18 +72,33 @@ class SpriteDefinitionsTests(unittest.TestCase):
 
     def test_drag_uses_a_subtle_manifest_dangling_loop(self) -> None:
         dragged = ANIMATIONS["dragged"]
-        self.assertEqual(len(dragged.frames), 3)
-        self.assertEqual(dragged.frame_duration_ms, 500)
+        self.assertEqual(len(dragged.frames), 10)
+        self.assertEqual(dragged.frame_duration_ms, 167)
         self.assertTrue(dragged.looping)
+        surfaces = SpriteAtlas().frames
+        drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
+        self.assertGreaterEqual(len(set(drag_pixels)), 9)
+
+    def test_walk_uses_a_slow_looping_bounce_prototype(self) -> None:
+        self.assertTrue(ANIMATIONS["walk"].looping)
+        self.assertTrue(ANIMATIONS["walk_left"].looping)
+        self.assertEqual(
+            tuple(frame.sprite for frame in ANIMATIONS["walk"].frames),
+            tuple(frame.sprite for frame in ANIMATIONS["bounce"].frames),
+        )
+        self.assertEqual(
+            tuple(frame.duration_ms for frame in ANIMATIONS["walk"].frames),
+            (80, 110, 125, 135, 180, 170, 130),
+        )
 
     def test_click_reactions_use_tactile_per_frame_timing(self) -> None:
         self.assertEqual(
             tuple(frame.duration_ms for frame in ANIMATIONS["bounce"].frames),
-            (70, 100, 90, 120, 130, 110, 80),
+            (50, 75, 85, 95, 135, 145, 110),
         )
         self.assertEqual(
             tuple(frame.duration_ms for frame in ANIMATIONS["squish"].frames),
-            (70, 85, 125, 95, 115, 80),
+            (45, 70, 105, 120, 145, 125),
         )
         self.assertFalse(ANIMATIONS["bounce"].looping)
         self.assertFalse(ANIMATIONS["squish"].looping)

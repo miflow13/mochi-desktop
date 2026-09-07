@@ -13,6 +13,7 @@ class AnimationFrame:
     sprite: str
     vertical_offset: float = 0.0
     duration_ms: int | None = None
+    horizontal_offset: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,7 @@ class Animation:
 class AnimationPlayer:
     """Advances frames; GTK merely supplies the regular timer tick."""
 
-    def __init__(self, on_finished: Callable[[], None] | None = None) -> None:
+    def __init__(self, on_finished: Callable[[Animation], None] | None = None) -> None:
         self.animation: Animation | None = None
         self.frame_index = 0
         self._elapsed_ms = 0
@@ -69,6 +70,37 @@ class AnimationPlayer:
         self.frame_index = 0
         self._elapsed_ms = 0
 
+    def seek_progress(self, progress: float) -> bool:
+        """Seek a looping animation to a normalized position and report frame changes."""
+        animation = self.animation
+        if animation is None or not animation.frames:
+            return False
+
+        progress = max(0.0, min(progress, 1.0))
+        if animation.looping:
+            progress %= 1.0
+        total_duration = sum(
+            frame.duration_ms or animation.frame_duration_ms
+            for frame in animation.frames
+        )
+        elapsed = progress * total_duration
+        frame_index = len(animation.frames) - 1
+        frame_elapsed = 0
+        for index, frame in enumerate(animation.frames):
+            duration = frame.duration_ms or animation.frame_duration_ms
+            if elapsed < duration or index == len(animation.frames) - 1:
+                frame_index = index
+                frame_elapsed = round(elapsed)
+                break
+            elapsed -= duration
+
+        changed = (
+            frame_index != self.frame_index or frame_elapsed != self._elapsed_ms
+        )
+        self.frame_index = frame_index
+        self._elapsed_ms = frame_elapsed
+        return changed
+
     def tick(self, elapsed_ms: int) -> bool:
         """Advance by elapsed time and return True when a frame changed."""
         animation = self.animation
@@ -88,6 +120,6 @@ class AnimationPlayer:
             else:
                 self.animation = None
                 if self._on_finished is not None:
-                    self._on_finished()
+                    self._on_finished(animation)
                 return True
         return changed
