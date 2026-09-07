@@ -11,6 +11,7 @@ from gi.repository import Gio, Gtk  # noqa: E402
 
 from mochi.buddy import Buddy
 from mochi.config import ConfigStore
+from mochi.sound import SoundManager
 from mochi.windowing import WindowPlacement
 from mochi.x11 import request_keep_above
 
@@ -30,6 +31,10 @@ class MochiApplication(Gtk.Application):
         self.config = config
         self.preview_animations = preview_animations
         self._logger = logging.getLogger(__name__)
+        self.sound = SoundManager(
+            volume=config.load_volume(),
+            muted=config.load_muted(),
+        )
 
     def do_activate(self) -> None:
         existing = self.get_active_window()
@@ -52,6 +57,7 @@ class MochiApplication(Gtk.Application):
                 window,
                 placement,
                 self.config,
+                self.sound,
                 preview_mode=self.preview_animations,
             )
         )

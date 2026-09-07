@@ -19,6 +19,7 @@ class ConfigStore:
     DEFAULT_SIZE = 128
     MIN_SIZE = 64
     MAX_SIZE = 256
+    DEFAULT_VOLUME = 0.6
 
     def __init__(self, path: Path | None = None) -> None:
         config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
@@ -56,6 +57,33 @@ class ConfigStore:
         data["size"] = size
         self._save(data)
         self._logger.debug("Size saved: %d", size)
+
+    def load_volume(self) -> float:
+        try:
+            volume = float(self._load()["volume"])
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return self.DEFAULT_VOLUME
+        return max(0.0, min(volume, 1.0))
+
+    def save_volume(self, volume: float) -> None:
+        volume = max(0.0, min(float(volume), 1.0))
+        data = self._load_or_empty()
+        data["volume"] = volume
+        self._save(data)
+        self._logger.debug("Volume saved: %.0f%%", volume * 100)
+
+    def load_muted(self) -> bool:
+        try:
+            muted = self._load()["muted"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return muted if isinstance(muted, bool) else False
+
+    def save_muted(self, muted: bool) -> None:
+        data = self._load_or_empty()
+        data["muted"] = bool(muted)
+        self._save(data)
+        self._logger.debug("Audio muted: %s", bool(muted))
 
     def reset_position(self) -> None:
         try:

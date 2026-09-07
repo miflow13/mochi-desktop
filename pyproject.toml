@@ -22,6 +22,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.data-files]
+"share/mochi/audio" = ["assets/audio/*"]
 "share/mochi" = ["assets/mochi/manifest.json"]
 "share/mochi/master" = ["assets/mochi/master/*.png"]
 "share/mochi/idle" = ["assets/mochi/idle/*.png"]

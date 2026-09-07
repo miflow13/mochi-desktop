@@ -37,6 +37,16 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertIsNone(store.load_position())
             self.assertEqual(store.load_size(), 160)
 
+    def test_audio_settings_round_trip_and_clamp(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertEqual(store.load_volume(), ConfigStore.DEFAULT_VOLUME)
+            self.assertFalse(store.load_muted())
+            store.save_volume(2.0)
+            store.save_muted(True)
+            self.assertEqual(store.load_volume(), 1.0)
+            self.assertTrue(store.load_muted())
+
 
 if __name__ == "__main__":
     unittest.main()

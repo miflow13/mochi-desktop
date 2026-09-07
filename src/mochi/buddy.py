@@ -19,6 +19,7 @@ from mochi.animation import AnimationPlayer
 from mochi.behavior import choose_click_reaction
 from mochi.config import ConfigStore
 from mochi.sprites import ANIMATIONS, SpriteAtlas
+from mochi.sound import SoundEvent, SoundManager
 from mochi.state import MochiState, StateMachine
 from mochi.windowing import WindowPlacement
 
@@ -48,12 +49,14 @@ class Buddy(Gtk.DrawingArea):
         window: Gtk.Window,
         placement: WindowPlacement,
         config: ConfigStore,
+        sound: SoundManager,
         preview_mode: bool = False,
     ) -> None:
         super().__init__()
         self._window = window
         self._placement = placement
         self._config = config
+        self._sound = sound
         self._preview_mode = preview_mode
         self._preview_index = 0
         self._logger = logging.getLogger(__name__)
@@ -155,6 +158,22 @@ class Buddy(Gtk.DrawingArea):
         size_scale.connect("value-changed", self._change_size)
         menu_box.append(size_scale)
 
+        mute_toggle = Gtk.CheckButton(label="Mute sounds")
+        mute_toggle.set_active(self._sound.muted)
+        mute_toggle.connect("toggled", self._change_muted)
+        menu_box.append(mute_toggle)
+
+        volume_label = Gtk.Label(label="Sound volume")
+        volume_label.set_xalign(0)
+        menu_box.append(volume_label)
+
+        volume_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
+        volume_scale.set_value(self._sound.volume * 100)
+        volume_scale.set_draw_value(True)
+        volume_scale.set_value_pos(Gtk.PositionType.RIGHT)
+        volume_scale.connect("value-changed", self._change_volume)
+        menu_box.append(volume_scale)
+
         reset_button = Gtk.Button(label="Reset Position")
         reset_button.add_css_class("flat")
         reset_button.connect("clicked", self._reset_position)
@@ -178,6 +197,16 @@ class Buddy(Gtk.DrawingArea):
         self._config.save_size(size)
         self._placement.move_to(self._placement.position.x, self._placement.position.y)
         self.queue_draw()
+
+    def _change_volume(self, scale: Gtk.Scale) -> None:
+        volume = scale.get_value() / 100
+        self._sound.set_volume(volume)
+        self._config.save_volume(volume)
+
+    def _change_muted(self, toggle: Gtk.CheckButton) -> None:
+        muted = toggle.get_active()
+        self._sound.set_muted(muted)
+        self._config.save_muted(muted)
 
     def _show_context_menu(
         self, _gesture: Gtk.GestureClick, _presses: int, x: float, y: float
@@ -230,9 +259,11 @@ class Buddy(Gtk.DrawingArea):
             return
         if math.hypot(offset_x, offset_y) < 6:
             return
-        self._drag_started = True
-        self.state.transition_to(MochiState.DRAGGED)
-        self._play_animation("dragged")
+        if not self._drag_started:
+            self._drag_started = True
+            self.state.transition_to(MochiState.DRAGGED)
+            self._play_animation("dragged")
+            self._sound.play(SoundEvent.PICKUP)
         # Y is stored as distance from the bottom edge, hence the subtraction.
         self._placement.move_to(
             self._drag_origin.x + round(offset_x),
@@ -247,6 +278,7 @@ class Buddy(Gtk.DrawingArea):
         if not self._placement.layer_shell_enabled:
             self._placement.sync_from_window()
         self._config.save_position(self._placement.position)
+        self._sound.play(SoundEvent.DROP)
         self.state.transition_to(MochiState.IDLE)
         self._play_animation("idle")
 
@@ -266,6 +298,7 @@ class Buddy(Gtk.DrawingArea):
             self._drag_started = True
             self.state.transition_to(MochiState.DRAGGED)
             self._play_animation("dragged")
+            self._sound.play(SoundEvent.PICKUP)
             # Wayland forbids applications from directly moving top-level windows.
             # begin_move asks the compositor to perform the user's active drag.
             surface.begin_move(
@@ -298,6 +331,7 @@ class Buddy(Gtk.DrawingArea):
         if self.state.current is not MochiState.IDLE:
             return
         animation = choose_click_reaction(self._recent_click_reactions)
+        self._sound.play(SoundEvent.PET)
         self._recent_click_reactions = (
             *self._recent_click_reactions[-1:],
             animation.name,
