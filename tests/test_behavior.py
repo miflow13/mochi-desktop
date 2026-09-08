@@ -1,4 +1,3 @@
-import random
 import unittest
 
 from mochi.behavior import (
@@ -53,7 +52,7 @@ class ClickReactionTests(unittest.TestCase):
 
     def test_walk_direction_matches_horizontal_motion(self) -> None:
         self.assertEqual(choose_walk_animation((100, 20), (40, 25)), "walk_left")
-        self.assertEqual(choose_walk_animation((40, 20), (100, 25)), "walk")
+        self.assertEqual(choose_walk_animation((40, 20), (100, 25)), "walk_right")
 
     def test_walk_motion_uses_distance_and_smooth_endpoints(self) -> None:
         motion = WalkMotion((0, 0), (144, 0), cycle_duration_ms=1_000)
@@ -68,25 +67,8 @@ class ClickReactionTests(unittest.TestCase):
         self.assertGreater(motion.position_at(1_900)[0], 134)
         self.assertEqual(motion.animation_progress(2_000), 0.0)
 
-    def test_default_weight_is_about_fifty_five_percent_bounce(self) -> None:
-        rng = random.Random(42)
-        results = [choose_click_reaction(rng=rng).name for _ in range(10_000)]
-        self.assertAlmostEqual(results.count("bounce") / len(results), 0.55, delta=0.02)
-        self.assertEqual(set(results), {"bounce", "squish"})
-
-    def test_two_repeats_favor_the_other_reaction(self) -> None:
-        bounce_rng = random.Random(42)
-        after_bounces = [
-            choose_click_reaction(("bounce", "bounce"), bounce_rng).name
-            for _ in range(10_000)
-        ]
-        squish_rng = random.Random(42)
-        after_squishes = [
-            choose_click_reaction(("squish", "squish"), squish_rng).name
-            for _ in range(10_000)
-        ]
-        self.assertAlmostEqual(after_bounces.count("bounce") / 10_000, 0.40, delta=0.02)
-        self.assertAlmostEqual(after_squishes.count("bounce") / 10_000, 0.60, delta=0.02)
+    def test_click_always_uses_the_pixellab_squish_reaction(self) -> None:
+        self.assertEqual(choose_click_reaction().name, "squish")
 
 
 if __name__ == "__main__":

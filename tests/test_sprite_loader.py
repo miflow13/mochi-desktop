@@ -14,7 +14,6 @@ class AnimationAssetSetTests(unittest.TestCase):
 
         self.assertEqual(idle.name, "idle")
         self.assertEqual(len(idle.frames), 6)
-        self.assertEqual(idle.frame_duration_ms, 400)
         self.assertTrue(idle.looping)
         self.assertIsNone(idle.next_state)
 
@@ -41,6 +40,8 @@ class AnimationAssetSetTests(unittest.TestCase):
             manifest = {
                 "format": AnimationAssetSet.FORMAT,
                 "cell_size": [128, 128],
+                "anchor": "bottom-center",
+                "scaling": "nearest-neighbor",
                 "animations": {
                     "idle": {
                         "frames": ["../outside.png"],

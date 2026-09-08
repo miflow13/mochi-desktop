@@ -53,7 +53,11 @@ class MochiApplication(Gtk.Application):
 
         placement = WindowPlacement(window, self.config.load_position())
         window.connect("map", self._configure_mapped_window, placement)
-        status = MochiStatusOverlay()
+        status = MochiStatusOverlay(
+            size=size,
+            volume=self.sound.volume,
+            muted=self.sound.muted,
+        )
         buddy = Buddy(
             window,
             placement,
@@ -63,6 +67,17 @@ class MochiApplication(Gtk.Application):
             on_click=status.dismiss_for_click,
             on_hover_enter=status.hover_enter,
             on_hover_leave=status.hover_leave,
+            on_context=status.open_context,
+            on_drag_start=status.begin_drag,
+        )
+        status.bind_actions(
+            sleep=buddy.toggle_sleep,
+            walk=buddy.start_walk,
+            size=buddy.change_size,
+            mute=buddy.change_muted,
+            volume=buddy.change_volume,
+            reset=buddy.reset_position,
+            quit=buddy.quit,
         )
         status.set_parent(buddy)
         window.set_child(buddy)

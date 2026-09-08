@@ -21,7 +21,7 @@ class AnimationMetadata:
 
 
 class AnimationAssetSet:
-    """Reads one animation manifest and lazily caches requested frame surfaces."""
+    """Reads, validates, and caches one fixed-canvas animation asset set."""
 
     FORMAT = "mochi-animation-set-v1"
 
@@ -36,6 +36,13 @@ class AnimationAssetSet:
         if cell_size != [128, 128]:
             raise ValueError(f"Expected 128x128 animation cells, got {cell_size}")
         self.cell_size = (128, 128)
+        self.anchor = manifest.get("anchor")
+        if self.anchor != "bottom-center":
+            raise ValueError(f"Expected bottom-center anchoring, got {self.anchor}")
+        scaling = manifest.get("scaling")
+        if not isinstance(scaling, str) or "nearest-neighbor" not in scaling:
+            raise ValueError(f"Expected nearest-neighbor scaling, got {scaling}")
+        self.scaling = scaling
         self.animations = self._parse_animations(manifest.get("animations"))
         self.surfaces: dict[str, cairo.ImageSurface] = {}
 
@@ -66,6 +73,12 @@ class AnimationAssetSet:
             path: self.surfaces[path]
             for path in metadata.frame_paths
         }
+
+    def load_all(self) -> dict[str, cairo.ImageSurface]:
+        """Decode every texture once during startup and return the shared cache."""
+        for name in self.animations:
+            self.load_frames(name)
+        return self.surfaces
 
     def _parse_animations(
         self, raw_animations: object

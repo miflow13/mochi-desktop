@@ -4,13 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mochi-desktop"
-version = "0.1.0"
+version = "0.2.0a0"
 description = "A tiny friend for your Linux desktop."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Mochi contributors" }]
 dependencies = []
+
+[project.optional-dependencies]
+dev = ["Pillow>=10"]
 
 [project.scripts]
 mochi = "mochi.main:main"
@@ -24,18 +27,9 @@ where = ["src"]
 [tool.setuptools.data-files]
 "share/mochi/audio" = ["assets/audio/*"]
 "share/mochi" = ["assets/mochi/manifest.json"]
-"share/mochi/master" = ["assets/mochi/master/*.png"]
 "share/mochi/idle" = ["assets/mochi/idle/*.png"]
-"share/mochi/blink" = ["assets/mochi/blink/*.png"]
-"share/mochi/dragged" = ["assets/mochi/dragged/*.png"]
-"share/mochi/drag" = ["assets/mochi/drag/*.png"]
-"share/mochi/walk" = ["assets/mochi/walk/*.png"]
-"share/mochi/walk_left" = ["assets/mochi/walk_left/*.png"]
-"share/mochi/bounce" = ["assets/mochi/bounce/*.png"]
 "share/mochi/squish" = ["assets/mochi/squish/*.png"]
-"share/mochi/sleep_transition" = ["assets/mochi/sleep_transition/*.png"]
-"share/mochi/sleeping" = ["assets/mochi/sleeping/*.png"]
-"share/mochi/wake" = ["assets/mochi/wake/*.png"]
+"share/mochi/drag" = ["assets/mochi/drag/*.png"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

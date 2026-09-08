@@ -4,4 +4,16 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 .venv/
+venv/
+.idea/
+.vscode/
+*.swp
+*.tmp
+*~
+.DS_Store

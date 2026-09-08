@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import random
 from dataclasses import dataclass
 
 from mochi.animation import Animation
@@ -83,7 +82,7 @@ class ClickReactionBuffer:
 
 
 def choose_walk_animation(origin: tuple[int, int], target: tuple[int, int]) -> str:
-    return "walk_left" if target[0] < origin[0] else "walk"
+    return "walk_left" if target[0] < origin[0] else "walk_right"
 
 
 @dataclass(frozen=True)
@@ -133,13 +132,6 @@ class WalkMotion:
         return (distance / self.pixels_per_cycle) % 1.0
 
 
-def choose_click_reaction(
-    recent: tuple[str, ...] = (), rng: random.Random | None = None
-) -> Animation:
-    """Choose a tactile reaction, gently discouraging three repeats in a row."""
-    generator = rng or random
-    bounce_probability = 0.55
-    if len(recent) >= 2 and recent[-1] == recent[-2]:
-        bounce_probability = 0.40 if recent[-1] == "bounce" else 0.60
-    name = "bounce" if generator.random() < bounce_probability else "squish"
-    return ANIMATIONS[name]
+def choose_click_reaction() -> Animation:
+    """Return the canonical tactile click reaction."""
+    return ANIMATIONS["squish"]

@@ -34,72 +34,83 @@ class SpriteDefinitionsTests(unittest.TestCase):
 
     def test_required_visible_states_use_manifest_art(self) -> None:
         required = {
-            "default", "idle", "blink", "walk", "walk_left", "bounce",
-            "squish", "sleep", "sleeping", "wake", "dragged", "excited",
+            "idle", "blink", "walk_right", "walk_left", "bounce", "squish",
+            "sleep", "wake", "excited", "hurt_sad", "curious", "sit", "dragged",
         }
-        self.assertTrue(required.issubset(ANIMATIONS))
+        self.assertEqual(set(ANIMATIONS), required)
+
+    def test_states_without_pixellab_art_explicitly_use_idle_fallback(self) -> None:
+        fallback = ANIMATIONS["idle"].frames[0]
+        fallback_states = {
+            "blink", "bounce", "sleep", "wake", "excited", "hurt_sad",
+            "curious", "sit",
+        }
+
+        for name in fallback_states:
+            self.assertEqual(ANIMATIONS[name].frames, (fallback,), name)
+
+    def test_every_runtime_png_is_referenced_by_the_manifest(self) -> None:
+        referenced = {
+            path
+            for metadata in ASSET_SET.animations.values()
+            for path in metadata.frame_paths
+        }
+        present = {
+            str(path.relative_to(ASSET_SET.root))
+            for path in ASSET_SET.root.rglob("*.png")
+        }
+
+        self.assertEqual(present, referenced)
 
     def test_sleep_transitions_to_sleeping(self) -> None:
-        self.assertEqual(ANIMATIONS["sleep"].next_state, "sleeping")
-        self.assertTrue(ANIMATIONS["sleeping"].looping)
-        self.assertEqual(
-            tuple(frame.duration_ms for frame in ANIMATIONS["sleep"].frames),
-            (90, 100, 120, 140, 160, 180),
-        )
-        self.assertEqual(
-            tuple(frame.duration_ms for frame in ANIMATIONS["wake"].frames),
-            (70, 80, 90, 100, 100, 90),
-        )
+        self.assertFalse(ANIMATIONS["sleep"].looping)
+        self.assertEqual(ANIMATIONS["sleep"].frame_duration_ms, 400)
+        self.assertFalse(ANIMATIONS["wake"].looping)
+        self.assertEqual(ANIMATIONS["wake"].frame_duration_ms, 200)
 
     def test_idle_breathing_uses_slow_per_frame_timing(self) -> None:
         idle = ANIMATIONS["idle"]
         self.assertEqual(len(idle.frames), 6)
-        self.assertEqual(
-            tuple(frame.duration_ms for frame in idle.frames),
-            (750, 500, 350, 900, 400, 1_000),
-        )
-        self.assertEqual(sum(frame.duration_ms or 0 for frame in idle.frames), 3900)
+        surfaces = SpriteAtlas().frames
+        idle_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in idle.frames]
+        self.assertEqual(len(set(idle_pixels)), 1)
         self.assertTrue(idle.looping)
 
     def test_blink_uses_fast_per_frame_timing(self) -> None:
         blink = ANIMATIONS["blink"]
-        self.assertEqual(
-            tuple(frame.duration_ms for frame in blink.frames),
-            (90, 90, 120, 90),
-        )
-        self.assertEqual(sum(frame.duration_ms or 0 for frame in blink.frames), 390)
+        self.assertEqual(blink.frame_duration_ms, 125)
         self.assertFalse(blink.looping)
 
-    def test_drag_uses_a_subtle_manifest_dangling_loop(self) -> None:
+    def test_drag_uses_complete_2d_velocity_pose_set(self) -> None:
         dragged = ANIMATIONS["dragged"]
-        self.assertEqual(len(dragged.frames), 10)
-        self.assertEqual(dragged.frame_duration_ms, 167)
+        self.assertEqual(len(dragged.frames), 25)
         self.assertTrue(dragged.looping)
         surfaces = SpriteAtlas().frames
         drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
-        self.assertGreaterEqual(len(set(drag_pixels)), 9)
+        self.assertEqual(len(set(drag_pixels)), 25)
 
     def test_walk_uses_a_slow_looping_bounce_prototype(self) -> None:
-        self.assertTrue(ANIMATIONS["walk"].looping)
+        self.assertTrue(ANIMATIONS["walk_right"].looping)
         self.assertTrue(ANIMATIONS["walk_left"].looping)
-        self.assertEqual(
-            tuple(frame.sprite for frame in ANIMATIONS["walk"].frames),
-            tuple(frame.sprite for frame in ANIMATIONS["bounce"].frames),
-        )
-        self.assertEqual(
-            tuple(frame.duration_ms for frame in ANIMATIONS["walk"].frames),
-            (80, 110, 125, 135, 180, 170, 130),
-        )
+        for name in ("walk_right", "walk_left"):
+            walk = ANIMATIONS[name]
+            self.assertEqual(
+                tuple(frame.sprite for frame in walk.frames),
+                (ANIMATIONS["idle"].frames[0].sprite,) * 8,
+            )
+            self.assertEqual(
+                tuple(frame.vertical_offset for frame in walk.frames),
+                (0, -2, -5, -2, 0, -2, -5, -2),
+            )
 
     def test_click_reactions_use_tactile_per_frame_timing(self) -> None:
+        self.assertEqual(len(ANIMATIONS["squish"].frames), 9)
         self.assertEqual(
-            tuple(frame.duration_ms for frame in ANIMATIONS["bounce"].frames),
-            (50, 75, 85, 95, 135, 145, 110),
+            ANIMATIONS["squish"].frames[0].sprite,
+            "squish/squish_01.png",
         )
-        self.assertEqual(
-            tuple(frame.duration_ms for frame in ANIMATIONS["squish"].frames),
-            (45, 70, 105, 120, 145, 125),
-        )
+        self.assertEqual(ANIMATIONS["bounce"].frames, (ANIMATIONS["idle"].frames[0],))
+        self.assertEqual(ANIMATIONS["squish"].frame_duration_ms, 125)
         self.assertFalse(ANIMATIONS["bounce"].looping)
         self.assertFalse(ANIMATIONS["squish"].looping)
 
