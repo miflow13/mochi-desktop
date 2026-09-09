@@ -715,11 +715,6 @@ class Buddy(Gtk.DrawingArea):
             self.queue_draw()
 
     def _finish_reaction(self, finished_animation) -> None:
-        self._logger.warning(
-    "ANIMATION FINISHED: current=%s finished=%s",
-    self._current_animation,
-    finished_animation.name,
-)
         if finished_animation is not self._active_animation:
             self._logger.debug(
                 "Ignoring stale animation completion: %s",

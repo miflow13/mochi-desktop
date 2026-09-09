@@ -222,41 +222,33 @@ class BuddyEmoteTests(unittest.TestCase):
 
         buddy._play_animation.assert_not_called()
 
-    def test_computer_intro_starts_one_owned_typing_timer(self) -> None:
-        intro = Animation("computer_intro", (), 167)
+    def test_computer_emote_plays_single_animation(self) -> None:
         buddy = SimpleNamespace(
-            _active_animation=intro,
-            _current_animation="computer_intro",
-            state=SimpleNamespace(current=MochiState.COMPUTER),
-            _play_animation=Mock(),
-            _finish_computer_typing=Mock(),
-            _computer_typing_source_id=None,
-            _logger=Mock(),
-        )
-
-        with (
-            patch("mochi.buddy.random.uniform", return_value=3.5),
-            patch("mochi.buddy.GLib.timeout_add", return_value=42) as timeout_add,
-        ):
-            Buddy._finish_reaction(buddy, intro)
-
-        buddy._play_animation.assert_called_once_with("computer_typing", after=None)
-        timeout_add.assert_called_once_with(3500, buddy._finish_computer_typing)
-        self.assertEqual(buddy._computer_typing_source_id, 42)
-
-    def test_direct_input_cancels_computer_timer_and_returns_to_idle(self) -> None:
-        buddy = SimpleNamespace(
-            _computer_typing_source_id=42,
-            state=SimpleNamespace(current=MochiState.COMPUTER),
-            _transition_to=Mock(),
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
             _play_animation=Mock(),
         )
 
-        with patch("mochi.buddy.GLib.source_remove") as source_remove:
-            self.assertTrue(Buddy._cancel_active_emote(buddy))
+        self.assertTrue(Buddy._start_computer_emote(buddy))
 
-        source_remove.assert_called_once_with(42)
-        self.assertIsNone(buddy._computer_typing_source_id)
+        buddy._transition_to.assert_called_once_with(MochiState.COMPUTER)
+        buddy._play_animation.assert_called_once_with(
+            "computer",
+            after="idle",
+        )
+
+    def test_direct_input_cancels_computer_emote_and_returns_to_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.COMPUTER),
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+        )
+
+        self.assertTrue(Buddy._cancel_active_emote(buddy))
+
         buddy._transition_to.assert_called_once_with(MochiState.IDLE)
         buddy._play_animation.assert_called_once_with("idle")
 
