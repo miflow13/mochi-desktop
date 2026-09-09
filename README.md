@@ -47,6 +47,20 @@ The long-term goal is a companion that develops personality and useful desktop b
 
 ---
 
+## Handcrafted with love
+
+<div align="center">
+
+*Every pixel. Every frame. A little bit of personality.*
+
+</div>
+
+Mochi's sprites and animations are **handcrafted with love**, built and refined frame by frame with careful attention to silhouette, timing, squash and stretch, and the tiny expressions that make Mochi feel alive.
+
+The goal isn't simply to make Mochi move — it's to make every movement feel unmistakably **Mochi**.
+
+---
+
 ## Engineering highlights
 
 Mochi is also a hands-on software-engineering project. Current work includes:
