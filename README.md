@@ -4,16 +4,16 @@
 
 ### Your new Deskling Companion
 
-<img width="800" height="475" alt="hifrommochi" src="https://github.com/user-attachments/assets/d64b6900-3120-4174-9ec6-a40688fe921a" />
+<img width="800" height="475" alt="Mochi on the Linux desktop" src="https://github.com/user-attachments/assets/d64b6900-3120-4174-9ec6-a40688fe921a" />
 
 **A tiny pixel-art companion quietly living on your Linux desktop.**
 
 </div>
 
-Mochi is a small Linux desktop companion currently under active development. He idles, reacts, wanders, sleeps, and generally tries to make your desktop feel a little more alive without getting in the way.
+Mochi is a lightweight Linux desktop companion that idles, reacts, wanders, sleeps, and generally tries to make the desktop feel a little more alive without becoming another thing demanding your attention.
 
 > [!IMPORTANT]
-> Mochi is currently in **alpha development** and is not ready for a public release yet. Features, artwork, behavior, architecture, and documentation may change significantly while development continues.
+> Mochi is currently in **alpha development** and is not ready for a public release. Features, artwork, behavior, architecture, and documentation may change significantly while development continues.
 
 ---
 
@@ -35,9 +35,31 @@ Mochi is a small Linux desktop companion currently under active development. He 
   <img width="738" height="592" alt="Mochi desktop demo" src="https://github.com/user-attachments/assets/79e7eb9b-8c14-4c22-86eb-fc7ea9878451" />
 </p>
 
-Mochi runs in a transparent, undecorated desktop window with persistent configuration, cached animation rendering, and crisp nearest-neighbor pixel scaling. He chooses occasional quiet idle actions, wanders around the screen, and falls asleep after extended inactivity.
+---
 
-A **right-click developer menu** is currently retained for testing while the future user-facing hover interaction is redesigned.
+## Why Mochi?
+
+Desktop pets already exist. Mochi is an experiment in making one feel **quietly useful, expressive, and native to the Linux desktop** rather than like a video playing on top of it.
+
+The project is intentionally focused on small interaction details: animation timing, state transitions, cursor reactions, movement, persistence, and knowing when *not* to interrupt the user.
+
+The long-term goal is a companion that develops personality and useful desktop behaviors while staying lightweight and unobtrusive.
+
+---
+
+## Engineering highlights
+
+Mochi is also a hands-on software-engineering project. Current work includes:
+
+- **State-driven behavior** for idle, movement, reactions, sleep, and interaction transitions
+- **Manifest-driven sprite assets** so artwork can change without coupling animation files to behavior code
+- **Per-frame animation timing** with cached Cairo surfaces and nearest-neighbor rendering
+- **Persistent configuration** for desktop placement and user settings
+- **GTK4 desktop integration** with transparent, undecorated windows
+- **Wayland/XWayland compatibility work** around Linux desktop window-management constraints
+- **Automated tests and asset validation** to keep behavior and animation changes from silently breaking existing states
+
+Mochi's visual design is simple on purpose; much of the engineering challenge is making that small character feel responsive and consistent.
 
 ---
 
@@ -48,6 +70,8 @@ Phase 2 is focused on making Mochi feel less like a widget and more like a tiny 
 Mochi should stay:
 
 **quiet · cozy · playful · lightweight · expressive · unobtrusive**
+
+A right-click developer menu is currently retained for testing while the future user-facing interaction UI is redesigned.
 
 ---
 
@@ -71,21 +95,22 @@ Mochi should stay:
 
 ---
 
-## Development environment
+## Tech stack
 
 The primary target is **Fedora Linux with GNOME and Wayland**.
 
 Mochi is built with:
 
 - Python
-- GTK4
-- PyGObject
+- GTK4 / PyGObject
 - Cairo
 - XWayland where GNOME's native Wayland restrictions require it
 
-### Installation
+---
 
-Install Fedora runtime packages:
+## Development setup
+
+Install the Fedora runtime packages:
 
 ```bash
 sudo dnf install python3 python3-gobject gtk4 gtk4-layer-shell
@@ -107,8 +132,6 @@ mochi --preview-animations
 python3 -m unittest discover -s tests -v
 python3 tools/export_animation_gifs.py
 ```
-
----
 
 <details>
 <summary><strong>Project structure</strong></summary>
@@ -147,6 +170,14 @@ Key modules:
 When adding or replacing art, update `assets/mochi/manifest.json`. Sprite paths remain isolated from input and behavior code.
 
 </details>
+
+---
+
+## Contributing and feedback
+
+Mochi is early-stage software, so bug reports, Linux desktop compatibility notes, design feedback, and ideas are welcome through [GitHub Issues](https://github.com/miflow13/mochi-desktop/issues).
+
+Licensed under the **MIT License**.
 
 ---
 
