@@ -1,6 +1,6 @@
 import unittest
 
-from mochi.drag_motion import DragMotionModel
+from mochi.drag_motion import DragMotionModel, drag_pose_sprite, drag_settle_sprite
 
 
 class DragMotionModelTests(unittest.TestCase):
@@ -44,6 +44,27 @@ class DragMotionModelTests(unittest.TestCase):
         self.assertEqual(motion.leg_sway, 0.0)
         motion.update(100, 0, 0.2)
         self.assertEqual(motion.leg_sway, 0.0)
+
+    def test_drag_pose_uses_the_remaining_soft_and_medium_frames(self) -> None:
+        self.assertEqual(drag_pose_sprite(0.0), "drag/drag_neutral.png")
+        self.assertEqual(drag_pose_sprite(0.3), "drag/drag_left_soft.png")
+        self.assertEqual(drag_pose_sprite(1.0), "drag/drag_left_medium.png")
+        self.assertEqual(drag_pose_sprite(-0.3), "drag/drag_right_soft.png")
+        self.assertEqual(drag_pose_sprite(-1.0), "drag/drag_right_medium.png")
+
+    def test_drag_release_selects_a_valid_directional_settle_frame(self) -> None:
+        self.assertEqual(
+            drag_settle_sprite("drag/drag_left_medium.png"),
+            "drag/drag_settle_left.png",
+        )
+        self.assertEqual(
+            drag_settle_sprite("drag/drag_right_soft.png"),
+            "drag/drag_settle_right.png",
+        )
+        self.assertEqual(
+            drag_settle_sprite("drag/drag_neutral.png"),
+            "drag/drag_settle_neutral.png",
+        )
 
 
 if __name__ == "__main__":

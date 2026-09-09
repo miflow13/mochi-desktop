@@ -27,7 +27,7 @@ from mochi.behavior import (
     choose_walk_animation,
 )
 from mochi.config import ConfigStore
-from mochi.drag_motion import DragMotionModel
+from mochi.drag_motion import DragMotionModel, drag_pose_sprite, drag_settle_sprite
 from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.sound import SoundEvent, SoundManager
 from mochi.state import MochiState, StateMachine
@@ -727,13 +727,12 @@ class Buddy(Gtk.DrawingArea):
 
     def _play_drag_pose(self) -> None:
         intensity = self._drag_motion.horizontal_intensity
-        magnitude = abs(intensity)
-        if magnitude < 0.20:
-            self._drag_frame_index = 0
-        else:
-            level = 1 if magnitude < 0.50 else 2 if magnitude < 0.80 else 3
-            # Rightward motion trails left; leftward motion trails right.
-            self._drag_frame_index = 3 + level if intensity < 0 else level
+        sprite = drag_pose_sprite(intensity)
+        self._drag_frame_index = next(
+            index
+            for index, frame in enumerate(ANIMATIONS["dragged"].frames)
+            if frame.sprite == sprite
+        )
         body_offset = round(self._drag_motion.body_sway * 14)
         animation = replace(
             ANIMATIONS["dragged"],
@@ -751,15 +750,17 @@ class Buddy(Gtk.DrawingArea):
         self.queue_draw()
 
     def _play_drag_settle(self) -> None:
-        settle_index = (
-            7
-            if 1 <= self._drag_frame_index <= 3
-            else 8
-            if 4 <= self._drag_frame_index <= 6
-            else 9
+        dragged_frames = ANIMATIONS["dragged"].frames
+        pose_sprite = dragged_frames[self._drag_frame_index].sprite
+        settle_sprite = drag_settle_sprite(pose_sprite)
+        current = next(
+            frame for frame in dragged_frames if frame.sprite == settle_sprite
         )
-        current = ANIMATIONS["dragged"].frames[settle_index]
-        neutral = ANIMATIONS["dragged"].frames[9]
+        neutral = next(
+            frame
+            for frame in dragged_frames
+            if frame.sprite == "drag/drag_settle_neutral.png"
+        )
         settle = Animation(
             name="drag_settle",
             frames=(

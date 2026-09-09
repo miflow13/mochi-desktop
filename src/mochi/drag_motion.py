@@ -10,6 +10,25 @@ def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(value, upper))
 
 
+def drag_pose_sprite(horizontal_intensity: float) -> str:
+    """Choose a drag pose without depending on manifest frame positions."""
+    magnitude = abs(horizontal_intensity)
+    if magnitude < 0.20:
+        return "drag/drag_neutral.png"
+    direction = "left" if horizontal_intensity > 0 else "right"
+    strength = "soft" if magnitude < 0.50 else "medium"
+    return f"drag/drag_{direction}_{strength}.png"
+
+
+def drag_settle_sprite(pose_sprite: str) -> str:
+    """Choose the release pose that corresponds to the current drag pose."""
+    if pose_sprite.startswith("drag/drag_left_"):
+        return "drag/drag_settle_left.png"
+    if pose_sprite.startswith("drag/drag_right_"):
+        return "drag/drag_settle_right.png"
+    return "drag/drag_settle_neutral.png"
+
+
 @dataclass
 class DragMotionModel:
     smoothing: float = 0.28

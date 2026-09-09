@@ -72,12 +72,12 @@ class SpriteDefinitionsTests(unittest.TestCase):
 
     def test_drag_uses_a_subtle_manifest_dangling_loop(self) -> None:
         dragged = ANIMATIONS["dragged"]
-        self.assertEqual(len(dragged.frames), 10)
+        self.assertEqual(len(dragged.frames), 8)
         self.assertEqual(dragged.frame_duration_ms, 167)
         self.assertTrue(dragged.looping)
         surfaces = SpriteAtlas().frames
         drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
-        self.assertGreaterEqual(len(set(drag_pixels)), 9)
+        self.assertEqual(len(set(drag_pixels)), 8)
 
     def test_walk_uses_a_slow_looping_bounce_prototype(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)
