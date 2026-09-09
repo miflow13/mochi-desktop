@@ -47,8 +47,6 @@ Phase 2 is focused on making Mochi feel like a small creature peacefully living
 on the desktop. Mochi should remain quiet, cozy, playful, lightweight,
 expressive, and unobtrusive.
 
-> There is a tiny creature peacefully living on your desktop.
-
 ## Planned roadmap
 
 ### v0.1 — Exists
