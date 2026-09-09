@@ -5,14 +5,7 @@
 <img width="1130" height="790" alt="Screenshot From 2026-09-08 21-05-33" src="https://github.com/user-attachments/assets/7b15c5ce-2ac3-4026-a37c-2ac13d2c6250" />
 
 
-<p align="center">
-  <img width="220" height="220" alt="Mochi squish animation" src="https://github.com/user-attachments/assets/be1abde7-8379-4923-98a7-68dcaf41d7b0" />
-  &nbsp;&nbsp;
-  <img width="220" height="220" alt="Mochi bounce animation" src="https://github.com/user-attachments/assets/68a79eb4-81f1-47cf-8891-1211bb1f8726" />
-  &nbsp;&nbsp;
-  <img width="220" height="220" alt="Mochi wake animation" src="https://github.com/user-attachments/assets/862b0ca0-8ec6-4ebd-a67a-0d9ad4a02b4c"![Uploading sprite-animation (2).gif…]()
- />
-</p>
+
 
 Mochi is a small Linux desktop companion currently under active development.
 
@@ -55,6 +48,14 @@ on the desktop. Mochi should remain quiet, cozy, playful, lightweight,
 expressive, and unobtrusive.
 
 ## Planned roadmap
+<p align="center">
+  <img width="220" height="220" alt="Mochi squish animation" src="https://github.com/user-attachments/assets/be1abde7-8379-4923-98a7-68dcaf41d7b0" />
+  &nbsp;&nbsp;
+  <img width="220" height="220" alt="Mochi bounce animation" src="https://github.com/user-attachments/assets/68a79eb4-81f1-47cf-8891-1211bb1f8726" />
+  &nbsp;&nbsp;
+  <img width="220" height="220" alt="Mochi wake animation" src="https://github.com/user-attachments/assets/862b0ca0-8ec6-4ebd-a67a-0d9ad4a02b4c"![Uploading sprite-animation (2).gif…]()
+ />
+</p>
 
 ### v0.1 — Exists
 
