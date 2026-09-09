@@ -43,6 +43,9 @@ class ClickReactionTests(unittest.TestCase):
         self.assertTrue(can_transition(MochiState.IDLE, MochiState.PICKUP))
         self.assertTrue(can_transition(MochiState.PICKUP, MochiState.DRAGGED))
         self.assertFalse(can_transition(MochiState.PICKUP, MochiState.BLINKING))
+        self.assertTrue(can_transition(MochiState.IDLE, MochiState.HEART))
+        self.assertTrue(can_transition(MochiState.IDLE, MochiState.COMPUTER))
+        self.assertFalse(can_transition(MochiState.HEART, MochiState.COMPUTER))
 
     def test_rapid_clicks_queue_at_most_one_follow_up(self) -> None:
         buffer = ClickReactionBuffer()

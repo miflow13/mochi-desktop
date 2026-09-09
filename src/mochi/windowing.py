@@ -77,7 +77,7 @@ class WindowPlacement:
         return self.position
 
     def clamp_position(self, x: int, y: int) -> Position:
-        monitor = self._monitor()
+        monitor = self._monitor_for_position(x, y)
         if monitor is None:
             return Position(max(0, round(x)), max(0, round(y)))
         geometry = monitor.get_geometry()
@@ -102,11 +102,31 @@ class WindowPlacement:
             self.position = self.clamp_position(*coordinates)
         return self.position
 
-    def _monitor(self) -> Gdk.Monitor | None:
+    def _monitor_for_position(self, x: int, y: int) -> Gdk.Monitor | None:
         if self.layer_shell_enabled and Gtk4LayerShell is not None:
             monitor = Gtk4LayerShell.get_monitor(self.window)
             if monitor is not None:
                 return monitor
         display = self.window.get_display()
         monitors = display.get_monitors()
-        return monitors.get_item(0) if monitors.get_n_items() else None
+        if not monitors.get_n_items():
+            return None
+
+        width, height = self.window.get_default_size()
+        center_x = x + width / 2
+        center_y = y + height / 2
+        nearest: tuple[float, Gdk.Monitor] | None = None
+        for index in range(monitors.get_n_items()):
+            monitor = monitors.get_item(index)
+            geometry = monitor.get_geometry()
+            if (
+                geometry.x <= center_x < geometry.x + geometry.width
+                and geometry.y <= center_y < geometry.y + geometry.height
+            ):
+                return monitor
+            nearest_x = max(geometry.x, min(center_x, geometry.x + geometry.width))
+            nearest_y = max(geometry.y, min(center_y, geometry.y + geometry.height))
+            distance = (center_x - nearest_x) ** 2 + (center_y - nearest_y) ** 2
+            if nearest is None or distance < nearest[0]:
+                nearest = (distance, monitor)
+        return nearest[1] if nearest is not None else None

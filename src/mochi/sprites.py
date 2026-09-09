@@ -7,11 +7,35 @@ from dataclasses import replace
 import cairo
 
 from mochi.animation import AnimationFrame
+from mochi.interaction_tuning import (
+    DRAG_FRAME_DURATION_MS,
+    PICKUP_FRAME_DURATION_MS,
+)
 from mochi.sprite_loader import AnimationAssetSet
 
 
 ASSET_SET = AnimationAssetSet()
 ANIMATIONS = {name: ASSET_SET.animation(name) for name in ASSET_SET.animations}
+ANIMATIONS["pickup"] = replace(
+    ANIMATIONS["pickup"], frame_duration_ms=PICKUP_FRAME_DURATION_MS
+)
+ANIMATIONS["dragged"] = replace(
+    ANIMATIONS["dragged"], frame_duration_ms=DRAG_FRAME_DURATION_MS
+)
+computer_frames = ANIMATIONS["computer"].frames
+ANIMATIONS["computer_intro"] = replace(
+    ANIMATIONS["computer"], name="computer_intro", frames=computer_frames[:4]
+)
+ANIMATIONS["computer_typing"] = replace(
+    ANIMATIONS["computer"],
+    name="computer_typing",
+    frames=computer_frames[4:12],
+    looping=True,
+    next_state=None,
+)
+ANIMATIONS["computer_outro"] = replace(
+    ANIMATIONS["computer"], name="computer_outro", frames=computer_frames[12:]
+)
 idle_frames = ANIMATIONS["idle"].frames
 idle_durations = (750, 500, 350, 900, 400, 1_000)
 idle_cycle = tuple(

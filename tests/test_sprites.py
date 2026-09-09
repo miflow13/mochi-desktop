@@ -36,13 +36,15 @@ class SpriteDefinitionsTests(unittest.TestCase):
         required = {
             "default", "idle", "blink", "walk", "walk_left", "bounce",
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
+            "heart", "computer", "computer_intro", "computer_typing",
+            "computer_outro",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
     def test_pickup_is_a_six_frame_one_shot(self) -> None:
         pickup = ANIMATIONS["pickup"]
         self.assertEqual(len(pickup.frames), 6)
-        self.assertEqual(pickup.frame_duration_ms, 50)
+        self.assertEqual(pickup.frame_duration_ms, 25)
         self.assertFalse(pickup.looping)
 
     def test_sleep_transitions_to_sleeping(self) -> None:
@@ -120,6 +122,20 @@ class SpriteDefinitionsTests(unittest.TestCase):
         )
         self.assertFalse(ANIMATIONS["bounce"].looping)
         self.assertFalse(ANIMATIONS["squish"].looping)
+
+    def test_heart_is_a_single_manifest_backed_pass(self) -> None:
+        heart = ANIMATIONS["heart"]
+        self.assertEqual(len(heart.frames), 16)
+        self.assertEqual(heart.frame_duration_ms, 120)
+        self.assertFalse(heart.looping)
+
+    def test_computer_emote_has_intro_typing_and_outro_phases(self) -> None:
+        self.assertEqual(len(ANIMATIONS["computer_intro"].frames), 4)
+        self.assertEqual(len(ANIMATIONS["computer_typing"].frames), 8)
+        self.assertEqual(len(ANIMATIONS["computer_outro"].frames), 4)
+        self.assertFalse(ANIMATIONS["computer_intro"].looping)
+        self.assertTrue(ANIMATIONS["computer_typing"].looping)
+        self.assertFalse(ANIMATIONS["computer_outro"].looping)
 
 
 if __name__ == "__main__":

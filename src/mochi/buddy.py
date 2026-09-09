@@ -27,7 +27,16 @@ from mochi.behavior import (
     choose_walk_animation,
 )
 from mochi.config import ConfigStore
-from mochi.drag_motion import DragMotionModel, drag_pose_sprite, drag_settle_sprite
+from mochi.drag_motion import DragMotionModel, DragPoseSelector, drag_settle_sprite
+from mochi.interaction_tuning import (
+    COMPUTER_IDLE_DELAY_SECONDS,
+    COMPUTER_TYPING_DURATION_SECONDS,
+    DRAG_BODY_SWAY_PX,
+    DRAG_SETTLE_DIRECTIONAL_MS,
+    DRAG_SETTLE_NEUTRAL_MS,
+    DRAG_VISUAL_IDLE_DELAY_SECONDS,
+    InteractionTuning,
+)
 from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.sound import SoundEvent, SoundManager
 from mochi.state import MochiState, StateMachine
@@ -84,17 +93,38 @@ class Buddy(Gtk.DrawingArea):
         self._idle_resume_position: tuple[int, int] | None = None
         self._recent_click_reactions: tuple[str, ...] = ()
         self._last_interaction = time.monotonic()
+        self._tuning = InteractionTuning()
+        self._tuning_controls: dict[str, Gtk.SpinButton] = {}
         self._walk_motion: WalkMotion | None = None
         self._walk_elapsed_ms = 0
         self._press: tuple[float, float] | None = None
         self._drag_origin = placement.position
         self._drag_started = False
         self._drag_move_started = False
-        self._drag_motion = DragMotionModel()
-        self._drag_frame_index = 1
+        self._drag_release_handled = False
+        self._drag_end_handled = False
+        self._drag_motion = DragMotionModel(
+            max_velocity=self._tuning.drag_heavy_velocity_px_per_second,
+            pose_selector=DragPoseSelector(
+                soft_enter_threshold=self._tuning.drag_soft_enter_threshold,
+                medium_enter_threshold=self._tuning.drag_medium_enter_threshold,
+                medium_exit_threshold=self._tuning.drag_medium_exit_threshold,
+                dwell_ms=self._tuning.drag_state_dwell_ms,
+            ),
+        )
+        self._drag_frame_index = 0
+        self._drag_visual_key: tuple[str, int] | None = None
         self._last_drag_update_time = 0.0
         self._drag_sample_position: tuple[int, int] | None = None
         self._drag_sample_time: float | None = None
+        self._hovered = False
+        self._last_heart_started = float("-inf")
+        self._idle_action_source_id: int | None = None
+        self._blink_source_id: int | None = None
+        self._computer_idle_source_id: int | None = None
+        self._computer_typing_source_id: int | None = None
+        self._context_menu_open = False
+        self._pending_context_action: Callable[[], None] | None = None
         self._size = self._config.load_size()
 
         self.set_content_width(self._size)
@@ -113,6 +143,8 @@ class Buddy(Gtk.DrawingArea):
         self.add_controller(context_click)
 
         motion = Gtk.EventControllerMotion.new()
+        motion.connect("enter", self._on_enter)
+        motion.connect("leave", self._on_leave)
         motion.connect("motion", self._on_motion)
         self.add_controller(motion)
 
@@ -123,12 +155,14 @@ class Buddy(Gtk.DrawingArea):
         drag.connect("drag-end", self._on_drag_end)
         self.add_controller(drag)
 
+        self._context_menu = self._build_context_menu()
+        self._context_menu.connect("closed", self._on_context_menu_closed)
+
         GLib.timeout_add(self.TICK_MS, self._tick)
         if not self._preview_mode:
             self._schedule_idle_action()
             self._schedule_blink()
-
-        self._context_menu = self._build_context_menu()
+            self._schedule_computer_idle_emote()
 
     def _build_context_menu(self) -> Gtk.Popover:
         popover = Gtk.Popover()
@@ -154,6 +188,16 @@ class Buddy(Gtk.DrawingArea):
         walk_button.add_css_class("flat")
         walk_button.connect("clicked", self._test_walk)
         menu_box.append(walk_button)
+
+        heart_button = Gtk.Button(label="Test Heart Emote")
+        heart_button.add_css_class("flat")
+        heart_button.connect("clicked", self._test_heart_emote)
+        menu_box.append(heart_button)
+
+        computer_button = Gtk.Button(label="Test Computer Emote")
+        computer_button.add_css_class("flat")
+        computer_button.connect("clicked", self._test_computer_emote)
+        menu_box.append(computer_button)
 
         options_label = Gtk.Label(label="Options")
         options_label.set_xalign(0)
@@ -198,6 +242,48 @@ class Buddy(Gtk.DrawingArea):
         volume_scale.connect("value-changed", self._change_volume)
         menu_box.append(volume_scale)
 
+        tuning_expander = Gtk.Expander(label="Developer tuning")
+        tuning_grid = Gtk.Grid(column_spacing=8, row_spacing=4)
+        tuning_grid.set_margin_top(4)
+        tuning_values = (
+            ("Start drag px", "drag_start_distance_px", 1.0, 12.0, 0.5, 1),
+            ("Soft threshold", "drag_soft_enter_threshold", 0.0, 1.0, 0.01, 2),
+            ("Medium enter", "drag_medium_enter_threshold", 0.0, 1.0, 0.01, 2),
+            ("Medium exit", "drag_medium_exit_threshold", 0.0, 1.0, 0.01, 2),
+            (
+                "Full-sway px/s",
+                "drag_heavy_velocity_px_per_second",
+                100.0,
+                2_000.0,
+                25.0,
+                0,
+            ),
+            ("Drag dwell ms", "drag_state_dwell_ms", 0.0, 250.0, 10.0, 0),
+            (
+                "Heart cooldown s",
+                "hover_heart_cooldown_seconds",
+                0.0,
+                10.0,
+                0.25,
+                2,
+            ),
+            (
+                "Pickup frame ms",
+                "pickup_frame_duration_ms",
+                10.0,
+                100.0,
+                5.0,
+                0,
+            ),
+        )
+        for row, values in enumerate(tuning_values):
+            label, attribute, lower, upper, step, digits = values
+            self._append_tuning_control(
+                tuning_grid, row, label, attribute, lower, upper, step, digits
+            )
+        tuning_expander.set_child(tuning_grid)
+        menu_box.append(tuning_expander)
+
         reset_button = Gtk.Button(label="Reset Position")
         reset_button.add_css_class("flat")
         reset_button.connect("clicked", self._reset_position)
@@ -209,6 +295,55 @@ class Buddy(Gtk.DrawingArea):
         menu_box.append(quit_button)
         popover.set_child(menu_box)
         return popover
+
+    def _append_tuning_control(
+        self,
+        grid: Gtk.Grid,
+        row: int,
+        label: str,
+        attribute: str,
+        lower: float,
+        upper: float,
+        step: float,
+        digits: int,
+    ) -> None:
+        value_label = Gtk.Label(label=label)
+        value_label.set_xalign(0)
+        spin = Gtk.SpinButton.new_with_range(lower, upper, step)
+        spin.set_digits(digits)
+        spin.set_value(float(getattr(self._tuning, attribute)))
+        spin.connect(
+            "value-changed",
+            lambda control, name=attribute: self._change_tuning(
+                name, control.get_value()
+            ),
+        )
+        self._tuning_controls[attribute] = spin
+        grid.attach(value_label, 0, row, 1, 1)
+        grid.attach(spin, 1, row, 1, 1)
+
+    def _change_tuning(self, attribute: str, value: float) -> None:
+        if attribute in ("drag_state_dwell_ms", "pickup_frame_duration_ms"):
+            value = round(value)
+        setattr(self._tuning, attribute, value)
+        selector = self._drag_motion.pose_selector
+        if attribute == "drag_soft_enter_threshold":
+            selector.soft_enter_threshold = value
+        elif attribute == "drag_medium_enter_threshold":
+            selector.medium_enter_threshold = value
+            self._tuning_controls[
+                "drag_medium_exit_threshold"
+            ].get_adjustment().set_upper(max(0.0, value - 0.01))
+        elif attribute == "drag_medium_exit_threshold":
+            selector.medium_exit_threshold = value
+            self._tuning_controls[
+                "drag_medium_enter_threshold"
+            ].get_adjustment().set_lower(min(1.0, value + 0.01))
+        elif attribute == "drag_heavy_velocity_px_per_second":
+            self._drag_motion.max_velocity = value
+        elif attribute == "drag_state_dwell_ms":
+            selector.dwell_ms = value
+        self._logger.debug("Tuning changed: %s=%s", attribute, value)
 
     def _change_size(self, scale: Gtk.Scale) -> None:
         size = round(scale.get_value() / 64) * 64
@@ -236,6 +371,11 @@ class Buddy(Gtk.DrawingArea):
         self, _gesture: Gtk.GestureClick, _presses: int, x: float, y: float
     ) -> None:
         self._mark_interaction()
+        self._cancel_active_emote()
+        if self.state.current is MochiState.WALKING:
+            self._cancel_walk()
+            self._transition_to(MochiState.IDLE)
+            self._play_animation("idle")
         self._sleep_button.set_label(
             "Wake Up" if self.state.current is MochiState.SLEEPING else "Sleep"
         )
@@ -245,39 +385,131 @@ class Buddy(Gtk.DrawingArea):
         rectangle.width = 1
         rectangle.height = 1
         self._context_menu.set_pointing_to(rectangle)
+        self._context_menu_open = True
         self._context_menu.popup()
+        self._logger.debug("Context menu opened at (%d, %d)", rectangle.x, rectangle.y)
 
     def _toggle_sleep(self, _button: Gtk.Button) -> None:
-        if self.state.current is MochiState.SLEEPING:
-            self._wake_up()
-        else:
-            self._begin_sleep()
-        self._context_menu.popdown()
-        self.queue_draw()
+        def toggle() -> None:
+            if self.state.current is MochiState.SLEEPING:
+                self._wake_up()
+            else:
+                self._begin_sleep()
+            self.queue_draw()
+
+        self._close_context_menu_then(toggle)
 
     def _test_walk(self, _button: Gtk.Button) -> None:
-        if self.state.current is MochiState.IDLE:
-            self._start_walk()
-        self._context_menu.popdown()
+        def start_walk() -> None:
+            if self.state.current is MochiState.IDLE:
+                self._start_walk()
+
+        self._close_context_menu_then(start_walk)
+
+    def _test_heart_emote(self, _button: Gtk.Button) -> None:
+        self._close_context_menu_then(
+            lambda: self._start_heart_emote(ignore_cooldown=True)
+        )
+
+    def _test_computer_emote(self, _button: Gtk.Button) -> None:
+        self._close_context_menu_then(self._start_computer_emote)
 
     def _reset_position(self, _button: Gtk.Button) -> None:
-        self._config.reset_position()
-        default = WindowPlacement.DEFAULT_POSITION
-        self._placement.move_to(default.x, default.y)
+        def reset_position() -> None:
+            self._config.reset_position()
+            default = WindowPlacement.DEFAULT_POSITION
+            self._placement.move_to(default.x, default.y)
+
+        self._close_context_menu_then(reset_position)
+
+    def _close_context_menu_then(self, action: Callable[[], None]) -> None:
+        self._pending_context_action = action
         self._context_menu.popdown()
+
+    def _on_context_menu_closed(self, _popover: Gtk.Popover) -> None:
+        self._context_menu_open = False
+        self._logger.debug("Context menu closed")
+        action = self._pending_context_action
+        self._pending_context_action = None
+        if action is not None:
+            GLib.idle_add(self._dispatch_context_action, action)
+
+    def _dispatch_context_action(self, action: Callable[[], None]) -> bool:
+        action()
+        return GLib.SOURCE_REMOVE
 
     def _quit(self, _button: Gtk.Button) -> None:
         application = self._window.get_application()
         if application is not None:
             application.quit()
 
+    def _on_enter(
+        self, _controller: Gtk.EventControllerMotion, _x: float, _y: float
+    ) -> None:
+        if self._hovered:
+            return
+        self._hovered = True
+        self._mark_interaction()
+        self._start_heart_emote()
+
+    def _on_leave(self, _controller: Gtk.EventControllerMotion) -> None:
+        self._hovered = False
+
+    def _start_heart_emote(self, ignore_cooldown: bool = False) -> bool:
+        now = time.monotonic()
+        if (
+            self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        if (
+            not ignore_cooldown
+            and now - self._last_heart_started
+            < self._tuning.hover_heart_cooldown_seconds
+        ):
+            return False
+        if not self._transition_to(MochiState.HEART):
+            return False
+        self._last_heart_started = now
+        self._play_animation("heart")
+        return True
+
+    def _start_computer_emote(self) -> bool:
+        if (
+            self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        if not self._transition_to(MochiState.COMPUTER):
+            return False
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._play_animation("computer_intro", after=None)
+        return True
+
+    def _cancel_active_emote(self) -> bool:
+        if self._computer_typing_source_id is not None:
+            GLib.source_remove(self._computer_typing_source_id)
+            self._computer_typing_source_id = None
+        if self.state.current not in (MochiState.HEART, MochiState.COMPUTER):
+            return False
+        self._transition_to(MochiState.IDLE)
+        self._play_animation("idle")
+        return True
+
     def _on_pressed(
         self, _gesture: Gtk.GestureClick, _presses: int, x: float, y: float
     ) -> None:
         self._mark_interaction()
+        self._cancel_active_emote()
         self._press = (x, y)
         self._drag_started = False
         self._drag_move_started = False
+        self._drag_release_handled = False
+        self._drag_end_handled = False
 
     def _on_drag_begin(self, _gesture: Gtk.GestureDrag, _x: float, _y: float) -> None:
         self._drag_origin = self._placement.position
@@ -285,13 +517,15 @@ class Buddy(Gtk.DrawingArea):
     def _on_drag_update(
         self, _gesture: Gtk.GestureDrag, offset_x: float, offset_y: float
     ) -> None:
-        if math.hypot(offset_x, offset_y) < 6:
+        if math.hypot(offset_x, offset_y) < self._tuning.drag_start_distance_px:
             return
         if not self._drag_started:
             self._drag_started = True
             self._cancel_walk()
             self._click_reactions.clear()
-            self._begin_pickup()
+            if not self._begin_pickup():
+                self._drag_started = False
+                return
             if self._placement.layer_shell_enabled:
                 self._begin_drag_visual(
                     self._drag_origin.x + offset_x,
@@ -301,7 +535,10 @@ class Buddy(Gtk.DrawingArea):
                 self._drag_motion.reset()
                 self._drag_frame_index = 0
             self._sound.play(SoundEvent.PICKUP)
-        if self._placement.layer_shell_enabled and self.state.current is MochiState.DRAGGED:
+        if self._placement.layer_shell_enabled and self.state.current in (
+            MochiState.PICKUP,
+            MochiState.DRAGGED,
+        ):
             # Y is stored as distance from the bottom edge, hence the subtraction.
             self._placement.move_to(
                 self._drag_origin.x + round(offset_x),
@@ -316,8 +553,12 @@ class Buddy(Gtk.DrawingArea):
     def _on_drag_end(
         self, _gesture: Gtk.GestureDrag, _offset_x: float, _offset_y: float
     ) -> None:
-        if not self._drag_started:
+        if not self._drag_started and not self._drag_release_handled:
             return
+        self._finish_drag_interaction()
+        if self._drag_end_handled:
+            return
+        self._drag_end_handled = True
         if not self._placement.layer_shell_enabled:
             self._placement.sync_from_window()
         self._config.save_position(self._placement.position)
@@ -348,7 +589,7 @@ class Buddy(Gtk.DrawingArea):
         if self._press is None or self._drag_started:
             return
         press_x, press_y = self._press
-        if math.hypot(x - press_x, y - press_y) < 6:
+        if math.hypot(x - press_x, y - press_y) < self._tuning.drag_start_distance_px:
             return
 
         event = controller.get_current_event()
@@ -358,7 +599,9 @@ class Buddy(Gtk.DrawingArea):
             self._drag_started = True
             self._cancel_walk()
             self._click_reactions.clear()
-            self._begin_pickup()
+            if not self._begin_pickup():
+                self._drag_started = False
+                return
             self._drag_motion.reset()
             self._drag_sample_position = None
             self._drag_sample_time = None
@@ -379,17 +622,24 @@ class Buddy(Gtk.DrawingArea):
         self, _gesture: Gtk.GestureClick, _presses: int, _x: float, _y: float
     ) -> None:
         self._press = None
-        if self._drag_started:
-            self._drag_started = False
-            self._drag_move_started = False
-            self._drag_sample_position = None
-            self._drag_sample_time = None
-            if self.state.current in (MochiState.PICKUP, MochiState.DRAGGED):
-                self._drag_motion.reset()
-                self._transition_to(MochiState.IDLE)
-                self._play_drag_settle()
+        if self._finish_drag_interaction() or self._drag_release_handled:
             return
         self.react_to_click()
+
+    def _finish_drag_interaction(self) -> bool:
+        if not self._drag_started:
+            return False
+        self._drag_started = False
+        self._drag_release_handled = True
+        self._drag_move_started = False
+        self._drag_sample_position = None
+        self._drag_sample_time = None
+        if self.state.current in (MochiState.PICKUP, MochiState.DRAGGED):
+            self._transition_to(MochiState.IDLE)
+            self._play_drag_settle()
+            self._drag_motion.reset()
+            self._drag_visual_key = None
+        return True
 
     def react_to_click(self) -> None:
         if self._preview_mode:
@@ -477,10 +727,24 @@ class Buddy(Gtk.DrawingArea):
             )
             return
         if self._current_animation == "pickup":
+            if not self._drag_started or self.state.current is not MochiState.PICKUP:
+                self._transition_to(MochiState.IDLE)
+                self._play_animation("idle")
+                return
             self._transition_to(MochiState.DRAGGED)
-            self._drag_motion.reset()
-            self._drag_frame_index = 0
             self._play_drag_pose()
+            return
+        if self._current_animation == "computer_intro":
+            if self.state.current is not MochiState.COMPUTER:
+                return
+            self._play_animation("computer_typing", after=None)
+            typing_seconds = random.uniform(*COMPUTER_TYPING_DURATION_SECONDS)
+            self._computer_typing_source_id = GLib.timeout_add(
+                round(typing_seconds * 1_000), self._finish_computer_typing
+            )
+            self._logger.debug(
+                "Computer typing loop started for %.1f seconds", typing_seconds
+            )
             return
         next_animation = self._pending_animation
         self._pending_animation = None
@@ -497,6 +761,8 @@ class Buddy(Gtk.DrawingArea):
         else:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
+            if finished_animation.name == "computer_outro":
+                self._schedule_computer_idle_emote()
 
     def _play_animation(self, name: str, after: str | None = None) -> None:
         previous = self._current_animation
@@ -509,15 +775,23 @@ class Buddy(Gtk.DrawingArea):
             self._idle_resume_position = None
         self._current_animation = name
         animation = ANIMATIONS[name]
+        if name == "pickup":
+            animation = replace(
+                animation,
+                frame_duration_ms=self._tuning.pickup_frame_duration_ms,
+            )
         self._active_animation = animation
         self._pending_animation = after if after is not None else animation.next_state
         self.player.play(animation)
         self._logger.debug("Animation: %s -> %s", previous, name)
         self.queue_draw()
 
-    def _begin_pickup(self) -> None:
-        self._transition_to(MochiState.PICKUP)
+    def _begin_pickup(self) -> bool:
+        self._cancel_active_emote()
+        if not self._transition_to(MochiState.PICKUP):
+            return False
         self._play_animation("pickup", after=None)
+        return True
 
     def _resume_idle(self) -> None:
         frame_index, elapsed_ms = self._idle_resume_position or (0, 0)
@@ -534,6 +808,7 @@ class Buddy(Gtk.DrawingArea):
         self.queue_draw()
 
     def _begin_sleep(self) -> None:
+        self._cancel_active_emote()
         if not can_begin_sleep(self.state.current):
             return
         if not can_transition(self.state.current, MochiState.SLEEPING):
@@ -554,19 +829,60 @@ class Buddy(Gtk.DrawingArea):
 
     def _mark_interaction(self) -> None:
         self._last_interaction = time.monotonic()
+        if not self._preview_mode:
+            self._reschedule_computer_idle_emote()
 
     def _schedule_idle_action(self) -> None:
-        GLib.timeout_add_seconds(random.randint(5, 15), self._choose_idle_action)
+        if self._idle_action_source_id is None:
+            self._idle_action_source_id = GLib.timeout_add_seconds(
+                random.randint(5, 15), self._choose_idle_action
+            )
 
     def _schedule_blink(self) -> None:
+        if self._blink_source_id is not None:
+            return
         delay_seconds = random.uniform(*self.BLINK_INTERVAL_SECONDS)
         self._logger.debug("Blink scheduled in: %.1f seconds", delay_seconds)
-        GLib.timeout_add(round(delay_seconds * 1_000), self._try_blink)
+        self._blink_source_id = GLib.timeout_add(
+            round(delay_seconds * 1_000), self._try_blink
+        )
+
+    def _schedule_computer_idle_emote(self) -> None:
+        if self._computer_idle_source_id is not None:
+            return
+        delay = random.randint(*COMPUTER_IDLE_DELAY_SECONDS)
+        self._computer_idle_source_id = GLib.timeout_add_seconds(
+            delay, self._try_computer_idle_emote
+        )
+        self._logger.debug("Computer idle emote scheduled in %d seconds", delay)
+
+    def _reschedule_computer_idle_emote(self) -> None:
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._schedule_computer_idle_emote()
+
+    def _try_computer_idle_emote(self) -> bool:
+        self._computer_idle_source_id = None
+        if not self._start_computer_emote():
+            self._schedule_computer_idle_emote()
+        return GLib.SOURCE_REMOVE
+
+    def _finish_computer_typing(self) -> bool:
+        self._computer_typing_source_id = None
+        if (
+            self.state.current is MochiState.COMPUTER
+            and self._current_animation == "computer_typing"
+        ):
+            self._play_animation("computer_outro", after="idle")
+        return GLib.SOURCE_REMOVE
 
     def _try_blink(self) -> bool:
+        self._blink_source_id = None
         try:
             if (
                 self.state.current is MochiState.IDLE
+                and not self._context_menu_open
                 and self.player.animation is ANIMATIONS["idle"]
             ):
                 self._play_blink()
@@ -599,8 +915,9 @@ class Buddy(Gtk.DrawingArea):
         self.queue_draw()
 
     def _choose_idle_action(self) -> bool:
+        self._idle_action_source_id = None
         try:
-            if self.state.current is not MochiState.IDLE:
+            if self.state.current is not MochiState.IDLE or self._context_menu_open:
                 return GLib.SOURCE_REMOVE
             if time.monotonic() - self._last_interaction >= 120:
                 self._begin_sleep()
@@ -663,33 +980,41 @@ class Buddy(Gtk.DrawingArea):
         walking = self.state.current is MochiState.WALKING and not self._preview_mode
         if walking:
             self._advance_walk()
+        picking_up = self.state.current is MochiState.PICKUP
         dragging = self.state.current is MochiState.DRAGGED
-        if dragging and not self._placement.layer_shell_enabled:
-            self._sample_x11_drag()
-        elif dragging and time.monotonic() - self._last_drag_update_time > 0.05:
+        if (picking_up or dragging) and not self._placement.layer_shell_enabled:
+            self._sample_x11_drag(render=dragging)
+        elif (
+            dragging
+            and time.monotonic() - self._last_drag_update_time
+            > DRAG_VISUAL_IDLE_DELAY_SECONDS
+        ):
             self._settle_drag_visual()
         if not walking and not dragging and self.player.tick(self.TICK_MS):
             self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
     def _begin_drag_visual(self, x: float, y: float) -> None:
-        self._last_drag_update_time = time.monotonic()
-        self._drag_motion.begin(x, y, time.monotonic())
-        self._drag_frame_index = 1
+        timestamp = time.monotonic()
+        self._last_drag_update_time = timestamp
+        self._drag_motion.begin(x, y, timestamp)
+        self._drag_frame_index = 0
+        self._drag_visual_key = None
 
     def _update_drag_visual(self, x: float, y: float) -> None:
-        if self.state.current is not MochiState.DRAGGED:
+        if self.state.current not in (MochiState.PICKUP, MochiState.DRAGGED):
             return
         timestamp = time.monotonic()
         self._last_drag_update_time = timestamp
         self._drag_motion.update(x, y, timestamp)
-        self._play_drag_pose()
+        if self.state.current is MochiState.DRAGGED:
+            self._play_drag_pose()
 
     def _settle_drag_visual(self) -> None:
         self._drag_motion.settle()
         self._play_drag_pose()
 
-    def _sample_x11_drag(self) -> None:
+    def _sample_x11_drag(self, render: bool = True) -> None:
         position = self._placement.sync_from_window()
         timestamp = time.monotonic()
         previous_position = self._drag_sample_position
@@ -703,7 +1028,8 @@ class Buddy(Gtk.DrawingArea):
         self._drag_sample_position = (position.x, position.y)
         self._drag_sample_time = timestamp
         self._last_drag_update_time = timestamp
-        self._play_drag_pose()
+        if render:
+            self._play_drag_pose()
         frame = self.player.frame
         self._logger.debug(
             "Drag sample position=(%d,%d) dt=%.3f filtered_velocity_x=%.1f intensity=%.3f frame_index=%d sprite=%s",
@@ -717,14 +1043,17 @@ class Buddy(Gtk.DrawingArea):
         )
 
     def _play_drag_pose(self) -> None:
-        intensity = self._drag_motion.horizontal_intensity
-        sprite = drag_pose_sprite(intensity)
+        sprite = self._drag_motion.pose_sprite()
         self._drag_frame_index = next(
             index
             for index, frame in enumerate(ANIMATIONS["dragged"].frames)
             if frame.sprite == sprite
         )
-        body_offset = round(self._drag_motion.body_sway * 14)
+        body_offset = round(self._drag_motion.body_sway * DRAG_BODY_SWAY_PX)
+        visual_key = (sprite, body_offset)
+        if visual_key == self._drag_visual_key:
+            return
+        self._drag_visual_key = visual_key
         animation = replace(
             ANIMATIONS["dragged"],
             frames=tuple(
@@ -755,10 +1084,10 @@ class Buddy(Gtk.DrawingArea):
         settle = Animation(
             name="drag_settle",
             frames=(
-                replace(current, duration_ms=70),
-                replace(neutral, duration_ms=140),
+                replace(current, duration_ms=DRAG_SETTLE_DIRECTIONAL_MS),
+                replace(neutral, duration_ms=DRAG_SETTLE_NEUTRAL_MS),
             ),
-            frame_duration_ms=140,
+            frame_duration_ms=DRAG_SETTLE_NEUTRAL_MS,
             next_state="idle",
         )
         self._current_animation = settle.name

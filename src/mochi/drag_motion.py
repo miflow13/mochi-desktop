@@ -2,22 +2,66 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
+
+from mochi.interaction_tuning import (
+    DRAG_HEAVY_VELOCITY_PX_PER_SECOND,
+    DRAG_MEDIUM_ENTER_THRESHOLD,
+    DRAG_MEDIUM_EXIT_THRESHOLD,
+    DRAG_SOFT_ENTER_THRESHOLD,
+    DRAG_STATE_DWELL_MS,
+    DRAG_VELOCITY_SMOOTHING,
+)
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(value, upper))
 
 
-def drag_pose_sprite(horizontal_intensity: float) -> str:
-    """Choose a drag pose without depending on manifest frame positions."""
-    magnitude = abs(horizontal_intensity)
-    if magnitude < 0.20:
-        return "drag/drag_neutral.png"
-    direction = "left" if horizontal_intensity > 0 else "right"
-    strength = "soft" if magnitude < 0.35 else "medium"
-    return f"drag/drag_{direction}_{strength}.png"
+@dataclass
+class DragPoseSelector:
+    """Stateful pose selection with a quiet soft/medium hysteresis band."""
+
+    soft_enter_threshold: float = DRAG_SOFT_ENTER_THRESHOLD
+    medium_enter_threshold: float = DRAG_MEDIUM_ENTER_THRESHOLD
+    medium_exit_threshold: float = DRAG_MEDIUM_EXIT_THRESHOLD
+    dwell_ms: int = DRAG_STATE_DWELL_MS
+    strength: str = "neutral"
+    _last_strength_change: float | None = None
+
+    def select(self, horizontal_intensity: float, timestamp: float) -> str:
+        magnitude = abs(horizontal_intensity)
+        if magnitude < self.soft_enter_threshold:
+            candidate = "neutral"
+        elif self.strength == "medium":
+            candidate = (
+                "medium" if magnitude >= self.medium_exit_threshold else "soft"
+            )
+        else:
+            candidate = (
+                "medium" if magnitude >= self.medium_enter_threshold else "soft"
+            )
+
+        changing_drag_strength = {candidate, self.strength} == {"soft", "medium"}
+        inside_dwell = (
+            self._last_strength_change is not None
+            and (timestamp - self._last_strength_change) * 1_000 < self.dwell_ms
+        )
+        if changing_drag_strength and inside_dwell:
+            candidate = self.strength
+        elif candidate != self.strength:
+            self.strength = candidate
+            self._last_strength_change = timestamp
+
+        if self.strength == "neutral":
+            return "drag/drag_neutral.png"
+        direction = "left" if horizontal_intensity > 0 else "right"
+        return f"drag/drag_{direction}_{self.strength}.png"
+
+    def reset(self) -> None:
+        self.strength = "neutral"
+        self._last_strength_change = None
 
 
 def drag_settle_sprite(pose_sprite: str) -> str:
@@ -31,13 +75,14 @@ def drag_settle_sprite(pose_sprite: str) -> str:
 
 @dataclass
 class DragMotionModel:
-    smoothing: float = 0.28
-    max_velocity: float = 700.0
+    smoothing: float = DRAG_VELOCITY_SMOOTHING
+    max_velocity: float = DRAG_HEAVY_VELOCITY_PX_PER_SECOND
     filtered_velocity_x: float = 0.0
     filtered_velocity_y: float = 0.0
     _previous_x: float | None = None
     _previous_y: float | None = None
     _previous_time: float | None = None
+    pose_selector: DragPoseSelector = field(default_factory=DragPoseSelector)
 
     def begin(self, x: float, y: float, timestamp: float) -> None:
         self._previous_x = x
@@ -85,9 +130,16 @@ class DragMotionModel:
         self.filtered_velocity_x *= 1.0 - self.smoothing
         self.filtered_velocity_y *= 1.0 - self.smoothing
 
+    def pose_sprite(self) -> str:
+        return self.pose_selector.select(
+            self.horizontal_intensity,
+            self._previous_time or 0.0,
+        )
+
     def reset(self) -> None:
         self.filtered_velocity_x = 0.0
         self.filtered_velocity_y = 0.0
         self._previous_x = None
         self._previous_y = None
         self._previous_time = None
+        self.pose_selector.reset()

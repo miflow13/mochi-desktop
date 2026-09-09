@@ -14,7 +14,9 @@ from mochi.state import MochiState
 CLICK_REACTION_STATES = frozenset(
     (MochiState.BOUNCING, MochiState.SQUISHING)
 )
-REACTION_STATES = CLICK_REACTION_STATES | frozenset((MochiState.EXCITED,))
+REACTION_STATES = CLICK_REACTION_STATES | frozenset(
+    (MochiState.EXCITED, MochiState.HEART, MochiState.COMPUTER)
+)
 
 
 def can_start_click_reaction(state: MochiState) -> bool:
@@ -61,6 +63,8 @@ def can_transition(current: MochiState, requested: MochiState) -> bool:
     if requested is MochiState.BLINKING:
         return current is MochiState.IDLE
     if requested is MochiState.WALKING:
+        return current is MochiState.IDLE
+    if requested in (MochiState.HEART, MochiState.COMPUTER):
         return current is MochiState.IDLE
     if requested in REACTION_STATES:
         return current in (MochiState.IDLE, MochiState.WALKING)
