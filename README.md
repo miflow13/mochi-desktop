@@ -59,7 +59,7 @@ expressive, and unobtrusive.
 
 ### v0.1 — Exists
 
-Core desktop buddy functionality.
+~~Core desktop buddy functionality.~~
 
 ### v0.2 — Feels alive
 
