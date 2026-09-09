@@ -2,6 +2,7 @@
 
 - [Home](Home.md)
 - [Getting Started](Getting-Started.md)
+- [Current Development Status](Current-Development-Status.md)
 - [Architecture and Tech Stack](Architecture-and-Tech-Stack.md)
 - [Interaction Core](Interaction-Core.md)
 - [Animation and Art Pipeline](Animation-and-Art-Pipeline.md)
