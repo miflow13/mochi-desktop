@@ -42,7 +42,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
     def test_pickup_is_a_six_frame_one_shot(self) -> None:
         pickup = ANIMATIONS["pickup"]
         self.assertEqual(len(pickup.frames), 6)
-        self.assertEqual(pickup.frame_duration_ms, 120)
+        self.assertEqual(pickup.frame_duration_ms, 50)
         self.assertFalse(pickup.looping)
 
     def test_sleep_transitions_to_sleeping(self) -> None:

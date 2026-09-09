@@ -16,7 +16,7 @@ def drag_pose_sprite(horizontal_intensity: float) -> str:
     if magnitude < 0.20:
         return "drag/drag_neutral.png"
     direction = "left" if horizontal_intensity > 0 else "right"
-    strength = "soft" if magnitude < 0.20 else "medium"
+    strength = "soft" if magnitude < 0.35 else "medium"
     return f"drag/drag_{direction}_{strength}.png"
 
 
