@@ -21,6 +21,7 @@ FRIENDLY_STATE_LABELS = {
     MochiState.WALKING: "Walking",
     MochiState.SLEEPING: "Sleeping",
     MochiState.WAKING: "Waking up",
+    MochiState.PICKING_UP: "Picked up",
     MochiState.DRAGGED: "Dragged",
 }
 
