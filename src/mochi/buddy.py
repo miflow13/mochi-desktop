@@ -30,7 +30,6 @@ from mochi.config import ConfigStore
 from mochi.drag_motion import DragMotionModel, DragPoseSelector, drag_settle_sprite
 from mochi.interaction_tuning import (
     COMPUTER_IDLE_DELAY_SECONDS,
-    COMPUTER_TYPING_DURATION_SECONDS,
     DRAG_BODY_SWAY_PX,
     DRAG_SETTLE_DIRECTIONAL_MS,
     DRAG_SETTLE_NEUTRAL_MS,
@@ -122,7 +121,6 @@ class Buddy(Gtk.DrawingArea):
         self._idle_action_source_id: int | None = None
         self._blink_source_id: int | None = None
         self._computer_idle_source_id: int | None = None
-        self._computer_typing_source_id: int | None = None
         self._context_menu_open = False
         self._pending_context_action: Callable[[], None] | None = None
         self._size = self._config.load_size()
@@ -487,13 +485,10 @@ class Buddy(Gtk.DrawingArea):
         if self._computer_idle_source_id is not None:
             GLib.source_remove(self._computer_idle_source_id)
             self._computer_idle_source_id = None
-        self._play_animation("computer_intro", after=None)
+        self._play_animation("computer", after="idle")
         return True
 
     def _cancel_active_emote(self) -> bool:
-        if self._computer_typing_source_id is not None:
-            GLib.source_remove(self._computer_typing_source_id)
-            self._computer_typing_source_id = None
         if self.state.current not in (MochiState.HEART, MochiState.COMPUTER):
             return False
         self._transition_to(MochiState.IDLE)
@@ -720,6 +715,11 @@ class Buddy(Gtk.DrawingArea):
             self.queue_draw()
 
     def _finish_reaction(self, finished_animation) -> None:
+        self._logger.warning(
+    "ANIMATION FINISHED: current=%s finished=%s",
+    self._current_animation,
+    finished_animation.name,
+)
         if finished_animation is not self._active_animation:
             self._logger.debug(
                 "Ignoring stale animation completion: %s",
@@ -733,18 +733,6 @@ class Buddy(Gtk.DrawingArea):
                 return
             self._transition_to(MochiState.DRAGGED)
             self._play_drag_pose()
-            return
-        if self._current_animation == "computer_intro":
-            if self.state.current is not MochiState.COMPUTER:
-                return
-            self._play_animation("computer_typing", after=None)
-            typing_seconds = random.uniform(*COMPUTER_TYPING_DURATION_SECONDS)
-            self._computer_typing_source_id = GLib.timeout_add(
-                round(typing_seconds * 1_000), self._finish_computer_typing
-            )
-            self._logger.debug(
-                "Computer typing loop started for %.1f seconds", typing_seconds
-            )
             return
         next_animation = self._pending_animation
         self._pending_animation = None
@@ -761,7 +749,7 @@ class Buddy(Gtk.DrawingArea):
         else:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
-            if finished_animation.name == "computer_outro":
+            if finished_animation.name == "computer":
                 self._schedule_computer_idle_emote()
 
     def _play_animation(self, name: str, after: str | None = None) -> None:
@@ -866,15 +854,6 @@ class Buddy(Gtk.DrawingArea):
         self._computer_idle_source_id = None
         if not self._start_computer_emote():
             self._schedule_computer_idle_emote()
-        return GLib.SOURCE_REMOVE
-
-    def _finish_computer_typing(self) -> bool:
-        self._computer_typing_source_id = None
-        if (
-            self.state.current is MochiState.COMPUTER
-            and self._current_animation == "computer_typing"
-        ):
-            self._play_animation("computer_outro", after="idle")
         return GLib.SOURCE_REMOVE
 
     def _try_blink(self) -> bool:
