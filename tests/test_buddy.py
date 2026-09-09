@@ -270,7 +270,7 @@ class BuddyEmoteTests(unittest.TestCase):
 
 
 class BuddyTypingTests(unittest.TestCase):
-    def test_typing_activity_starts_loop_from_idle(self) -> None:
+    def test_typing_activity_starts_intro_from_idle(self) -> None:
         buddy = SimpleNamespace(
             state=SimpleNamespace(current=MochiState.IDLE),
             _context_menu_open=False,
@@ -284,12 +284,27 @@ class BuddyTypingTests(unittest.TestCase):
         self.assertTrue(Buddy._start_typing_emote(buddy))
 
         buddy._transition_to.assert_called_once_with(MochiState.TYPING)
+        buddy._play_animation.assert_called_once_with("typing_intro", after="typing_loop")
+
+    def test_typing_intro_finishes_in_loop(self) -> None:
+        intro = ANIMATIONS["typing_intro"]
+        buddy = SimpleNamespace(
+            _active_animation=intro,
+            _current_animation="typing_intro",
+            _pending_animation="typing_loop",
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._finish_reaction(buddy, intro)
+
         buddy._play_animation.assert_called_once_with("typing_loop", after=None)
 
-    def test_typing_stop_returns_to_idle(self) -> None:
+    def test_typing_stop_plays_outro_before_idle(self) -> None:
         buddy = SimpleNamespace(
             state=SimpleNamespace(current=MochiState.TYPING),
             _last_interaction=0.0,
+            _current_animation="typing_loop",
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),
             _schedule_computer_idle_emote=Mock(),
@@ -300,6 +315,25 @@ class BuddyTypingTests(unittest.TestCase):
             Buddy._on_typing_stopped(buddy)
 
         self.assertEqual(buddy._last_interaction, 10.0)
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_called_once_with("typing_outro", after="idle")
+        buddy._schedule_computer_idle_emote.assert_not_called()
+
+    def test_typing_outro_finishes_in_idle(self) -> None:
+        outro = ANIMATIONS["typing_outro"]
+        buddy = SimpleNamespace(
+            _active_animation=outro,
+            _current_animation="typing_outro",
+            _pending_animation="idle",
+            _click_reactions=SimpleNamespace(consume=Mock(return_value=False)),
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._finish_reaction(buddy, outro)
+
         buddy._transition_to.assert_called_once_with(MochiState.IDLE)
         buddy._play_animation.assert_called_once_with("idle")
         buddy._schedule_computer_idle_emote.assert_called_once()
@@ -308,6 +342,7 @@ class BuddyTypingTests(unittest.TestCase):
         monitor = Mock()
         buddy = SimpleNamespace(
             state=SimpleNamespace(current=MochiState.TYPING),
+            _current_animation="typing_intro",
             _typing_monitor=monitor,
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),

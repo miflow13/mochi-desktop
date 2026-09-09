@@ -515,7 +515,7 @@ class Buddy(Gtk.DrawingArea):
         if self._computer_idle_source_id is not None:
             GLib.source_remove(self._computer_idle_source_id)
             self._computer_idle_source_id = None
-        self._play_animation("typing_loop", after=None)
+        self._play_animation("typing_intro", after="typing_loop")
         self._logger.debug("Typing mirror animation started")
         return True
 
@@ -523,10 +523,11 @@ class Buddy(Gtk.DrawingArea):
         if self.state.current is not MochiState.TYPING:
             return
         self._last_interaction = time.monotonic()
-        self._transition_to(MochiState.IDLE)
-        self._play_animation("idle")
-        self._schedule_computer_idle_emote()
-        self._logger.debug("Typing mirror animation stopped")
+        if self._current_animation == "typing_intro":
+            self._pending_animation = "typing_outro"
+        elif self._current_animation == "typing_loop":
+            self._play_animation("typing_outro", after="idle")
+        self._logger.debug("Typing mirror animation stopping")
 
     def _cancel_active_emote(self) -> bool:
         if self.state.current not in (
@@ -779,6 +780,10 @@ class Buddy(Gtk.DrawingArea):
         self._pending_animation = None
         if next_animation == "sleeping":
             self._play_animation("sleeping")
+        elif next_animation == "typing_loop":
+            self._play_animation("typing_loop", after=None)
+        elif next_animation == "typing_outro":
+            self._play_animation("typing_outro", after="idle")
         elif self._click_reactions.consume() and self._current_animation in (
             "bounce",
             "squish",
@@ -790,7 +795,7 @@ class Buddy(Gtk.DrawingArea):
         else:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
-            if finished_animation.name == "computer":
+            if finished_animation.name in ("computer", "typing_outro"):
                 self._schedule_computer_idle_emote()
 
     def _play_animation(self, name: str, after: str | None = None) -> None:

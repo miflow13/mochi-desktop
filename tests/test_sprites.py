@@ -37,7 +37,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "default", "idle", "blink", "walk", "walk_left", "bounce",
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
-            "computer_outro",
+            "computer_outro", "typing_intro", "typing_loop", "typing_outro",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -136,6 +136,13 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertFalse(ANIMATIONS["computer_intro"].looping)
         self.assertTrue(ANIMATIONS["computer_typing"].looping)
         self.assertFalse(ANIMATIONS["computer_outro"].looping)
+
+    def test_typing_transition_animations_surround_the_loop(self) -> None:
+        self.assertEqual(len(ANIMATIONS["typing_intro"].frames), 5)
+        self.assertFalse(ANIMATIONS["typing_intro"].looping)
+        self.assertTrue(ANIMATIONS["typing_loop"].looping)
+        self.assertEqual(len(ANIMATIONS["typing_outro"].frames), 3)
+        self.assertFalse(ANIMATIONS["typing_outro"].looping)
 
 
 if __name__ == "__main__":
