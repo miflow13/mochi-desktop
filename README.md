@@ -50,6 +50,7 @@ The long-term goal is a companion that develops personality and useful desktop b
 ## Handcrafted with love
 
 <div align="center">
+<img width="800" height="588" alt="ezgif-8f82b5c9d969566f" src="https://github.com/user-attachments/assets/8c3492d7-7be7-4d9a-9a0d-9028dd75154b" />
 
 *Every pixel. Every frame. A little bit of personality.*
 
