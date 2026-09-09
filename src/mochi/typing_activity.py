@@ -30,7 +30,7 @@ class TypingBurstDetector:
         self._event_times: deque[float] = deque(maxlen=start_event_count)
 
     def record_activity(self, now: float | None = None) -> bool:
-        """Record one anonymous text/caret activity event.
+        """Record one anonymous caret activity event.
 
         Returns True only when this event starts a new typing session.
         """
@@ -45,6 +45,15 @@ class TypingBurstDetector:
             return True
 
         return False
+
+    def record_text_changed(self) -> bool:
+        """Record an anonymous text-change event as an immediate signal."""
+        if self.active:
+            return False
+
+        self.active = True
+        self._event_times.clear()
+        return True
 
     def end_session(self) -> bool:
         """End the active typing session and report whether one was active."""
@@ -176,13 +185,12 @@ class TypingActivityMonitor:
         # source contents, key values, or inserted strings.
         event_type = getattr(event, "type", "") or ""
 
-        if not (
-            event_type.startswith(self.TEXT_CHANGED_EVENT)
-            or event_type.startswith(self.CARET_MOVED_EVENT)
-        ):
+        if event_type.startswith(self.TEXT_CHANGED_EVENT):
+            started = self._detector.record_text_changed()
+        elif event_type.startswith(self.CARET_MOVED_EVENT):
+            started = self._detector.record_activity()
+        else:
             return
-
-        started = self._detector.record_activity()
 
         if self._detector.active:
             # Emit on every active event so Mochi can begin once any
