@@ -13,9 +13,21 @@ The project is still experimental and is **not ready for public release yet**.
 Features, artwork, behavior, architecture, and documentation may change
 significantly while development continues.
 
+---
 
-## Current status
+<br>
+<br>
 
+<table>
+  <tr>
+    <td>
+      <img width="64" height="64" alt="mochi_pickedup" src="https://github.com/user-attachments/assets/dee6a7c8-2f70-475a-ae3b-74f1b959dbc6" />
+    </td>
+    <td>
+      <h2>Current status</h2>
+    </td>
+  </tr>
+</table>
 **Version:** `0.2.0-alpha`  
 **Stage:** Phase 2 — Make Mochi Feel Alive
 
