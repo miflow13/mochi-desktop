@@ -26,7 +26,7 @@ Mochi is a lightweight Linux desktop companion that idles, reacts, wanders, slee
 | --- | --- |
 | ✅ Core desktop buddy MVP | 🚧 Walking polish |
 | ✅ Idle / breathing behavior | 🚧 Sleep / wake polish |
-| ✅ Natural blink behavior | 🚧 Pickup + drag animation refresh |
+| ✅ Natural blink behavior | ✅ Pickup + drag animation refresh |
 | ✅ Bounce / squish reactions | ⏳ New hover interaction UI |
 | ✅ Manifest-driven pixel-art assets | ⏳ Desktop reliability testing |
 | ✅ Two-dimensional wandering | |
