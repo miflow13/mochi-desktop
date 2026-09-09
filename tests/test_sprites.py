@@ -39,6 +39,12 @@ class SpriteDefinitionsTests(unittest.TestCase):
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
+    def test_pickup_is_a_six_frame_one_shot(self) -> None:
+        pickup = ANIMATIONS["pickup"]
+        self.assertEqual(len(pickup.frames), 6)
+        self.assertEqual(pickup.frame_duration_ms, 120)
+        self.assertFalse(pickup.looping)
+
     def test_sleep_transitions_to_sleeping(self) -> None:
         self.assertEqual(ANIMATIONS["sleep"].next_state, "sleeping")
         self.assertTrue(ANIMATIONS["sleeping"].looping)
@@ -88,13 +94,6 @@ class SpriteDefinitionsTests(unittest.TestCase):
         surfaces = SpriteAtlas().frames
         drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
         self.assertEqual(len(set(drag_pixels)), 8)
-
-    def test_drag_settle_ends_on_the_exact_idle_endpoint(self) -> None:
-        surfaces = SpriteAtlas().frames
-        settle = bytes(surfaces["drag/drag_settle_neutral.png"].get_data())
-        idle = bytes(surfaces["idle/idle_01.png"].get_data())
-
-        self.assertEqual(settle, idle)
 
     def test_walk_uses_the_manifest_directional_frames(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)

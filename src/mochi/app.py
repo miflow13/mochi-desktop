@@ -12,7 +12,6 @@ from gi.repository import Gio, Gtk  # noqa: E402
 from mochi.buddy import Buddy
 from mochi.config import ConfigStore
 from mochi.sound import SoundManager
-from mochi.status_overlay import MochiStatusOverlay
 from mochi.windowing import WindowPlacement
 from mochi.x11 import request_keep_above
 
@@ -53,18 +52,13 @@ class MochiApplication(Gtk.Application):
 
         placement = WindowPlacement(window, self.config.load_position())
         window.connect("map", self._configure_mapped_window, placement)
-        status = MochiStatusOverlay()
         buddy = Buddy(
             window,
             placement,
             self.config,
             self.sound,
             preview_mode=self.preview_animations,
-            on_click=status.dismiss_for_click,
-            on_hover_enter=status.hover_enter,
-            on_hover_leave=status.hover_leave,
         )
-        status.set_parent(buddy)
         window.set_child(buddy)
 
         css = Gtk.CssProvider()
@@ -75,7 +69,6 @@ class MochiApplication(Gtk.Application):
             }
             """
         )
-        MochiStatusOverlay.install_css(window.get_display())
         Gtk.StyleContext.add_provider_for_display(
             window.get_display(), css, Gtk.STYLE_PROVIDER_PRIORITY_USER
         )

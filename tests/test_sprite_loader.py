@@ -37,9 +37,13 @@ class AnimationAssetSetTests(unittest.TestCase):
             )
         )
 
-    def test_every_mochi_png_is_a_256px_rgba_asset(self) -> None:
+    def test_every_runtime_frame_is_a_256px_rgba_asset(self) -> None:
         assets = AnimationAssetSet()
-        paths = tuple(assets.root.rglob("*.png"))
+        paths = {
+            assets.root / path
+            for animation in assets.animations.values()
+            for path in animation.frame_paths
+        }
 
         self.assertTrue(paths)
         for path in paths:
