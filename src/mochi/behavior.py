@@ -17,6 +17,41 @@ CLICK_REACTION_STATES = frozenset(
 REACTION_STATES = CLICK_REACTION_STATES | frozenset((MochiState.EXCITED,))
 
 
+@dataclass
+class LongPressDragTracker:
+    """Tracks one primary-button sequence without owning GTK timers."""
+
+    generation: int = 0
+    pressed: bool = False
+    active: bool = False
+    moved: bool = False
+
+    def press(self) -> int:
+        self.generation += 1
+        self.pressed = True
+        self.active = False
+        self.moved = False
+        return self.generation
+
+    def mark_drag_intent(self) -> None:
+        if self.pressed:
+            self.moved = True
+
+    def activate(self, generation: int) -> bool:
+        if generation != self.generation or not self.pressed or self.active:
+            return False
+        self.active = True
+        return True
+
+    def release(self) -> tuple[bool, bool]:
+        result = (self.active, self.moved)
+        self.generation += 1
+        self.pressed = False
+        self.active = False
+        self.moved = False
+        return result
+
+
 def can_start_click_reaction(state: MochiState) -> bool:
     return state is MochiState.IDLE
 

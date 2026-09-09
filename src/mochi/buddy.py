@@ -16,9 +16,10 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
-from mochi.animation import Animation, AnimationPlayer
+from mochi.animation import AnimationPlayer
 from mochi.behavior import (
     ClickReactionBuffer,
+    LongPressDragTracker,
     WalkMotion,
     can_begin_sleep,
     can_begin_wake,
@@ -41,6 +42,7 @@ class Buddy(Gtk.DrawingArea):
     BLINK_INTERVAL_SECONDS = (4.0, 12.0)
     DOUBLE_BLINK_CHANCE = 0.075
     DOUBLE_BLINK_PAUSE_MS = (120, 250)
+    LONG_PRESS_MS = 400
     PREVIEW_ANIMATIONS = (
         "default",
         "idle",
@@ -91,6 +93,8 @@ class Buddy(Gtk.DrawingArea):
         self._walk_motion: WalkMotion | None = None
         self._walk_elapsed_ms = 0
         self._press: tuple[float, float] | None = None
+        self._long_press = LongPressDragTracker()
+        self._long_press_source = 0
         self._drag_origin = placement.position
         self._drag_started = False
         self._drag_move_started = False
@@ -282,8 +286,37 @@ class Buddy(Gtk.DrawingArea):
     ) -> None:
         self._mark_interaction()
         self._press = (x, y)
+        self._cancel_long_press_timer()
+        generation = self._long_press.press()
+        self._long_press_source = GLib.timeout_add(
+            self.LONG_PRESS_MS, self._activate_long_press, generation
+        )
         self._drag_started = False
         self._drag_move_started = False
+
+    def _activate_long_press(self, generation: int) -> bool:
+        self._long_press_source = 0
+        if not self._long_press.activate(generation):
+            return GLib.SOURCE_REMOVE
+        self._drag_started = True
+        self._cancel_walk()
+        self._click_reactions.clear()
+        self._transition_to(MochiState.PICKING_UP)
+        self._play_animation("pickup")
+        if self._placement.layer_shell_enabled:
+            position = self._placement.position
+            self._begin_pickup_visual(position.x, position.y)
+        else:
+            self._drag_motion.reset()
+            self._drag_sample_position = None
+            self._drag_sample_time = None
+        self._sound.play(SoundEvent.PICKUP)
+        return GLib.SOURCE_REMOVE
+
+    def _cancel_long_press_timer(self) -> None:
+        if self._long_press_source:
+            GLib.source_remove(self._long_press_source)
+            self._long_press_source = 0
 
     def _on_drag_begin(self, _gesture: Gtk.GestureDrag, _x: float, _y: float) -> None:
         self._drag_origin = self._placement.position
@@ -294,19 +327,8 @@ class Buddy(Gtk.DrawingArea):
         if math.hypot(offset_x, offset_y) < 6:
             return
         if not self._drag_started:
-            self._drag_started = True
-            self._cancel_walk()
-            self._click_reactions.clear()
-            self._transition_to(MochiState.PICKING_UP)
-            self._play_animation("pickup")
-            if self._placement.layer_shell_enabled:
-                self._begin_pickup_visual(
-                    self._drag_origin.x + offset_x,
-                    self._drag_origin.y + offset_y,
-                )
-            else:
-                self._drag_motion.reset()
-            self._sound.play(SoundEvent.PICKUP)
+            self._long_press.mark_drag_intent()
+            return
         if self._placement.layer_shell_enabled:
             # Y is stored as distance from the bottom edge, hence the subtraction.
             self._placement.move_to(
@@ -356,35 +378,14 @@ class Buddy(Gtk.DrawingArea):
         press_x, press_y = self._press
         if math.hypot(x - press_x, y - press_y) < 6:
             return
-
-        event = controller.get_current_event()
-        surface = self._window.get_surface()
-        device = event.get_device() if event is not None else None
-        if isinstance(surface, Gdk.Toplevel) and device is not None:
-            self._drag_started = True
-            self._cancel_walk()
-            self._click_reactions.clear()
-            self._transition_to(MochiState.PICKING_UP)
-            self._drag_motion.reset()
-            self._drag_sample_position = None
-            self._drag_sample_time = None
-            self._play_animation("pickup")
-            self._sound.play(SoundEvent.PICKUP)
-            # Wayland forbids applications from directly moving top-level windows.
-            # begin_move asks the compositor to perform the user's active drag.
-            surface.begin_move(
-                device,
-                Gdk.BUTTON_PRIMARY,
-                press_x,
-                press_y,
-                event.get_time(),
-            )
-            self._drag_move_started = True
+        self._long_press.mark_drag_intent()
 
     def _on_released(
         self, _gesture: Gtk.GestureClick, _presses: int, _x: float, _y: float
     ) -> None:
         self._press = None
+        self._cancel_long_press_timer()
+        _long_press_active, moved_before_activation = self._long_press.release()
         if self._drag_started:
             self._drag_started = False
             self._drag_move_started = False
@@ -394,6 +395,8 @@ class Buddy(Gtk.DrawingArea):
                 self._drag_motion.reset()
                 self._transition_to(MochiState.IDLE)
                 self._play_drag_settle()
+            return
+        if moved_before_activation:
             return
         self.react_to_click()
 
@@ -771,29 +774,7 @@ class Buddy(Gtk.DrawingArea):
         self.queue_draw()
 
     def _play_drag_settle(self) -> None:
-        settle_index = (
-            7
-            if 1 <= self._drag_frame_index <= 3
-            else 8
-            if 4 <= self._drag_frame_index <= 6
-            else 9
-        )
-        current = ANIMATIONS["dragged"].frames[settle_index]
-        neutral = ANIMATIONS["dragged"].frames[9]
-        settle = Animation(
-            name="drag_settle",
-            frames=(
-                replace(current, duration_ms=70),
-                replace(neutral, duration_ms=140),
-            ),
-            frame_duration_ms=140,
-            next_state="idle",
-        )
-        self._current_animation = settle.name
-        self._active_animation = settle
-        self._pending_animation = "idle"
-        self.player.play(settle)
-        self.queue_draw()
+        self._play_animation("put_down")
 
     def _cancel_walk(self) -> None:
         self._walk_motion = None

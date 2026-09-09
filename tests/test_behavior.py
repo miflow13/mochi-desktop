@@ -3,6 +3,7 @@ import unittest
 
 from mochi.behavior import (
     ClickReactionBuffer,
+    LongPressDragTracker,
     WalkMotion,
     can_begin_sleep,
     can_begin_wake,
@@ -16,6 +17,35 @@ from mochi.state import MochiState
 
 
 class ClickReactionTests(unittest.TestCase):
+    def test_long_press_distinguishes_click_drag_intent_and_activation(self) -> None:
+        tracker = LongPressDragTracker()
+
+        click_token = tracker.press()
+        self.assertEqual(tracker.release(), (False, False))
+        self.assertFalse(tracker.activate(click_token))
+
+        tracker.press()
+        tracker.mark_drag_intent()
+        self.assertEqual(tracker.release(), (False, True))
+
+        drag_token = tracker.press()
+        self.assertTrue(tracker.activate(drag_token))
+        self.assertEqual(tracker.release(), (True, False))
+
+    def test_stale_long_press_callbacks_and_repeated_cycles_are_safe(self) -> None:
+        tracker = LongPressDragTracker()
+        stale_token = tracker.press()
+        tracker.release()
+        current_token = tracker.press()
+        self.assertFalse(tracker.activate(stale_token))
+        self.assertTrue(tracker.activate(current_token))
+        self.assertEqual(tracker.release(), (True, False))
+
+        for _ in range(100):
+            token = tracker.press()
+            self.assertTrue(tracker.activate(token))
+            self.assertEqual(tracker.release(), (True, False))
+
     def test_click_reaction_state_restrictions(self) -> None:
         self.assertTrue(can_start_click_reaction(MochiState.IDLE))
         self.assertFalse(can_start_click_reaction(MochiState.SLEEPING))

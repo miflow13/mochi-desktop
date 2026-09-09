@@ -132,6 +132,34 @@ class SpriteDefinitionsTests(unittest.TestCase):
             player.play(ANIMATIONS["idle"])
         self.assertEqual(completions, [])
 
+    def test_put_down_is_the_seven_frame_plop_handoff(self) -> None:
+        put_down = ANIMATIONS["put_down"]
+        self.assertEqual(len(put_down.frames), 7)
+        self.assertEqual(put_down.frame_duration_ms, 120)
+        self.assertEqual(sum(frame.duration_ms or 120 for frame in put_down.frames), 840)
+        self.assertFalse(put_down.looping)
+        self.assertEqual(put_down.next_state, "idle")
+
+        surfaces = SpriteAtlas().frames
+        self.assertEqual(
+            len({bytes(surfaces[frame.sprite].get_data()) for frame in put_down.frames}),
+            7,
+        )
+        for frame in put_down.frames:
+            data = bytes(surfaces[frame.sprite].get_data())
+            alpha = data[3::4]
+            self.assertTrue(set(alpha).issubset({0, 255}))
+            self.assertIn(0, alpha)
+            self.assertIn(255, alpha)
+            self.assertFalse(
+                any(
+                    opaque == 255 and (red, green, blue) == (127, 127, 126)
+                    for blue, green, red, opaque in zip(
+                        *[iter(data)] * 4, strict=True
+                    )
+                )
+            )
+
     def test_walk_uses_a_slow_looping_bounce_prototype(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)
         self.assertTrue(ANIMATIONS["walk_left"].looping)
