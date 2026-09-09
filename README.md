@@ -1,25 +1,13 @@
 # Mochi 🌱
 
-> Private development repository.
-
-<p align="center">
-  <img width="220" height="220" alt="Mochi squish animation" src="animation-gifs/squish.gif" />
-  &nbsp;&nbsp;
-  <img width="220" height="220" alt="Mochi bounce animation" src="animation-gifs/bounce.gif" />
-  &nbsp;&nbsp;
-  <img width="220" height="220" alt="Mochi wake animation" src="animation-gifs/wake.gif" />
-</p>
-
-Mochi is a small Linux desktop companion currently under active development.
-
-The project is still experimental and is **not ready for public release yet**.
-Features, artwork, behavior, architecture, and documentation may change
-significantly while development continues.
+Mochi is a small Linux desktop companion in public alpha. This release is meant
+for hands-on testing: core interaction is usable, but desktop-environment quirks
+and animation polish are still being evaluated.
 
 ## Current status
 
-**Version:** `0.2.0-alpha`  
-**Stage:** Phase 2 — Make Mochi Feel Alive
+**Version:** `0.2.0a1`
+**Stage:** Public alpha
 
 - ✅ Core desktop buddy MVP
 - ✅ Idle / breathing animation
@@ -28,10 +16,9 @@ significantly while development continues.
 - ✅ Manifest-driven 128×128 pixel-art assets
 - ✅ Two-dimensional wandering
 - ✅ Dangling drag animation
-- 🚧 Walking polish
-- 🚧 Sleep / wake polish
-- ⏳ Nametag / status UI
-- ⏳ Desktop reliability testing
+- ✅ Double-click heart reaction and phased computer idle emote
+- ✅ Drag/drop lifecycle and cancellable timers
+- 🚧 Cross-desktop reliability testing
 
 Mochi has a transparent, undecorated window; a right-click menu for sleep,
 size, position reset, and quitting; persistent configuration; and cached,
@@ -77,13 +64,12 @@ GTK4, PyGObject, and XWayland where GNOME's native Wayland restrictions require 
 
 ```text
 mochi-desktop/
-├── animation-gifs/
 ├── assets/
 │   └── mochi/
+├── scripts/
 ├── src/
 │   └── mochi/
 ├── tests/
-├── tools/
 ├── README.md
 └── pyproject.toml
 ```
@@ -103,6 +89,13 @@ python3 -m pip install -e .
 mochi
 ```
 
+For an isolated user installation instead of an editable checkout:
+
+```bash
+python3 -m pip install --user .
+mochi
+```
+
 Useful commands:
 
 ```bash
@@ -110,8 +103,14 @@ mochi --debug
 mochi --reset-position
 mochi --preview-animations
 python3 -m unittest discover -s tests -v
-python3 tools/export_animation_gifs.py
 ```
+
+Debug logs include animation and state transitions. When reporting an alpha
+problem, launch with `mochi --debug`, reproduce it once, and include the relevant
+log lines together with your desktop environment and session type.
+
+See [docs/ALPHA_TESTING.md](docs/ALPHA_TESTING.md) for the release checklist,
+known limitations, and a concise bug-report template.
 
 ## Animation architecture
 

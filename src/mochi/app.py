@@ -66,6 +66,7 @@ class MochiApplication(Gtk.Application):
         )
         status.set_parent(buddy)
         window.set_child(buddy)
+        window.connect("close-request", self._cleanup_window, buddy, status)
 
         css = Gtk.CssProvider()
         css.load_from_string(
@@ -81,6 +82,16 @@ class MochiApplication(Gtk.Application):
         )
 
         window.present()
+
+    def _cleanup_window(
+        self,
+        _window: Gtk.Window,
+        buddy: Buddy,
+        status: MochiStatusOverlay,
+    ) -> bool:
+        status.shutdown()
+        buddy.shutdown()
+        return False
 
     def _configure_mapped_window(
         self, window: Gtk.Window, placement: WindowPlacement

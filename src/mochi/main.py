@@ -45,6 +45,15 @@ def configure_display_backend(environment: MutableMapping[str, str]) -> bool:
     return True
 
 
+def run_application(application: object, executable: str) -> int:
+    """Run GTK while treating terminal interruption as a clean shutdown."""
+    try:
+        return application.run([executable])
+    except KeyboardInterrupt:
+        logging.getLogger(__name__).info("Mochi stopped by keyboard interrupt")
+        return 130
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     selected_xwayland = configure_display_backend(os.environ)
@@ -65,16 +74,23 @@ def main(argv: list[str] | None = None) -> int:
     # usable on machines without a graphical session.
     try:
         from mochi.app import MochiApplication
+        from gi.repository import Gdk, Gtk
     except (ImportError, ValueError) as error:
         logging.getLogger(__name__).error(
             "GTK4/PyGObject is required to run Mochi: %s", error
+        )
+        return 1
+    if not Gtk.init_check() or Gdk.Display.get_default() is None:
+        logging.getLogger(__name__).error(
+            "GTK could not connect to a display. Check DISPLAY/WAYLAND_DISPLAY "
+            "and launch Mochi from an active desktop session."
         )
         return 1
 
     application = MochiApplication(
         config=config, preview_animations=args.preview_animations
     )
-    return application.run([sys.argv[0]])
+    return run_application(application, sys.argv[0])
 
 
 if __name__ == "__main__":

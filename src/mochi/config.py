@@ -34,20 +34,20 @@ class ConfigStore:
             return Position(x=int(data["x"]), y=int(data["y"]))
         except FileNotFoundError:
             return None
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             self._logger.warning("Ignoring invalid config %s: %s", self.path, error)
             return None
 
     def save_position(self, position: Position) -> None:
         data = self._load_or_empty()
         data.update({"x": position.x, "y": position.y})
-        self._save(data)
-        self._logger.debug("Position saved: %d, %d", position.x, position.y)
+        if self._save(data):
+            self._logger.debug("Position saved: %d, %d", position.x, position.y)
 
     def load_size(self) -> int:
         try:
             size = int(self._load()["size"])
-        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return self.DEFAULT_SIZE
         return max(self.MIN_SIZE, min(size, self.MAX_SIZE))
 
@@ -55,13 +55,13 @@ class ConfigStore:
         size = max(self.MIN_SIZE, min(round(size), self.MAX_SIZE))
         data = self._load_or_empty()
         data["size"] = size
-        self._save(data)
-        self._logger.debug("Size saved: %d", size)
+        if self._save(data):
+            self._logger.debug("Size saved: %d", size)
 
     def load_volume(self) -> float:
         try:
             volume = float(self._load()["volume"])
-        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return self.DEFAULT_VOLUME
         return max(0.0, min(volume, 1.0))
 
@@ -69,21 +69,21 @@ class ConfigStore:
         volume = max(0.0, min(float(volume), 1.0))
         data = self._load_or_empty()
         data["volume"] = volume
-        self._save(data)
-        self._logger.debug("Volume saved: %.0f%%", volume * 100)
+        if self._save(data):
+            self._logger.debug("Volume saved: %.0f%%", volume * 100)
 
     def load_muted(self) -> bool:
         try:
             muted = self._load()["muted"]
-        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return False
         return muted if isinstance(muted, bool) else False
 
     def save_muted(self, muted: bool) -> None:
         data = self._load_or_empty()
         data["muted"] = bool(muted)
-        self._save(data)
-        self._logger.debug("Audio muted: %s", bool(muted))
+        if self._save(data):
+            self._logger.debug("Audio muted: %s", bool(muted))
 
     def reset_position(self) -> None:
         try:
@@ -98,7 +98,12 @@ class ConfigStore:
         except FileNotFoundError:
             pass
         except (TypeError, ValueError, json.JSONDecodeError):
-            self.path.unlink(missing_ok=True)
+            try:
+                self.path.unlink(missing_ok=True)
+            except OSError as error:
+                self._logger.warning("Could not reset config %s: %s", self.path, error)
+        except OSError as error:
+            self._logger.warning("Could not reset config %s: %s", self.path, error)
 
     def _load(self) -> dict[str, object]:
         data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -109,13 +114,18 @@ class ConfigStore:
     def _load_or_empty(self) -> dict[str, object]:
         try:
             return self._load()
-        except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError):
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
             return {}
 
-    def _save(self, data: dict[str, object]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.path.with_suffix(".tmp")
-        temporary_path.write_text(
-            json.dumps(data, indent=2) + "\n", encoding="utf-8"
-        )
-        temporary_path.replace(self.path)
+    def _save(self, data: dict[str, object]) -> bool:
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = self.path.with_suffix(".tmp")
+            temporary_path.write_text(
+                json.dumps(data, indent=2) + "\n", encoding="utf-8"
+            )
+            temporary_path.replace(self.path)
+        except OSError as error:
+            self._logger.warning("Could not save config %s: %s", self.path, error)
+            return False
+        return True

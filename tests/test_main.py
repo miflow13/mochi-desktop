@@ -1,9 +1,27 @@
 import unittest
+from pathlib import Path
+import tomllib
 
-from mochi.main import configure_display_backend
+from mochi import __version__
+from mochi.main import configure_display_backend, run_application
 
 
 class DisplayBackendTests(unittest.TestCase):
+    def test_keyboard_interrupt_exits_without_propagating_a_traceback(self) -> None:
+        class InterruptedApplication:
+            def run(self, _arguments):
+                raise KeyboardInterrupt
+
+        self.assertEqual(run_application(InterruptedApplication(), "mochi"), 130)
+
+    def test_runtime_version_matches_package_metadata(self) -> None:
+        project = tomllib.loads(
+            (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(__version__, project["project"]["version"])
+
     def test_gnome_wayland_selects_xwayland(self) -> None:
         environment = {
             "XDG_SESSION_TYPE": "wayland",

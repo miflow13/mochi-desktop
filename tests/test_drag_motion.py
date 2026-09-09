@@ -45,6 +45,28 @@ class DragMotionModelTests(unittest.TestCase):
         motion.update(100, 0, 0.2)
         self.assertEqual(motion.leg_sway, 0.0)
 
+    def test_visual_offset_trails_fast_motion_but_stays_subtle(self) -> None:
+        motion = DragMotionModel()
+        motion.begin(0, 0, 0.0)
+        motion.update(100, 50, 0.1)
+
+        self.assertLess(motion.visual_offset_x, 0)
+        self.assertLess(motion.visual_offset_y, 0)
+        self.assertLessEqual(abs(motion.visual_offset_x), 6)
+        self.assertLessEqual(abs(motion.visual_offset_y), 6)
+
+    def test_visual_offset_settles_quickly_without_oscillation(self) -> None:
+        motion = DragMotionModel()
+        motion.begin(0, 0, 0.0)
+        motion.update(100, 0, 0.1)
+        offsets = []
+        for index in range(1, 16):
+            motion.update(100, 0, 0.1 + index * 0.016)
+            offsets.append(abs(motion.visual_offset_x))
+
+        self.assertEqual(offsets, sorted(offsets, reverse=True))
+        self.assertLess(offsets[-1], 0.1)
+
 
 if __name__ == "__main__":
     unittest.main()

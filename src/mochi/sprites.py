@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import cairo
 
-from mochi.animation import AnimationFrame
+from mochi.animation import Animation, AnimationFrame
 from mochi.sprite_loader import AnimationAssetSet
 
 
@@ -68,17 +68,23 @@ ANIMATIONS["sleep"] = replace(
     ),
     next_state="sleeping",
 )
+ANIMATIONS["sleeping"] = replace(
+    ANIMATIONS["sleeping"],
+    frames=(ANIMATIONS["sleep"].frames[-1],),
+)
 wake_durations = (70, 80, 90, 100, 100, 90)
+timed_wake_frames = tuple(
+    replace(frame, duration_ms=duration)
+    for frame, duration in zip(
+        ANIMATIONS["wake"].frames, wake_durations, strict=True
+    )
+)
 ANIMATIONS["wake"] = replace(
     ANIMATIONS["wake"],
-    frames=tuple(
-        replace(frame, duration_ms=duration)
-        for frame, duration in zip(
-            ANIMATIONS["wake"].frames, wake_durations, strict=True
-        )
-    ),
+    frames=timed_wake_frames
+    + (replace(ANIMATIONS["idle"].frames[0], duration_ms=120),),
 )
-squish_durations = (45, 70, 105, 120, 145, 125)
+squish_durations = (45, 55, 65, 75, 90, 85, 75, 65, 55)
 ANIMATIONS["squish"] = replace(
     ANIMATIONS["squish"],
     frames=tuple(
@@ -89,6 +95,35 @@ ANIMATIONS["squish"] = replace(
     ),
 )
 ANIMATIONS["excited"] = replace(ANIMATIONS["bounce"], name="excited")
+
+
+def _computer_idle_phase(
+    name: str, frames: tuple[AnimationFrame, ...], *, looping: bool
+) -> Animation:
+    """Build a playback phase from the one cached 16-frame source sheet."""
+    source = ANIMATIONS["idle_typing"]
+    return replace(
+        source,
+        name=name,
+        frames=frames,
+        looping=looping,
+        next_state=None,
+    )
+
+
+computer_frames = ANIMATIONS["idle_typing"].frames
+COMPUTER_IDLE_PHASES = {
+    "intro": _computer_idle_phase(
+        "idle_typing_intro", computer_frames[:4], looping=False
+    ),
+    "loop": _computer_idle_phase(
+        "idle_typing_loop", computer_frames[4:12], looping=True
+    ),
+    "outro": _computer_idle_phase(
+        "idle_typing_outro", computer_frames[12:], looping=False
+    ),
+}
+PREVIEW_ANIMATION_NAMES = tuple(ANIMATIONS)
 
 
 class SpriteAtlas:

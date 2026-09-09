@@ -47,6 +47,23 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertEqual(store.load_volume(), 1.0)
             self.assertTrue(store.load_muted())
 
+    def test_unwritable_config_path_does_not_break_interaction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            blocked_parent = Path(directory) / "blocked"
+            blocked_parent.write_text("not a directory", encoding="utf-8")
+            store = ConfigStore(blocked_parent / "config.json")
+
+            store.save_position(Position(42, 73))
+            store.save_size(192)
+            store.save_volume(0.5)
+            store.save_muted(True)
+            store.reset_position()
+
+            self.assertIsNone(store.load_position())
+            self.assertEqual(store.load_size(), ConfigStore.DEFAULT_SIZE)
+            self.assertEqual(store.load_volume(), ConfigStore.DEFAULT_VOLUME)
+            self.assertFalse(store.load_muted())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,6 +14,8 @@ def _clamp(value: float, lower: float, upper: float) -> float:
 class DragMotionModel:
     smoothing: float = 0.28
     max_velocity: float = 700.0
+    lag_seconds: float = 0.012
+    max_visual_offset: float = 6.0
     filtered_velocity_x: float = 0.0
     filtered_velocity_y: float = 0.0
     _previous_x: float | None = None
@@ -61,6 +63,22 @@ class DragMotionModel:
     @property
     def speed(self) -> float:
         return math.hypot(self.filtered_velocity_x, self.filtered_velocity_y)
+
+    @property
+    def visual_offset_x(self) -> float:
+        return _clamp(
+            -self.filtered_velocity_x * self.lag_seconds,
+            -self.max_visual_offset,
+            self.max_visual_offset,
+        )
+
+    @property
+    def visual_offset_y(self) -> float:
+        return _clamp(
+            -self.filtered_velocity_y * self.lag_seconds,
+            -self.max_visual_offset,
+            self.max_visual_offset,
+        )
 
     def settle(self) -> None:
         self.filtered_velocity_x *= 1.0 - self.smoothing

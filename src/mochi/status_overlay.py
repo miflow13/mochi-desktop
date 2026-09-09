@@ -202,6 +202,19 @@ class MochiStatusOverlay(Gtk.Popover):
         self._status_bar.set_value(self._status_value)
         self._status_percent.set_label(f"{round(self._status_value * 100)}%")
 
+    def shutdown(self) -> None:
+        """Cancel pending animations and detach the manually parented popover."""
+        self._fade_generation += 1
+        for attribute in (
+            "_hover_delay_source",
+            "_leave_source",
+            "_fade_source",
+        ):
+            self._cancel_source(attribute)
+        self.popdown()
+        if self.get_parent() is not None:
+            self.unparent()
+
     def dismiss_for_click(self) -> None:
         if self._mode is not OverlayMode.HIDDEN:
             self.hide_context()
