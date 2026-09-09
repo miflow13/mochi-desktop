@@ -269,5 +269,56 @@ class BuddyEmoteTests(unittest.TestCase):
         add.assert_called_once_with(60, buddy._try_computer_idle_emote)
 
 
+class BuddyTypingTests(unittest.TestCase):
+    def test_typing_activity_starts_loop_from_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_typing_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.TYPING)
+        buddy._play_animation.assert_called_once_with("typing_loop", after=None)
+
+    def test_typing_stop_returns_to_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.TYPING),
+            _last_interaction=0.0,
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        with patch("mochi.buddy.time.monotonic", return_value=10.0):
+            Buddy._on_typing_stopped(buddy)
+
+        self.assertEqual(buddy._last_interaction, 10.0)
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+        buddy._schedule_computer_idle_emote.assert_called_once()
+
+    def test_direct_interaction_cancels_typing_and_resets_detector(self) -> None:
+        monitor = Mock()
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.TYPING),
+            _typing_monitor=monitor,
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+        )
+
+        self.assertTrue(Buddy._cancel_active_emote(buddy))
+
+        monitor.reset.assert_called_once()
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+
+
 if __name__ == "__main__":
     unittest.main()

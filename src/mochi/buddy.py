@@ -39,6 +39,7 @@ from mochi.interaction_tuning import (
 from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.sound import SoundEvent, SoundManager
 from mochi.state import MochiState, StateMachine
+from mochi.typing_activity import TypingActivityMonitor
 from mochi.windowing import WindowPlacement
 
 
@@ -121,6 +122,7 @@ class Buddy(Gtk.DrawingArea):
         self._idle_action_source_id: int | None = None
         self._blink_source_id: int | None = None
         self._computer_idle_source_id: int | None = None
+        self._typing_monitor: TypingActivityMonitor | None = None
         self._context_menu_open = False
         self._pending_context_action: Callable[[], None] | None = None
         self._size = self._config.load_size()
@@ -158,6 +160,12 @@ class Buddy(Gtk.DrawingArea):
 
         GLib.timeout_add(self.TICK_MS, self._tick)
         if not self._preview_mode:
+            self._typing_monitor = TypingActivityMonitor(
+                on_typing_activity=self._on_typing_activity,
+                on_typing_stopped=self._on_typing_stopped,
+                logger=self._logger,
+            )
+            self._typing_monitor.start()
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
@@ -488,9 +496,47 @@ class Buddy(Gtk.DrawingArea):
         self._play_animation("computer", after="idle")
         return True
 
-    def _cancel_active_emote(self) -> bool:
-        if self.state.current not in (MochiState.HEART, MochiState.COMPUTER):
+    def _on_typing_activity(self) -> None:
+        """Mirror a recognized typing burst without inspecting typed content."""
+        self._last_interaction = time.monotonic()
+        if self.state.current is MochiState.TYPING:
+            return
+        self._start_typing_emote()
+
+    def _start_typing_emote(self) -> bool:
+        if (
+            self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
             return False
+        if not self._transition_to(MochiState.TYPING):
+            return False
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._play_animation("typing_loop", after=None)
+        self._logger.debug("Typing mirror animation started")
+        return True
+
+    def _on_typing_stopped(self) -> None:
+        if self.state.current is not MochiState.TYPING:
+            return
+        self._last_interaction = time.monotonic()
+        self._transition_to(MochiState.IDLE)
+        self._play_animation("idle")
+        self._schedule_computer_idle_emote()
+        self._logger.debug("Typing mirror animation stopped")
+
+    def _cancel_active_emote(self) -> bool:
+        if self.state.current not in (
+            MochiState.HEART,
+            MochiState.COMPUTER,
+            MochiState.TYPING,
+        ):
+            return False
+        if self.state.current is MochiState.TYPING and self._typing_monitor is not None:
+            self._typing_monitor.reset()
         self._transition_to(MochiState.IDLE)
         self._play_animation("idle")
         return True

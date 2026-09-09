@@ -39,6 +39,7 @@ where = ["src"]
 "share/mochi/wake" = ["assets/mochi/wake/*.png"]
 "share/mochi/heart" = ["assets/mochi/heart/*.png"]
 "share/mochi/computer" = ["assets/mochi/computer/*.png"]
+"share/mochi/typing" = ["assets/mochi/typing/*.png"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
