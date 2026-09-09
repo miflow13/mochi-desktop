@@ -4,7 +4,7 @@
 
 ### Your new Deskling Companion
 
-<img width="800" height="475" alt="Mochi desktop companion" src="https://github.com/user-attachments/assets/afb00fa1-2983-4a45-b387-b75ad2b3ee60" />
+<img width="800" height="475" alt="hifrommochi" src="https://github.com/user-attachments/assets/d64b6900-3120-4174-9ec6-a40688fe921a" />
 
 **A tiny pixel-art companion quietly living on your Linux desktop.**
 
