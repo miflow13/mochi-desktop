@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import cairo
+
 from mochi.sprite_loader import AnimationAssetSet
 
 
@@ -30,17 +32,35 @@ class AnimationAssetSetTests(unittest.TestCase):
         )
         self.assertTrue(
             all(
-                (surface.get_width(), surface.get_height()) == (128, 128)
+                (surface.get_width(), surface.get_height()) == (256, 256)
                 for surface in first.values()
             )
         )
+
+    def test_every_mochi_png_is_a_256px_rgba_asset(self) -> None:
+        assets = AnimationAssetSet()
+        paths = tuple(assets.root.rglob("*.png"))
+
+        self.assertTrue(paths)
+        for path in paths:
+            surface = cairo.ImageSurface.create_from_png(str(path))
+            self.assertEqual(
+                (surface.get_width(), surface.get_height()),
+                (256, 256),
+                path.relative_to(assets.root),
+            )
+            self.assertEqual(
+                surface.get_content(),
+                cairo.CONTENT_COLOR_ALPHA,
+                path.relative_to(assets.root),
+            )
 
     def test_manifest_rejects_a_frame_path_outside_its_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = {
                 "format": AnimationAssetSet.FORMAT,
-                "cell_size": [128, 128],
+                "cell_size": [256, 256],
                 "animations": {
                     "idle": {
                         "frames": ["../outside.png"],

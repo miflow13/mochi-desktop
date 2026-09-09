@@ -26,7 +26,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(set(atlas.frames), expected)
         self.assertTrue(
             all(
-                (surface.get_width(), surface.get_height()) == (128, 128)
+                (surface.get_width(), surface.get_height()) == (256, 256)
                 and surface.get_content() == cairo.CONTENT_COLOR_ALPHA
                 for surface in atlas.frames.values()
             )
@@ -70,6 +70,16 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(sum(frame.duration_ms or 0 for frame in blink.frames), 390)
         self.assertFalse(blink.looping)
 
+    def test_blink_starts_and_ends_on_the_exact_idle_endpoint(self) -> None:
+        surfaces = {
+            **ASSET_SET.load_frames("idle"),
+            **ASSET_SET.load_frames("blink"),
+        }
+        idle = bytes(surfaces["idle/idle_01.png"].get_data())
+
+        self.assertEqual(bytes(surfaces["blink/blink_01.png"].get_data()), idle)
+        self.assertEqual(bytes(surfaces["blink/blink_04.png"].get_data()), idle)
+
     def test_drag_uses_a_subtle_manifest_dangling_loop(self) -> None:
         dragged = ANIMATIONS["dragged"]
         self.assertEqual(len(dragged.frames), 8)
@@ -79,16 +89,25 @@ class SpriteDefinitionsTests(unittest.TestCase):
         drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
         self.assertEqual(len(set(drag_pixels)), 8)
 
-    def test_walk_uses_a_slow_looping_bounce_prototype(self) -> None:
+    def test_drag_settle_ends_on_the_exact_idle_endpoint(self) -> None:
+        surfaces = SpriteAtlas().frames
+        settle = bytes(surfaces["drag/drag_settle_neutral.png"].get_data())
+        idle = bytes(surfaces["idle/idle_01.png"].get_data())
+
+        self.assertEqual(settle, idle)
+
+    def test_walk_uses_the_manifest_directional_frames(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)
         self.assertTrue(ANIMATIONS["walk_left"].looping)
         self.assertEqual(
             tuple(frame.sprite for frame in ANIMATIONS["walk"].frames),
-            tuple(frame.sprite for frame in ANIMATIONS["bounce"].frames),
+            tuple(f"walk/walk_{index:02}.png" for index in range(1, 9)),
         )
         self.assertEqual(
-            tuple(frame.duration_ms for frame in ANIMATIONS["walk"].frames),
-            (80, 110, 125, 135, 180, 170, 130),
+            tuple(frame.sprite for frame in ANIMATIONS["walk_left"].frames),
+            tuple(
+                f"walk_left/walk_left_{index:02}.png" for index in range(1, 9)
+            ),
         )
 
     def test_click_reactions_use_tactile_per_frame_timing(self) -> None:

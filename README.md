@@ -23,7 +23,7 @@ significantly while development continues.
 - ✅ Idle / breathing animation
 - ✅ Natural blink behavior
 - ✅ Bounce / squish reactions
-- ✅ Manifest-driven 128×128 pixel-art assets
+- ✅ Manifest-driven 256×256 pixel-art assets
 - ✅ Two-dimensional wandering
 - ✅ Dangling drag animation
 - 🚧 Walking polish
@@ -125,7 +125,7 @@ python3 tools/export_animation_gifs.py
 ## Animation architecture
 
 `sprite_loader.py` reads the authoritative asset manifest and loads every fixed
-128×128 RGBA frame once. `sprites.py` retains those cached Cairo surfaces, while
+256×256 RGBA frame once. `sprites.py` retains those cached Cairo surfaces, while
 `animation.py` advances them using per-frame durations. Rendering uses nearest-
 neighbor filtering and bottom-center anchoring throughout.
 

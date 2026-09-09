@@ -42,21 +42,6 @@ ANIMATIONS["bounce"] = replace(
         )
     ),
 )
-walk_bounce_durations = (80, 110, 125, 135, 180, 170, 130)
-walk_bounce = replace(
-    ANIMATIONS["bounce"],
-    name="walk",
-    frames=tuple(
-        replace(frame, duration_ms=duration)
-        for frame, duration in zip(
-            ANIMATIONS["bounce"].frames, walk_bounce_durations, strict=True
-        )
-    ),
-    looping=True,
-    next_state=None,
-)
-ANIMATIONS["walk"] = walk_bounce
-ANIMATIONS["walk_left"] = replace(walk_bounce, name="walk_left")
 sleep_durations = (90, 100, 120, 140, 160, 180)
 ANIMATIONS["sleep"] = replace(
     ANIMATIONS["sleep"],
@@ -92,9 +77,10 @@ ANIMATIONS["excited"] = replace(ANIMATIONS["bounce"], name="excited")
 
 
 class SpriteAtlas:
-    """Caches every manifest frame once and draws fixed 128px canvases."""
+    """Caches 256px asset frames and scales them to the configured window."""
 
-    CANVAS_SIZE = (128, 128)
+    CANVAS_SIZE = (256, 256)
+    OFFSET_COORDINATE_SIZE = 128
 
     def __init__(self) -> None:
         self.frames: dict[str, cairo.ImageSurface] = {}
@@ -105,9 +91,17 @@ class SpriteAtlas:
         self, context: cairo.Context, frame: AnimationFrame, width: int, height: int
     ) -> None:
         sprite = self.frames[frame.sprite]
-        scale = min(width / 128, height / 128)
-        x = round((width - 128 * scale) / 2 + frame.horizontal_offset * scale)
-        y = round((height - 128 * scale) / 2 + frame.vertical_offset * height / 128)
+        source_width, source_height = self.CANVAS_SIZE
+        scale = min(width / source_width, height / source_height)
+        offset_scale = min(width, height) / self.OFFSET_COORDINATE_SIZE
+        x = round(
+            (width - source_width * scale) / 2
+            + frame.horizontal_offset * offset_scale
+        )
+        y = round(
+            (height - source_height * scale) / 2
+            + frame.vertical_offset * offset_scale
+        )
         context.save()
         context.translate(x, y)
         context.scale(scale, scale)

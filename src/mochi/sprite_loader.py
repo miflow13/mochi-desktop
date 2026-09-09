@@ -24,6 +24,7 @@ class AnimationAssetSet:
     """Reads one animation manifest and lazily caches requested frame surfaces."""
 
     FORMAT = "mochi-animation-set-v1"
+    CELL_SIZE = (256, 256)
 
     def __init__(self, manifest_path: Path | None = None) -> None:
         self.manifest_path = manifest_path or self._find_manifest()
@@ -33,9 +34,12 @@ class AnimationAssetSet:
             raise ValueError("Unsupported Mochi animation manifest format")
 
         cell_size = manifest.get("cell_size")
-        if cell_size != [128, 128]:
-            raise ValueError(f"Expected 128x128 animation cells, got {cell_size}")
-        self.cell_size = (128, 128)
+        if cell_size != list(self.CELL_SIZE):
+            raise ValueError(
+                f"Expected {self.CELL_SIZE[0]}x{self.CELL_SIZE[1]} "
+                f"animation cells, got {cell_size}"
+            )
+        self.cell_size = self.CELL_SIZE
         self.animations = self._parse_animations(manifest.get("animations"))
         self.surfaces: dict[str, cairo.ImageSurface] = {}
 
