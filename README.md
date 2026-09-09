@@ -1,8 +1,8 @@
-# Mochi 🌱
+# Mochi - Your new Deskling Companion 🌱
 
 
 
-<img width="1130" height="790" alt="Screenshot From 2026-09-08 21-05-33" src="https://github.com/user-attachments/assets/7b15c5ce-2ac3-4026-a37c-2ac13d2c6250" />
+<img width="800" height="475" alt="hifrommochi" src="https://github.com/user-attachments/assets/afb00fa1-2983-4a45-b387-b75ad2b3ee60" />
 
 
 
