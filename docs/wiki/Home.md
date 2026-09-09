@@ -20,14 +20,16 @@ The project intentionally keeps the creature core small. Systems such as health,
 
 ## Wiki map
 
-- [[Architecture and Tech Stack]] — runtime, modules, rendering, packaging, and platform assumptions
-- [[Interaction Core]] — the behaviors that define the public-alpha creature experience
-- [[Animation and Art Pipeline]] — assets, manifests, spritesheets, timing, and PixelLab/Pixelorama workflow
-- [[Development and Testing]] — development loop, validation gates, debugging, and release discipline
-- [[Troubleshooting and Regressions]] — known failure modes and what to check when Mochi becomes stuck
-- [[Contributing and Issues]] — issue-writing guidance, contribution scope, and acceptance criteria
-- [[Roadmap and Public Alpha]] — current priorities, alpha definition of done, and later roadmap
-- [[Project Philosophy]] — the design rules that protect Mochi's identity and reliability
+- [Getting Started](Getting-Started.md) — install the development checkout, launch Mochi, run tests, and understand Wayland expectations
+- [Current Development Status](Current-Development-Status.md) — dated handoff snapshot, current WIP, checkpoint history, and next-session priorities
+- [Architecture and Tech Stack](Architecture-and-Tech-Stack.md) — runtime, modules, rendering, packaging, and platform assumptions
+- [Interaction Core](Interaction-Core.md) — the behaviors that define the public-alpha creature experience
+- [Animation and Art Pipeline](Animation-and-Art-Pipeline.md) — assets, manifests, spritesheets, timing, and PixelLab/Pixelorama workflow
+- [Development and Testing](Development-and-Testing.md) — development loop, validation gates, debugging, and release discipline
+- [Troubleshooting and Regressions](Troubleshooting-and-Regressions.md) — known failure modes and what to check when Mochi becomes stuck
+- [Contributing and Issues](Contributing-and-Issues.md) — issue-writing guidance, contribution scope, and acceptance criteria
+- [Roadmap and Public Alpha](Roadmap-and-Public-Alpha.md) — current priorities, alpha definition of done, and later roadmap
+- [Project Philosophy](Project-Philosophy.md) — the design rules that protect Mochi's identity and reliability
 
 ## Current development focus
 
@@ -95,7 +97,7 @@ Avoid stacking unrelated refactors, art migrations, and interaction changes in o
 
 - Main repository: https://github.com/miflow13/mochi-desktop
 - Issues: https://github.com/miflow13/mochi-desktop/issues
-- Regression watchlist: ../REGRESSION_WATCHLIST.md
+- Regression watchlist: ../../REGRESSION_WATCHLIST.md
 
 ---
 
