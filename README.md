@@ -20,9 +20,6 @@ The project is still experimental and is **not ready for public release yet**.
 Features, artwork, behavior, architecture, and documentation may change
 significantly while development continues.
 
-<p align="center">
-<img width="738" height="592" alt="mochi_demo1mp4 (2)" src="https://github.com/user-attachments/assets/79e7eb9b-8c14-4c22-86eb-fc7ea9878451" />
-</p>
 
 ## Current status
 
@@ -40,6 +37,11 @@ significantly while development continues.
 - 🚧 Sleep / wake polish
 - ⏳ Nametag / status UI
 - ⏳ Desktop reliability testing
+
+<p align="center">
+<img width="738" height="592" alt="mochi_demo1mp4 (2)" src="https://github.com/user-attachments/assets/79e7eb9b-8c14-4c22-86eb-fc7ea9878451" />
+</p>
+
 
 Mochi has a transparent, undecorated window; a right-click menu for sleep,
 size, position reset, and quitting; persistent configuration; and cached,
