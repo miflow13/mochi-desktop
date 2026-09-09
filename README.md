@@ -1,6 +1,5 @@
 # Mochi 🌱
 
-> Private development repository.
 
 <p align="center">
   <img width="220" height="220" alt="Mochi squish animation" src="animation-gifs/squish.gif" />
@@ -15,6 +14,10 @@ Mochi is a small Linux desktop companion currently under active development.
 The project is still experimental and is **not ready for public release yet**.
 Features, artwork, behavior, architecture, and documentation may change
 significantly while development continues.
+
+<p align="center">
+<img width="738" height="592" alt="mochi_demo1mp4 (2)" src="https://github.com/user-attachments/assets/79e7eb9b-8c14-4c22-86eb-fc7ea9878451" />
+</p>
 
 ## Current status
 
