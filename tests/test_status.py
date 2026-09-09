@@ -16,6 +16,7 @@ class StatusPresentationTests(unittest.TestCase):
         self.assertEqual(friendly_state_label(MochiState.WAKING), "Waking up")
         self.assertEqual(friendly_state_label(MochiState.SQUISHING), "Happy")
         self.assertEqual(friendly_state_label(MochiState.SLEEPING), "Sleeping")
+        self.assertEqual(friendly_state_label(MochiState.PICKING_UP), "Picked up")
 
     def test_status_value_is_clamped(self) -> None:
         self.assertEqual(clamp_status_value(-0.5), 0.0)

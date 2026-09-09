@@ -12,6 +12,7 @@ from mochi.sprite_loader import AnimationAssetSet
 
 ASSET_SET = AnimationAssetSet()
 ANIMATIONS = {name: ASSET_SET.animation(name) for name in ASSET_SET.animations}
+ANIMATIONS["pickup"] = replace(ANIMATIONS["pickup"], next_state="dragged")
 idle_frames = ANIMATIONS["idle"].frames
 idle_durations = (750, 500, 350, 900, 400, 1_000)
 idle_cycle = tuple(

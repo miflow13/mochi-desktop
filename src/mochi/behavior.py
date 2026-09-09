@@ -37,8 +37,12 @@ def can_transition(current: MochiState, requested: MochiState) -> bool:
     """Allow state changes that respect Mochi's behavior priority."""
     if current is requested or requested is MochiState.IDLE:
         return True
+    if current is MochiState.PICKING_UP:
+        return requested is MochiState.DRAGGED
     if current is MochiState.DRAGGED:
         return False
+    if requested is MochiState.PICKING_UP:
+        return True
     if requested is MochiState.DRAGGED:
         return True
     if current is MochiState.WAKING:

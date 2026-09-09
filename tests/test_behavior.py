@@ -41,6 +41,24 @@ class ClickReactionTests(unittest.TestCase):
         self.assertFalse(can_transition(MochiState.WAKING, MochiState.BOUNCING))
         self.assertTrue(can_transition(MochiState.SLEEPING, MochiState.WAKING))
 
+    def test_pickup_can_handoff_to_drag_or_be_interrupted_by_release(self) -> None:
+        self.assertTrue(can_transition(MochiState.IDLE, MochiState.PICKING_UP))
+        self.assertTrue(can_transition(MochiState.WALKING, MochiState.PICKING_UP))
+        self.assertTrue(can_transition(MochiState.PICKING_UP, MochiState.DRAGGED))
+        self.assertTrue(can_transition(MochiState.PICKING_UP, MochiState.IDLE))
+
+    def test_pickup_blocks_lower_priority_visual_states(self) -> None:
+        for state in (
+            MochiState.BLINKING,
+            MochiState.BOUNCING,
+            MochiState.SQUISHING,
+            MochiState.EXCITED,
+            MochiState.WALKING,
+            MochiState.SLEEPING,
+            MochiState.WAKING,
+        ):
+            self.assertFalse(can_transition(MochiState.PICKING_UP, state), state)
+
     def test_rapid_clicks_queue_at_most_one_follow_up(self) -> None:
         buffer = ClickReactionBuffer()
 

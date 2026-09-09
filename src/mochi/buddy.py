@@ -297,16 +297,15 @@ class Buddy(Gtk.DrawingArea):
             self._drag_started = True
             self._cancel_walk()
             self._click_reactions.clear()
-            self._transition_to(MochiState.DRAGGED)
+            self._transition_to(MochiState.PICKING_UP)
+            self._play_animation("pickup")
             if self._placement.layer_shell_enabled:
-                self._begin_drag_visual(
+                self._begin_pickup_visual(
                     self._drag_origin.x + offset_x,
                     self._drag_origin.y + offset_y,
                 )
             else:
                 self._drag_motion.reset()
-                self._drag_frame_index = 0
-                self._play_drag_pose()
             self._sound.play(SoundEvent.PICKUP)
         if self._placement.layer_shell_enabled:
             # Y is stored as distance from the bottom edge, hence the subtraction.
@@ -365,12 +364,11 @@ class Buddy(Gtk.DrawingArea):
             self._drag_started = True
             self._cancel_walk()
             self._click_reactions.clear()
-            self._transition_to(MochiState.DRAGGED)
+            self._transition_to(MochiState.PICKING_UP)
             self._drag_motion.reset()
             self._drag_sample_position = None
             self._drag_sample_time = None
-            self._drag_frame_index = 0
-            self._play_drag_pose()
+            self._play_animation("pickup")
             self._sound.play(SoundEvent.PICKUP)
             # Wayland forbids applications from directly moving top-level windows.
             # begin_move asks the compositor to perform the user's active drag.
@@ -392,7 +390,7 @@ class Buddy(Gtk.DrawingArea):
             self._drag_move_started = False
             self._drag_sample_position = None
             self._drag_sample_time = None
-            if self.state.current is MochiState.DRAGGED:
+            if self.state.current in (MochiState.PICKING_UP, MochiState.DRAGGED):
                 self._drag_motion.reset()
                 self._transition_to(MochiState.IDLE)
                 self._play_drag_settle()
@@ -498,6 +496,8 @@ class Buddy(Gtk.DrawingArea):
         self._pending_animation = None
         if next_animation == "sleeping":
             self._play_animation("sleeping")
+        elif next_animation == "dragged":
+            self._finish_pickup()
         elif self._click_reactions.consume() and self._current_animation in (
             "bounce",
             "squish",
@@ -685,6 +685,26 @@ class Buddy(Gtk.DrawingArea):
         self._drag_motion.begin(x, y, time.monotonic())
         self._drag_frame_index = 1
         self._play_drag_pose()
+
+    def _begin_pickup_visual(self, x: float, y: float) -> None:
+        self._last_drag_update_time = time.monotonic()
+        self._drag_motion.begin(x, y, time.monotonic())
+
+    def _finish_pickup(self) -> None:
+        if not self._drag_started or self.state.current is not MochiState.PICKING_UP:
+            self._transition_to(MochiState.IDLE)
+            self._play_animation("idle")
+            return
+        self._transition_to(MochiState.DRAGGED)
+        if self._placement.layer_shell_enabled:
+            position = self._placement.position
+            self._begin_drag_visual(position.x, position.y)
+        else:
+            self._drag_motion.reset()
+            self._drag_sample_position = None
+            self._drag_sample_time = None
+            self._drag_frame_index = 0
+            self._play_drag_pose()
 
     def _update_drag_visual(self, x: float, y: float) -> None:
         if self.state.current is not MochiState.DRAGGED:
