@@ -17,7 +17,7 @@ Mochi is a lightweight Linux desktop companion that idles, reacts, wanders, slee
 
 ---
 
-<h2><img width="48" height="48" alt="Mochi being picked up" src="https://github.com/user-attachments/assets/dee6a7c8-2f70-475a-ae3b-74f1b959dbc6" /> Current status</h2>
+<h2><img width="48" height="48" alt="Mochi being picked up" src="https://github.com/user-attachments/assets/dee6a7c8-2f70-475a-ae3b-74f1b959dbc6" /> Current Status</h2>
 
 **Version:** `0.2.0-alpha`  
 **Stage:** Phase 2 — *Make Mochi Feel Alive*
@@ -47,10 +47,11 @@ The long-term goal is a companion that develops personality and useful desktop b
 
 ---
 
-## Handcrafted with love
+## Handcrafted With Love
 
 <div align="center">
-<img width="800" height="588" alt="ezgif-8f82b5c9d969566f" src="https://github.com/user-attachments/assets/8c3492d7-7be7-4d9a-9a0d-9028dd75154b" />
+
+<img width="800" alt="Mochi animation being handcrafted in Pixelorama" src="https://github.com/user-attachments/assets/8c3492d7-7be7-4d9a-9a0d-9028dd75154b" />
 
 *Every pixel. Every frame. A little bit of personality.*
 
@@ -62,7 +63,7 @@ The goal isn't simply to make Mochi move — it's to make every movement feel un
 
 ---
 
-## Engineering highlights
+## Engineering Highlights
 
 Mochi is also a hands-on software-engineering project. Current work includes:
 
@@ -78,7 +79,7 @@ Mochi's visual design is simple on purpose; much of the engineering challenge is
 
 ---
 
-## Design goal
+## Design Goal
 
 Phase 2 is focused on making Mochi feel less like a widget and more like a tiny creature peacefully sharing your desktop.
 
@@ -110,7 +111,7 @@ A right-click developer menu is currently retained for testing while the future 
 
 ---
 
-## Tech stack
+## Tech Stack
 
 The primary target is **Fedora Linux with GNOME and Wayland**.
 
@@ -123,7 +124,7 @@ Mochi is built with:
 
 ---
 
-## Development setup
+## Development Setup
 
 Install the Fedora runtime packages:
 
@@ -149,7 +150,7 @@ python3 tools/export_animation_gifs.py
 ```
 
 <details>
-<summary><strong>Project structure</strong></summary>
+<summary><strong>Project Structure</strong></summary>
 
 ```text
 mochi-desktop/
@@ -167,7 +168,7 @@ mochi-desktop/
 </details>
 
 <details>
-<summary><strong>Animation architecture</strong></summary>
+<summary><strong>Animation Architecture</strong></summary>
 
 `sprite_loader.py` reads the authoritative asset manifest and loads every fixed RGBA frame once. `sprites.py` retains those cached Cairo surfaces, while `animation.py` advances them using per-frame durations. Rendering uses nearest-neighbor filtering and bottom-center anchoring throughout.
 
@@ -188,7 +189,7 @@ When adding or replacing art, update `assets/mochi/manifest.json`. Sprite paths 
 
 ---
 
-## Contributing and feedback
+## Contributing & Feedback
 
 Mochi is early-stage software, so bug reports, Linux desktop compatibility notes, design feedback, and ideas are welcome through [GitHub Issues](https://github.com/miflow13/mochi-desktop/issues).
 
