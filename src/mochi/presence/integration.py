@@ -85,9 +85,9 @@ class PresenceBuddyMixin:
     def _build_developer_menu(self):
         """Extend Mochi Lab with isolated presence controls.
 
-        Buddy still owns the menu surface and lifecycle. Presence appends its
-        widgets to the finished developer card without touching the user
-        context-menu implementation.
+        Buddy still owns the developer surface and lifecycle. Presence appends
+        its widgets without touching the user-facing right-click menu, then
+        promotes the Lab surface into a normal resizable, scrollable GTK window.
         """
         popover = super()._build_developer_menu()
         card = self._developer_menu_content
@@ -157,10 +157,32 @@ class PresenceBuddyMixin:
 
         self._developer_menu_animated_rows = tuple(animated_rows)
 
-        # The presence rows extend Mochi Lab's natural height. Keep the menu
-        # positioner aware of that size so it clamps correctly on each monitor.
-        popover._preferred_height = 940
-        popover.window.set_default_size(332, 940)
+        # Mochi Lab has outgrown a menu-sized surface. Keep the proven MenuWindow
+        # lifecycle/callback plumbing, but present only this developer surface as
+        # a conventional resizable window with a bounded viewport and scrolling.
+        popover.window.set_decorated(True)
+        popover.window.set_resizable(True)
+        popover.window.set_title("Mochi Lab")
+        popover._preferred_width = 560
+        popover._preferred_height = 620
+        popover.window.set_default_size(560, 620)
+        popover.window.set_size_request(420, 360)
+
+        # Buddy originally parented the card directly to the MenuWindow. Detach
+        # it once, then put the same live controls inside a scroll container.
+        popover.window.set_child(None)
+        card.set_size_request(-1, -1)
+        card.set_hexpand(True)
+
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_hexpand(True)
+        scroller.set_vexpand(True)
+        scroller.set_min_content_width(420)
+        scroller.set_min_content_height(360)
+        scroller.add_css_class("mochi-dev-scroll")
+        scroller.set_child(card)
+        popover.set_child(scroller)
         return popover
 
     def _make_presence_switch_row(self, label: str, active: bool, callback):
