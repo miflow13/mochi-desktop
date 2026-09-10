@@ -10,7 +10,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, Gtk  # noqa: E402
 
 from mochi.config import ConfigStore
-from mochi.presence.integration import PresenceBuddy, PresenceX11Buddy
+from mochi.presence.click_dialogue import PresenceBuddy, PresenceX11Buddy
 from mochi.sound import SoundEvent, SoundManager
 from mochi.windowing import WindowPlacement
 from mochi.x11 import request_keep_above
