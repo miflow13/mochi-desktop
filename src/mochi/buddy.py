@@ -39,6 +39,7 @@ from mochi.interaction_tuning import (
 from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.sound import SoundEvent, SoundManager
 from mochi.state import MochiState, StateMachine
+from mochi.presence_activity import PresenceActivityMonitor
 from mochi.typing_activity import TypingActivityMonitor
 from mochi.windowing import WindowPlacement
 
@@ -123,6 +124,7 @@ class Buddy(Gtk.DrawingArea):
         self._blink_source_id: int | None = None
         self._computer_idle_source_id: int | None = None
         self._typing_monitor: TypingActivityMonitor | None = None
+        self._presence_monitor: PresenceActivityMonitor | None = None
         self._context_menu_open = False
         self._pending_context_action: Callable[[], None] | None = None
         self._size = self._config.load_size()
@@ -169,6 +171,12 @@ class Buddy(Gtk.DrawingArea):
                 logger=self._logger,
             )
             self._typing_monitor.start()
+            self._presence_monitor = PresenceActivityMonitor(
+                on_user_idle=self._on_user_idle,
+                on_user_active=self._on_user_active,
+                logger=self._logger,
+            )
+            self._presence_monitor.start()
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
@@ -531,6 +539,22 @@ class Buddy(Gtk.DrawingArea):
         elif self._current_animation == "typing_loop":
             self._play_animation("typing_outro", after="idle")
         self._logger.debug("Typing mirror animation stopping")
+
+    def _on_user_idle(self) -> None:
+        """Put Mochi to sleep when Mutter reports real user inactivity."""
+        if self._preview_mode or self.state.current is MochiState.SLEEPING:
+            return
+        if self._context_menu_open:
+            self._logger.debug("Presence idle deferred while context menu is open")
+            return
+        self._logger.debug("User presence: idle")
+        self._begin_sleep()
+
+    def _on_user_active(self) -> None:
+        """Wake sleeping Mochi on the first real user input after idle."""
+        self._logger.debug("User presence: active")
+        if self.state.current is MochiState.SLEEPING:
+            self._wake_up()
 
     def _cancel_active_emote(self) -> bool:
         if self.state.current not in (
@@ -947,10 +971,9 @@ class Buddy(Gtk.DrawingArea):
         try:
             if self.state.current is not MochiState.IDLE or self._context_menu_open:
                 return GLib.SOURCE_REMOVE
-            if time.monotonic() - self._last_interaction >= 120:
-                self._begin_sleep()
-                return GLib.SOURCE_REMOVE
-
+            # Automatic sleep is driven by the GNOME Shell presence monitor.
+            # Local Mochi interaction timestamps are not a proxy for whether the
+            # user is actually present at the computer.
             action = random.choice(("walk", "squish", None, None))
             if action == "squish":
                 self._transition_to(MochiState.SQUISHING)

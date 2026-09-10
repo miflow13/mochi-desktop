@@ -7,7 +7,13 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 const BUS_NAME = 'io.github.mochi_desktop.Mochi.TypingMonitor';
 const OBJECT_PATH = '/io/github/mochi_desktop/Mochi/TypingMonitor';
 const INTERFACE_NAME = 'io.github.mochi_desktop.Mochi.TypingMonitor';
-const SIGNAL_NAME = 'Pulse';
+const TYPING_SIGNAL_NAME = 'Pulse';
+const USER_IDLE_SIGNAL_NAME = 'UserIdle';
+const USER_ACTIVE_SIGNAL_NAME = 'UserActive';
+
+// Keep the existing two-minute sleep behavior, but drive it from Mutter's
+// server-global idle monitor instead of Mochi-local interaction timestamps.
+const USER_IDLE_AFTER_MS = 120_000;
 
 // We cannot observe client-window key events through global.stage on Wayland.
 // GNOME 50 also does not expose Meta.Backend.get_last_input_device(); that
@@ -16,8 +22,9 @@ const SIGNAL_NAME = 'Pulse';
 // idle monitor to notice each new input event.
 //
 // Privacy boundary: we never inspect key symbols, keycodes, Unicode values,
-// modifiers, text, shortcuts, or application content. The only D-Bus payload is
-// a zero-argument Pulse indicating anonymous keyboard activity.
+// modifiers, text, shortcuts, or application content. Typing is represented by
+// a zero-argument Pulse. Presence is represented only by zero-argument UserIdle
+// and UserActive signals.
 const POLL_INTERVAL_MS = 50;
 const EVENT_TIME_EPSILON_MS = 12;
 
@@ -28,6 +35,10 @@ export default class MochiTypingActivityExtension extends Extension {
         this._pollSourceId = 0;
         this._lastInputEventAtMs = null;
         this._lastInputWasKeyboard = false;
+        this._presenceIdleWatchId = 0;
+        this._presenceActiveWatchId = 0;
+        this._presenceIsIdle = false;
+
         this._lastDeviceChangedId = global.backend.connect(
             'last-device-changed',
             (_backend, device) => {
@@ -46,14 +57,18 @@ export default class MochiTypingActivityExtension extends Extension {
             Gio.BusNameOwnerFlags.NONE,
             () => {
                 this._nameReady = true;
+                // If the idle watch fired before D-Bus ownership completed,
+                // publish the current semantic state once ownership is ready.
+                if (this._presenceIsIdle)
+                    this._emitSignal(USER_IDLE_SIGNAL_NAME);
             },
             () => {
                 this._nameReady = false;
             },
         );
 
-        // Establish a baseline so pre-existing activity does not emit a pulse
-        // when the extension starts.
+        // Establish a baseline so pre-existing activity does not emit a typing
+        // pulse when the extension starts.
         this._sampleInput(false);
 
         this._pollSourceId = GLib.timeout_add(
@@ -62,6 +77,61 @@ export default class MochiTypingActivityExtension extends Extension {
             () => {
                 this._sampleInput(true);
                 return GLib.SOURCE_CONTINUE;
+            },
+        );
+
+        this._armPresenceIdleWatch();
+    }
+
+    _emitSignal(signalName) {
+        if (!this._nameReady || this._connection === null)
+            return;
+
+        try {
+            this._connection.emit_signal(
+                null,
+                OBJECT_PATH,
+                INTERFACE_NAME,
+                signalName,
+                null,
+            );
+        } catch (_error) {
+            // Never log input-event data. Dropping a semantic signal is safe.
+        }
+    }
+
+    _armPresenceIdleWatch() {
+        if (this._idleMonitor === null || this._presenceIdleWatchId)
+            return;
+
+        this._presenceIdleWatchId = this._idleMonitor.add_idle_watch(
+            USER_IDLE_AFTER_MS,
+            () => {
+                this._presenceIdleWatchId = 0;
+                if (!this._presenceIsIdle) {
+                    this._presenceIsIdle = true;
+                    this._emitSignal(USER_IDLE_SIGNAL_NAME);
+                }
+                this._armPresenceActiveWatch();
+            },
+        );
+    }
+
+    _armPresenceActiveWatch() {
+        if (this._idleMonitor === null || this._presenceActiveWatchId)
+            return;
+
+        // Mutter documents this as a one-shot watch intended to be armed after
+        // an idle watch fires. Any real user input (keyboard, pointer, touch,
+        // etc.) wakes it; no input contents are inspected.
+        this._presenceActiveWatchId = this._idleMonitor.add_user_active_watch(
+            () => {
+                this._presenceActiveWatchId = 0;
+                if (this._presenceIsIdle) {
+                    this._presenceIsIdle = false;
+                    this._emitSignal(USER_ACTIVE_SIGNAL_NAME);
+                }
+                this._armPresenceIdleWatch();
             },
         );
     }
@@ -89,33 +159,32 @@ export default class MochiTypingActivityExtension extends Extension {
         // pointer activity from being mistaken for a later keyboard pulse.
         this._lastInputEventAtMs = inputEventAtMs;
 
-        if (!allowPulse || !this._nameReady || this._connection === null)
+        if (!allowPulse)
             return;
 
         // GNOME 50 does not have get_last_input_device(). The signal above
         // maintains only whether the most recently active hardware class is a
         // keyboard. Once the keyboard becomes current, repeated keypresses keep
         // this true while each idle-time reset produces a fresh anonymous pulse.
-        if (!this._lastInputWasKeyboard)
-            return;
-
-        try {
-            this._connection.emit_signal(
-                null,
-                OBJECT_PATH,
-                INTERFACE_NAME,
-                SIGNAL_NAME,
-                null,
-            );
-        } catch (_error) {
-            // Never log event data. Dropping an activity pulse is harmless.
-        }
+        if (this._lastInputWasKeyboard)
+            this._emitSignal(TYPING_SIGNAL_NAME);
     }
 
     disable() {
         if (this._pollSourceId) {
             GLib.Source.remove(this._pollSourceId);
             this._pollSourceId = 0;
+        }
+
+        if (this._idleMonitor !== null) {
+            if (this._presenceIdleWatchId) {
+                this._idleMonitor.remove_watch(this._presenceIdleWatchId);
+                this._presenceIdleWatchId = 0;
+            }
+            if (this._presenceActiveWatchId) {
+                this._idleMonitor.remove_watch(this._presenceActiveWatchId);
+                this._presenceActiveWatchId = 0;
+            }
         }
 
         if (this._lastDeviceChangedId) {
@@ -126,6 +195,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._idleMonitor = null;
         this._lastInputEventAtMs = null;
         this._lastInputWasKeyboard = false;
+        this._presenceIsIdle = false;
         this._nameReady = false;
 
         if (this._nameOwnerId) {

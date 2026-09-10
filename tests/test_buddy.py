@@ -367,5 +367,55 @@ class BuddyTypingTests(unittest.TestCase):
         buddy._play_animation.assert_called_once_with("idle")
 
 
+class BuddyPresenceTests(unittest.TestCase):
+    def test_real_user_idle_begins_sleep(self) -> None:
+        buddy = SimpleNamespace(
+            _preview_mode=False,
+            _context_menu_open=False,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _begin_sleep=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_idle(buddy)
+
+        buddy._begin_sleep.assert_called_once_with()
+
+    def test_idle_does_not_sleep_while_context_menu_is_open(self) -> None:
+        buddy = SimpleNamespace(
+            _preview_mode=False,
+            _context_menu_open=True,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _begin_sleep=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_idle(buddy)
+
+        buddy._begin_sleep.assert_not_called()
+
+    def test_real_user_activity_wakes_sleeping_mochi(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.SLEEPING),
+            _wake_up=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_active(buddy)
+
+        buddy._wake_up.assert_called_once_with()
+
+    def test_real_user_activity_does_not_interrupt_awake_mochi(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _wake_up=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_active(buddy)
+
+        buddy._wake_up.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

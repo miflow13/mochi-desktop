@@ -1,8 +1,14 @@
-# Mochi Typing Activity GNOME Extension
+# Mochi Desktop Activity GNOME Extension
 
-This optional GNOME Shell extension gives Mochi broad keyboard **activity** detection on GNOME/Wayland.
+This optional GNOME Shell extension gives Mochi privacy-safe desktop activity signals on GNOME/Wayland.
 
-It deliberately does **not** read, store, log, or transmit key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, or text. It only checks whether a captured Shell event is a key press and emits a zero-argument D-Bus `Pulse` signal.
+It currently provides:
+
+- `Pulse` — anonymous keyboard activity used by the typing-reactive emote.
+- `UserIdle` — emitted after 120 seconds of real server-global inactivity.
+- `UserActive` — emitted on the first real input after `UserIdle`.
+
+Presence uses Mutter's server-global idle monitor. Typing inspects only the broad input-device type needed to distinguish keyboard activity. The extension never reads, stores, logs, or transmits key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, text, pointer coordinates, application content, or window titles.
 
 ## Local development install
 
@@ -12,7 +18,7 @@ From the Mochi repository root:
 ./scripts/install-typing-extension.sh
 ```
 
-`gnome-extensions install` loads newly installed extensions in the next GNOME Shell session. On Wayland, log out and back in once after the first install, then enable it if needed:
+On GNOME Wayland, a full logout/login may be required after changing extension JavaScript because the Shell can retain the previous loaded module. Then enable/check it with:
 
 ```bash
 gnome-extensions enable mochi-typing@miflow13
