@@ -47,7 +47,7 @@ class WindowPlacementMonitorTests(unittest.TestCase):
     @patch("mochi.windowing.primary_button_pressed", return_value=False)
     @patch("mochi.windowing.move_window")
     @patch("mochi.windowing.get_window_position", return_value=(-80, 790))
-    def test_sync_from_window_pushes_far_out_of_bounds_window_back_to_grabbable_edge(
+    def test_sync_from_window_pushes_far_out_of_bounds_window_back_to_safe_edge(
         self, _get_window_position, move_window, _primary_button_pressed
     ) -> None:
         monitors = MonitorList(monitor(0, 0, 1000, 800))
@@ -59,8 +59,8 @@ class WindowPlacementMonitorTests(unittest.TestCase):
 
         position = WindowPlacement.sync_from_window(placement)
 
-        self.assertEqual((position.x, position.y), (-44, 740))
-        move_window.assert_called_once_with(test_window, -44, 740)
+        self.assertEqual((position.x, position.y), (-44, 688))
+        move_window.assert_called_once_with(test_window, -44, 688)
 
     @patch("mochi.windowing.primary_button_pressed", return_value=True)
     @patch("mochi.windowing.move_window")
@@ -98,7 +98,7 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         self.assertEqual((position.x, position.y), (250, 300))
         move_window.assert_not_called()
 
-    def test_x11_clamp_keeps_only_a_grabbable_portion_visible(self) -> None:
+    def test_x11_clamp_is_permissive_horizontally_but_strict_vertically(self) -> None:
         monitors = MonitorList(monitor(0, 0, 1000, 800))
         placement = object.__new__(WindowPlacement)
         placement.window = window(monitors)
@@ -107,8 +107,8 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         top_left = WindowPlacement.clamp_position(placement, -50, -50)
         bottom_right = WindowPlacement.clamp_position(placement, 990, 790)
 
-        self.assertEqual((top_left.x, top_left.y), (-44, -44))
-        self.assertEqual((bottom_right.x, bottom_right.y), (944, 740))
+        self.assertEqual((top_left.x, top_left.y), (-44, 8))
+        self.assertEqual((bottom_right.x, bottom_right.y), (944, 688))
 
     def test_scaled_xwayland_position_uses_device_pixel_bounds(self) -> None:
         monitors = MonitorList(monitor(0, 0, 1536, 864))
@@ -121,6 +121,16 @@ class WindowPlacementMonitorTests(unittest.TestCase):
 
         self.assertEqual((in_bounds.x, in_bounds.y), (2954, 274))
         self.assertEqual((too_far.x, too_far.y), (2960, 274))
+
+    def test_scaled_xwayland_bottom_edge_keeps_full_window_visible(self) -> None:
+        monitors = MonitorList(monitor(0, 0, 1536, 864))
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors, 128, 128, scale=2.0)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.clamp_position(placement, 800, 1608)
+
+        self.assertEqual((position.x, position.y), (800, 1448))
 
     @patch("mochi.windowing.primary_button_pressed", return_value=False)
     @patch("mochi.windowing.move_window")
