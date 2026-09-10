@@ -40,10 +40,9 @@ class X11Buddy(Buddy):
     def _maybe_show_drag_speech(self) -> None:
         """Show the playful drag line through the ambient branch's bubble system.
 
-        This intentionally reuses PresenceBuddyMixin's `_presence_bubble`
-        instead of reviving the older standalone speech.py implementation from
-        feat/drag-wheee-dialogue. Direct drag speech does not consume ambient
-        rate-limit budget, but it still respects speech/quiet-mode preferences.
+        Existing dialogue wins: if Mochi is already speaking (or visibly typing
+        a pending line), keep that bubble alive and let the drag-following path
+        carry it with him. `wheee!` is only used when the drag starts in silence.
         """
         bubble = getattr(self, "_presence_bubble", None)
         if bubble is None:
@@ -55,16 +54,16 @@ class X11Buddy(Buddy):
             if not tuning.speech_enabled or tuning.quiet_mode:
                 return
 
+        if bubble.visible:
+            logger = getattr(self, "_logger", None)
+            if logger is not None:
+                logger.debug("Drag dialogue skipped: existing bubble preserved")
+            return
+
         now = time.monotonic()
         last_spoken_at = getattr(self, "_last_drag_speech_at", float("-inf"))
         if now - last_spoken_at < self.DRAG_SPEECH_COOLDOWN_SECONDS:
             return
-
-        # A direct interaction wins over a lingering ambient line. _on_pressed
-        # normally clears it already, but replacing here keeps the drag trigger
-        # deterministic if another bubble appears in the same frame.
-        if bubble.visible:
-            bubble.hide()
 
         if bubble.show("wheee!", duration_seconds=self.DRAG_SPEECH_DURATION_SECONDS):
             self._last_drag_speech_at = now
