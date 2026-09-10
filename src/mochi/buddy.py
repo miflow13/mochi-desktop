@@ -28,6 +28,7 @@ from mochi.behavior import (
 )
 from mochi.config import ConfigStore
 from mochi.drag_motion import DragMotionModel, DragPoseSelector, drag_settle_sprite
+from mochi.media_activity import MediaActivityMonitor
 from mochi.interaction_tuning import (
     COMPUTER_IDLE_DELAY_SECONDS,
     DRAG_BODY_SWAY_PX,
@@ -125,7 +126,9 @@ class Buddy(Gtk.DrawingArea):
         self._computer_idle_source_id: int | None = None
         self._typing_monitor: TypingActivityMonitor | None = None
         self._presence_monitor: PresenceActivityMonitor | None = None
+        self._media_monitor: MediaActivityMonitor | None = None
         self._context_menu_open = False
+        self._user_idle = False
         self._pending_context_action: Callable[[], None] | None = None
         self._size = self._config.load_size()
 
@@ -177,6 +180,12 @@ class Buddy(Gtk.DrawingArea):
                 logger=self._logger,
             )
             self._presence_monitor.start()
+            self._media_monitor = MediaActivityMonitor(
+                on_youtube_started=self._on_youtube_started,
+                on_youtube_stopped=self._on_youtube_stopped,
+                logger=self._logger,
+            )
+            self._media_monitor.start()
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
@@ -516,9 +525,12 @@ class Buddy(Gtk.DrawingArea):
 
     def _start_typing_emote(self) -> bool:
         if (
-            self.state.current is not MochiState.IDLE
+            self.state.current not in (MochiState.IDLE, MochiState.WATCHING)
             or self._context_menu_open
-            or self.player.animation is not ANIMATIONS["idle"]
+            or (
+                self.state.current is MochiState.IDLE
+                and self.player.animation is not ANIMATIONS["idle"]
+            )
         ):
             return False
         if not self._transition_to(MochiState.TYPING):
@@ -540,18 +552,65 @@ class Buddy(Gtk.DrawingArea):
             self._play_animation("typing_outro", after="idle")
         self._logger.debug("Typing mirror animation stopping")
 
+    def _on_youtube_started(self) -> None:
+        """Start Mochi's low-priority watch-along when YouTube is playing."""
+        self._start_watching_emote()
+
+    def _on_youtube_stopped(self) -> None:
+        if self.state.current is not MochiState.WATCHING:
+            return
+        self._transition_to(MochiState.IDLE)
+        self._play_animation("idle")
+        self._logger.debug("YouTube watch-along stopped")
+        if self._user_idle:
+            self._begin_sleep()
+        else:
+            self._schedule_computer_idle_emote()
+
+    def _start_watching_emote(self) -> bool:
+        if (
+            self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        if not self._transition_to(MochiState.WATCHING):
+            return False
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._play_animation("watch", after=None)
+        self._logger.debug("YouTube watch-along started")
+        return True
+
+    def _maybe_resume_watching(self) -> bool:
+        if (
+            self._media_monitor is None
+            or not self._media_monitor.youtube_playing
+            or self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        return self._start_watching_emote()
+
     def _on_user_idle(self) -> None:
-        """Put Mochi to sleep when Mutter reports real user inactivity."""
+        """Put Mochi to sleep when truly idle, except during active playback."""
+        self._user_idle = True
         if self._preview_mode or self.state.current is MochiState.SLEEPING:
             return
         if self._context_menu_open:
             self._logger.debug("Presence idle deferred while context menu is open")
+            return
+        if self._media_monitor is not None and self._media_monitor.youtube_playing:
+            self._logger.debug("Presence idle deferred while YouTube is playing")
             return
         self._logger.debug("User presence: idle")
         self._begin_sleep()
 
     def _on_user_active(self) -> None:
         """Wake sleeping Mochi on the first real user input after idle."""
+        self._user_idle = False
         self._logger.debug("User presence: active")
         if self.state.current is MochiState.SLEEPING:
             self._wake_up()
@@ -561,6 +620,7 @@ class Buddy(Gtk.DrawingArea):
             MochiState.HEART,
             MochiState.COMPUTER,
             MochiState.TYPING,
+            MochiState.WATCHING,
         ):
             return False
         if self.state.current is MochiState.TYPING and self._typing_monitor is not None:
@@ -822,7 +882,10 @@ class Buddy(Gtk.DrawingArea):
         else:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
-            if finished_animation.name in ("computer", "typing_outro"):
+            if not self._maybe_resume_watching() and finished_animation.name in (
+                "computer",
+                "typing_outro",
+            ):
                 self._schedule_computer_idle_emote()
 
     def _play_animation(self, name: str, after: str | None = None) -> None:
@@ -867,6 +930,7 @@ class Buddy(Gtk.DrawingArea):
         )
         self._logger.debug("Animation: %s -> idle (resumed)", previous)
         self.queue_draw()
+        self._maybe_resume_watching()
 
     def _begin_sleep(self) -> None:
         self._cancel_active_emote()
@@ -1026,6 +1090,7 @@ class Buddy(Gtk.DrawingArea):
             self._config.save_position(self._placement.position)
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
+            self._maybe_resume_watching()
 
     def _tick(self) -> bool:
         walking = self.state.current is MochiState.WALKING and not self._preview_mode

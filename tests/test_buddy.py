@@ -341,6 +341,7 @@ class BuddyTypingTests(unittest.TestCase):
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),
             _schedule_computer_idle_emote=Mock(),
+            _maybe_resume_watching=Mock(return_value=False),
             _logger=Mock(),
         )
 
@@ -367,11 +368,94 @@ class BuddyTypingTests(unittest.TestCase):
         buddy._play_animation.assert_called_once_with("idle")
 
 
+class BuddyWatchingTests(unittest.TestCase):
+    def test_youtube_playback_starts_watch_from_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_watching_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.WATCHING)
+        buddy._play_animation.assert_called_once_with("watch", after=None)
+
+    def test_watching_does_not_override_busy_states(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.DRAGGED),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["dragged"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertFalse(Buddy._start_watching_emote(buddy))
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
+
+    def test_typing_can_interrupt_watching(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["watch"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_typing_emote(buddy))
+        buddy._transition_to.assert_called_once_with(MochiState.TYPING)
+        buddy._play_animation.assert_called_once_with("typing_intro", after="typing_loop")
+
+    def test_media_stop_returns_watch_to_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _user_idle=False,
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _begin_sleep=Mock(),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_youtube_stopped(buddy)
+
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+        buddy._begin_sleep.assert_not_called()
+        buddy._schedule_computer_idle_emote.assert_called_once_with()
+
+    def test_media_stop_sleeps_if_presence_was_already_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _user_idle=True,
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _begin_sleep=Mock(),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_youtube_stopped(buddy)
+
+        buddy._begin_sleep.assert_called_once_with()
+        buddy._schedule_computer_idle_emote.assert_not_called()
+
+
 class BuddyPresenceTests(unittest.TestCase):
     def test_real_user_idle_begins_sleep(self) -> None:
         buddy = SimpleNamespace(
             _preview_mode=False,
             _context_menu_open=False,
+            _media_monitor=None,
             state=SimpleNamespace(current=MochiState.IDLE),
             _begin_sleep=Mock(),
             _logger=Mock(),
@@ -385,6 +469,7 @@ class BuddyPresenceTests(unittest.TestCase):
         buddy = SimpleNamespace(
             _preview_mode=False,
             _context_menu_open=True,
+            _media_monitor=None,
             state=SimpleNamespace(current=MochiState.IDLE),
             _begin_sleep=Mock(),
             _logger=Mock(),
@@ -392,6 +477,21 @@ class BuddyPresenceTests(unittest.TestCase):
 
         Buddy._on_user_idle(buddy)
 
+        buddy._begin_sleep.assert_not_called()
+
+    def test_idle_does_not_sleep_while_youtube_is_playing(self) -> None:
+        buddy = SimpleNamespace(
+            _preview_mode=False,
+            _context_menu_open=False,
+            _media_monitor=SimpleNamespace(youtube_playing=True),
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _begin_sleep=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_idle(buddy)
+
+        self.assertTrue(buddy._user_idle)
         buddy._begin_sleep.assert_not_called()
 
     def test_real_user_activity_wakes_sleeping_mochi(self) -> None:

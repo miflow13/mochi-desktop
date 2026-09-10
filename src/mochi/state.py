@@ -18,6 +18,7 @@ class MochiState(Enum):
     HEART = auto()
     COMPUTER = auto()
     TYPING = auto()
+    WATCHING = auto()
     PICKUP = auto()
     DRAGGED = auto()
 
