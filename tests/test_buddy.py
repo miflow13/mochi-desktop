@@ -163,6 +163,18 @@ class BuddyDragReleaseTests(unittest.TestCase):
 
 
 class BuddyContextMenuTests(unittest.TestCase):
+    def test_context_menu_opens_after_secondary_button_release(self) -> None:
+        import inspect
+
+        source = inspect.getsource(Buddy.__init__)
+
+        self.assertIn(
+            'context_click.connect("released", self._show_context_menu)', source
+        )
+        self.assertNotIn(
+            'context_click.connect("pressed", self._show_context_menu)', source
+        )
+
     def test_menu_action_waits_for_closed_and_one_idle_turn(self) -> None:
         action = Mock()
         buddy = SimpleNamespace(

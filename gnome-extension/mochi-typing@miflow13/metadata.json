@@ -1,0 +1,7 @@
+{
+  "uuid": "mochi-typing@miflow13",
+  "name": "Mochi Typing Activity",
+  "description": "Sends anonymous keyboard-activity pulses to Mochi. No key identity or text is read or transmitted.",
+  "shell-version": ["50"],
+  "version": 1
+}

@@ -40,6 +40,8 @@ where = ["src"]
 "share/mochi/heart" = ["assets/mochi/heart/*.png"]
 "share/mochi/computer" = ["assets/mochi/computer/*.png"]
 "share/mochi/typing" = ["assets/mochi/typing/*.png"]
+"share/mochi/typing_intro" = ["assets/mochi/typing_intro/*.png"]
+"share/mochi/typing_outro" = ["assets/mochi/typing_outro/*.png"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

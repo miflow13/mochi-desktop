@@ -139,7 +139,10 @@ class Buddy(Gtk.DrawingArea):
 
         context_click = Gtk.GestureClick.new()
         context_click.set_button(Gdk.BUTTON_SECONDARY)
-        context_click.connect("pressed", self._show_context_menu)
+        # Open after the button is released. Under XWayland, opening on
+        # ``pressed`` lets the matching release immediately dismiss the new
+        # popover before the user can interact with it.
+        context_click.connect("released", self._show_context_menu)
         self.add_controller(context_click)
 
         motion = Gtk.EventControllerMotion.new()
