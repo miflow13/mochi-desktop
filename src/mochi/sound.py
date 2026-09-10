@@ -21,6 +21,8 @@ class SoundEvent(StrEnum):
     PICKUP = "pickup"
     DROP = "drop"
     LEVEL_UP = "level_up"
+    SPAWN = "spawn"
+    EXIT = "exit"
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,14 @@ class SoundManager:
         SoundEvent.PICKUP: "pickup.ogg",
         SoundEvent.DROP: "drop.ogg",
         SoundEvent.LEVEL_UP: "level_up.ogg",
+        SoundEvent.SPAWN: "spawn.ogg",
+        SoundEvent.EXIT: "exit.ogg",
+    }
+
+    # Keep lifecycle cues quieter than direct interaction sounds.
+    EVENT_GAINS = {
+        SoundEvent.SPAWN: 0.35,
+        SoundEvent.EXIT: 0.28,
     }
 
     def __init__(
@@ -89,8 +99,9 @@ class SoundManager:
             self._logger.debug("No supported audio player found; skipping %s", event)
             return False
 
+        effective_volume = self.volume * self.EVENT_GAINS.get(event, 1.0)
         try:
-            self.backend.play(path, self.volume)
+            self.backend.play(path, effective_volume)
         except OSError as error:
             self._logger.warning("Could not play sound %s: %s", path, error)
             return False

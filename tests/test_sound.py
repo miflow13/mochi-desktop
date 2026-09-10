@@ -41,6 +41,21 @@ class SoundManagerTests(unittest.TestCase):
             self.assertTrue(manager.play_level_up())
             self.assertEqual(backend.calls[0][0].name, "level_up.ogg")
 
+    def test_lifecycle_sounds_use_subtle_event_gain(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "spawn.ogg").touch()
+            (root / "exit.ogg").touch()
+            backend = FakeBackend()
+            manager = SoundManager(volume=0.6, asset_root=root, backend=backend)
+
+            self.assertTrue(manager.play(SoundEvent.SPAWN))
+            self.assertTrue(manager.play(SoundEvent.EXIT))
+            self.assertEqual(backend.calls[0][0].name, "spawn.ogg")
+            self.assertAlmostEqual(backend.calls[0][1], 0.21)
+            self.assertEqual(backend.calls[1][0].name, "exit.ogg")
+            self.assertAlmostEqual(backend.calls[1][1], 0.168)
+
     def test_volume_is_clamped(self) -> None:
         manager = SoundManager(volume=9, backend=FakeBackend())
         self.assertEqual(manager.volume, 1.0)

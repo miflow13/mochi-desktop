@@ -2,6 +2,7 @@ import unittest
 
 import cairo
 
+from mochi.interaction_tuning import PICKUP_FRAME_DURATION_MS
 from mochi.sprites import ANIMATIONS, ASSET_SET, SpriteAtlas
 
 
@@ -37,15 +38,25 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "default", "idle", "blink", "walk", "walk_left", "bounce",
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
-            "computer_outro",
+            "computer_outro", "typing_intro", "typing_loop", "typing_outro",
+            "watch", "searching", "drop",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
     def test_pickup_is_a_six_frame_one_shot(self) -> None:
         pickup = ANIMATIONS["pickup"]
         self.assertEqual(len(pickup.frames), 6)
-        self.assertEqual(pickup.frame_duration_ms, 25)
+        self.assertEqual(pickup.frame_duration_ms, PICKUP_FRAME_DURATION_MS)
         self.assertFalse(pickup.looping)
+
+    def test_drop_is_a_quick_six_frame_one_shot(self) -> None:
+        drop = ANIMATIONS["drop"]
+        self.assertEqual(len(drop.frames), 6)
+        self.assertLessEqual(
+            len(drop.frames) * drop.frame_duration_ms,
+            400,
+        )
+        self.assertFalse(drop.looping)
 
     def test_sleep_transitions_to_sleeping(self) -> None:
         self.assertEqual(ANIMATIONS["sleep"].next_state, "sleeping")
@@ -93,9 +104,19 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(len(dragged.frames), 8)
         self.assertEqual(dragged.frame_duration_ms, 167)
         self.assertTrue(dragged.looping)
-        surfaces = SpriteAtlas().frames
-        drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
-        self.assertEqual(len(set(drag_pixels)), 8)
+        self.assertEqual(
+            tuple(frame.sprite for frame in dragged.frames),
+            (
+                "drag/drag_neutral.png",
+                "drag/drag_left_soft.png",
+                "drag/drag_left_medium.png",
+                "drag/drag_right_soft.png",
+                "drag/drag_right_medium.png",
+                "drag/drag_settle_left.png",
+                "drag/drag_settle_right.png",
+                "drag/drag_settle_neutral.png",
+            ),
+        )
 
     def test_walk_uses_the_manifest_directional_frames(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)
@@ -136,6 +157,23 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertFalse(ANIMATIONS["computer_intro"].looping)
         self.assertTrue(ANIMATIONS["computer_typing"].looping)
         self.assertFalse(ANIMATIONS["computer_outro"].looping)
+
+    def test_searching_emote_preserves_the_authored_twenty_frame_timing(self) -> None:
+        searching = ANIMATIONS["searching"]
+        self.assertEqual(len(searching.frames), 20)
+        self.assertEqual(searching.frame_duration_ms, 120)
+        self.assertTrue(searching.looping)
+        self.assertEqual(
+            tuple(frame.sprite for frame in searching.frames),
+            tuple(f"searching/searching_{index:02}.png" for index in range(1, 21)),
+        )
+
+    def test_typing_transition_animations_surround_the_loop(self) -> None:
+        self.assertEqual(len(ANIMATIONS["typing_intro"].frames), 5)
+        self.assertFalse(ANIMATIONS["typing_intro"].looping)
+        self.assertTrue(ANIMATIONS["typing_loop"].looping)
+        self.assertEqual(len(ANIMATIONS["typing_outro"].frames), 3)
+        self.assertFalse(ANIMATIONS["typing_outro"].looping)
 
 
 if __name__ == "__main__":

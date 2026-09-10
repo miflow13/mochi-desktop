@@ -1,0 +1,366 @@
+import logging
+import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+from mochi.media_activity import (
+    MediaActivityMonitor,
+    MprisMediaBackend,
+    _metadata_indicates_video_file,
+    _metadata_indicates_watchable_video,
+    _metadata_indicates_youtube,
+)
+
+
+class _Variant:
+    def __init__(self, _signature, value):
+        self.value = value
+
+    def unpack(self):
+        return self.value
+
+
+class _GLib:
+    Variant = _Variant
+
+
+class _Gio:
+    class BusType:
+        SESSION = object()
+
+    class DBusCallFlags:
+        NONE = object()
+
+    connection = None
+
+    @classmethod
+    def bus_get_sync(cls, _bus_type, _cancellable):
+        return cls.connection
+
+
+class _Connection:
+    def __init__(self, players):
+        self.players = players
+
+    def call_sync(
+        self,
+        destination,
+        _path,
+        interface,
+        method,
+        parameters,
+        _reply_type,
+        _flags,
+        _timeout,
+        _cancellable,
+    ):
+        if destination == MprisMediaBackend.DBUS_NAME and method == "ListNames":
+            return _Variant("(as)", (list(self.players),))
+
+        if interface == MprisMediaBackend.PROPERTIES_INTERFACE and method == "Get":
+            _player_interface, property_name = parameters.unpack()
+            return _Variant("(v)", (_Variant("v", self.players[destination][property_name]),))
+
+        raise AssertionError(f"unexpected D-Bus call: {destination} {interface} {method}")
+
+
+class MprisMediaBackendTests(unittest.TestCase):
+    def _backend(self, players):
+        connection = _Connection(players)
+        _Gio.connection = connection
+        backend = MprisMediaBackend()
+        backend._load_gio = lambda: (_Gio, _GLib)
+        self.assertTrue(backend.start())
+        return backend
+
+    def test_no_players_is_not_youtube_playback(self) -> None:
+        backend = self._backend({})
+        self.assertFalse(backend.sample_youtube_playing())
+
+    def test_non_youtube_player_is_ignored(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.spotify": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:url": "https://example.test/track"},
+                }
+            }
+        )
+        self.assertFalse(backend.sample_youtube_playing())
+
+    def test_youtube_url_while_playing_is_detected(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:url": "https://www.youtube.com/watch?v=abc"},
+                }
+            }
+        )
+        backend._youtube_focused = True
+        self.assertTrue(backend.sample_youtube_playing())
+
+    def test_generic_chromium_audio_is_not_watchable(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:title": "A song"},
+                }
+            }
+        )
+        self.assertFalse(backend.sample_youtube_playing())
+    def test_generic_chrome_audio_is_not_watchable(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chrome.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:title": "A song"},
+                }
+            }
+        )
+        self.assertFalse(backend.sample_youtube_playing())
+    def test_focused_youtube_allows_chromium_without_url_metadata(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:title": "A video"},
+                }
+            }
+        )
+        backend._youtube_focused = True
+        self.assertTrue(backend.sample_youtube_playing())
+
+    def test_youtube_focus_does_not_turn_spotify_into_video(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.spotify": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:title": "A song"},
+                }
+            }
+        )
+        backend._youtube_focused = True
+        self.assertFalse(backend.sample_youtube_playing())
+
+    def test_paused_youtube_is_not_playing(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.firefox.instance123": {
+                    "PlaybackStatus": "Paused",
+                    "Metadata": {"xesam:url": "https://youtu.be/abc"},
+                }
+            }
+        )
+        self.assertFalse(backend.sample_youtube_playing())
+
+    def test_title_suffix_is_a_fallback_when_url_is_missing(self) -> None:
+        self.assertTrue(
+            _metadata_indicates_youtube({"xesam:title": "A video - YouTube"})
+        )
+        self.assertFalse(_metadata_indicates_youtube({"xesam:title": "A video"}))
+
+    def test_youtube_music_is_not_watchable(self) -> None:
+        self.assertFalse(
+            _metadata_indicates_youtube(
+                {
+                    "xesam:url": "https://music.youtube.com/watch?v=abc",
+                    "xesam:title": "A song - YouTube Music",
+                }
+            )
+        )
+
+    def test_local_video_file_is_watchable(self) -> None:
+        metadata = {"xesam:url": "file:///home/user/Videos/movie.mkv"}
+        self.assertTrue(_metadata_indicates_video_file(metadata))
+        self.assertTrue(_metadata_indicates_watchable_video(metadata))
+
+    def test_direct_video_file_url_is_watchable(self) -> None:
+        self.assertTrue(
+            _metadata_indicates_video_file(
+                {"xesam:url": "https://example.test/video/demo.mp4"}
+            )
+        )
+
+    def test_audio_file_is_not_watchable(self) -> None:
+        self.assertFalse(
+            _metadata_indicates_watchable_video(
+                {
+                    "xesam:url": "file:///home/user/Music/song.mp3",
+                    "xesam:title": "song.mp3",
+                }
+            )
+        )
+
+    def test_video_filename_title_is_a_fallback(self) -> None:
+        self.assertTrue(_metadata_indicates_video_file({"xesam:title": "holiday.webm"}))
+    def test_youtube_thumbnail_art_url_is_detected(self) -> None:
+        self.assertTrue(
+            _metadata_indicates_youtube(
+                {
+                    "xesam:title": "A video",
+                    "mpris:artUrl": "https://i.ytimg.com/vi/abc/hqdefault.jpg",
+                }
+            )
+        )
+
+    def test_youtube_music_thumbnail_is_not_watchable(self) -> None:
+        self.assertFalse(
+            _metadata_indicates_youtube(
+                {
+                    "xesam:title": "A song - YouTube Music",
+                    "mpris:artUrl": "https://i.ytimg.com/vi/abc/hqdefault.jpg",
+                }
+            )
+        )
+
+    def test_metadata_is_reduced_without_being_retained(self) -> None:
+        secret_title = "private viewing title - YouTube"
+        metadata = {"xesam:title": secret_title}
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": metadata,
+                }
+            }
+        )
+        backend._youtube_focused = True
+        self.assertTrue(backend.sample_youtube_playing())
+        self.assertNotIn(secret_title, repr(vars(backend)))
+
+
+class _FakeBackend:
+    name = "fake media"
+
+    def __init__(self, samples):
+        self.samples = list(samples)
+        self.last_error = None
+
+    def start(self):
+        return True
+
+    def stop(self):
+        pass
+
+    def sample_youtube_playing(self):
+        if not self.samples:
+            return False
+        return self.samples.pop(0)
+
+
+class MediaActivityMonitorTests(unittest.TestCase):
+    def test_playback_start_fires_once(self) -> None:
+        now = [10.0]
+        started = Mock()
+        monitor = MediaActivityMonitor(
+            on_youtube_started=started,
+            on_youtube_stopped=Mock(),
+            backend=_FakeBackend([True, True]),
+            clock=lambda: now[0],
+        )
+
+        monitor._poll()
+        now[0] += 1
+        monitor._poll()
+
+        self.assertTrue(monitor.youtube_playing)
+        started.assert_called_once_with()
+
+    def test_focus_loss_stops_focus_based_youtube_immediately(self) -> None:
+        stopped = Mock()
+        backend = SimpleNamespace(watching_via_youtube_focus=True)
+        monitor = MediaActivityMonitor(
+            on_youtube_started=Mock(),
+            on_youtube_stopped=stopped,
+            backend=backend,
+        )
+        monitor.available = True
+        monitor.youtube_playing = True
+        monitor._last_playing_at = 10.0
+
+        monitor._on_youtube_focus_changed(False)
+
+        self.assertFalse(monitor.youtube_playing)
+        self.assertIsNone(monitor._last_playing_at)
+        stopped.assert_called_once_with()
+
+    def test_focus_loss_does_not_stop_local_video_immediately(self) -> None:
+        stopped = Mock()
+        backend = SimpleNamespace(watching_via_youtube_focus=False)
+        monitor = MediaActivityMonitor(
+            on_youtube_started=Mock(),
+            on_youtube_stopped=stopped,
+            backend=backend,
+        )
+        monitor.available = True
+        monitor.youtube_playing = True
+
+        monitor._on_youtube_focus_changed(False)
+
+        self.assertTrue(monitor.youtube_playing)
+        stopped.assert_not_called()
+
+    def test_brief_pause_is_covered_by_grace_period(self) -> None:
+        now = [10.0]
+        stopped = Mock()
+        monitor = MediaActivityMonitor(
+            on_youtube_started=Mock(),
+            on_youtube_stopped=stopped,
+            backend=_FakeBackend([True, False, True]),
+            clock=lambda: now[0],
+        )
+
+        monitor._poll()
+        now[0] += 3.0
+        monitor._poll()
+        self.assertTrue(monitor.youtube_playing)
+        stopped.assert_not_called()
+
+        now[0] += 1.0
+        monitor._poll()
+        self.assertTrue(monitor.youtube_playing)
+        stopped.assert_not_called()
+
+    def test_sustained_pause_stops_after_grace_period(self) -> None:
+        now = [10.0]
+        stopped = Mock()
+        monitor = MediaActivityMonitor(
+            on_youtube_started=Mock(),
+            on_youtube_stopped=stopped,
+            backend=_FakeBackend([True, False, False]),
+            clock=lambda: now[0],
+            logger=logging.getLogger("media-test"),
+        )
+
+        monitor._poll()
+        now[0] += 4.0
+        monitor._poll()
+        stopped.assert_not_called()
+
+        now[0] += 1.1
+        monitor._poll()
+        self.assertFalse(monitor.youtube_playing)
+        stopped.assert_called_once_with()
+
+    def test_sample_error_does_not_create_false_stop(self) -> None:
+        now = [10.0]
+        stopped = Mock()
+        monitor = MediaActivityMonitor(
+            on_youtube_started=Mock(),
+            on_youtube_stopped=stopped,
+            backend=_FakeBackend([True, None]),
+            clock=lambda: now[0],
+        )
+
+        monitor._poll()
+        now[0] += 10.0
+        monitor._poll()
+
+        self.assertTrue(monitor.youtube_playing)
+        stopped.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

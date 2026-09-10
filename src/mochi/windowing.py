@@ -31,6 +31,10 @@ class WindowPlacement:
 
     DEFAULT_POSITION = Position(48, 48)
 
+    # Invisible breathing room around Mochi so he never visually touches an edge.
+    EDGE_PADDING_PX = 24
+    BOTTOM_PADDING_PX = 32
+
     def __init__(self, window: Gtk.Window, saved_position: Position | None) -> None:
         self.window = window
         self.position = saved_position or self.DEFAULT_POSITION
@@ -78,16 +82,39 @@ class WindowPlacement:
 
     def clamp_position(self, x: int, y: int) -> Position:
         monitor = self._monitor_for_position(x, y)
+        edge_padding = self.EDGE_PADDING_PX
+        bottom_padding = self.BOTTOM_PADDING_PX
+
         if monitor is None:
-            return Position(max(0, round(x)), max(0, round(y)))
+            return Position(
+                max(edge_padding, round(x)),
+                max(bottom_padding, round(y)),
+            )
+
         geometry = monitor.get_geometry()
         width, height = self.window.get_default_size()
-        min_x = geometry.x
-        min_y = 0 if self.layer_shell_enabled else geometry.y
-        max_x = geometry.x + max(0, geometry.width - width)
-        max_y = max(0, geometry.height - height)
-        if not self.layer_shell_enabled:
-            max_y += geometry.y
+
+        min_x = geometry.x + edge_padding
+        max_x = geometry.x + max(
+            edge_padding,
+            geometry.width - width - edge_padding,
+        )
+
+        if self.layer_shell_enabled:
+            # Layer-shell Y is measured upward from the bottom edge.
+            min_y = bottom_padding
+            max_y = max(
+                bottom_padding,
+                geometry.height - height - edge_padding,
+            )
+        else:
+            # X11/XWayland Y is a normal top-left screen coordinate.
+            min_y = geometry.y + edge_padding
+            max_y = geometry.y + max(
+                edge_padding,
+                geometry.height - height - bottom_padding,
+            )
+
         return Position(
             max(min_x, min(round(x), max_x)),
             max(min_y, min(round(y), max_y)),
@@ -98,8 +125,19 @@ class WindowPlacement:
 
     def sync_from_window(self) -> Position:
         coordinates = get_window_position(self.window)
-        if coordinates is not None:
-            self.position = self.clamp_position(*coordinates)
+        if coordinates is None:
+            return self.position
+
+        clamped = self.clamp_position(*coordinates)
+        self.position = clamped
+
+        # XWayland native drags are compositor-owned, so move_to() is bypassed
+        # while the pointer is actively moving the window. Re-apply only the
+        # out-of-bounds correction here. Buddy samples the native drag every
+        # frame, which makes the monitor edge behave like an invisible wall.
+        if coordinates != (clamped.x, clamped.y):
+            move_window(self.window, clamped.x, clamped.y)
+
         return self.position
 
     def _monitor_for_position(self, x: int, y: int) -> Gdk.Monitor | None:

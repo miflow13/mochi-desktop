@@ -16,7 +16,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
-from mochi.animation import Animation, AnimationPlayer
+from mochi.animation import AnimationPlayer
 from mochi.behavior import (
     ClickReactionBuffer,
     WalkMotion,
@@ -27,19 +27,24 @@ from mochi.behavior import (
     choose_walk_animation,
 )
 from mochi.config import ConfigStore
-from mochi.drag_motion import DragMotionModel, DragPoseSelector, drag_settle_sprite
+from mochi.drag_motion import DragMotionModel, DragPoseSelector
+from mochi.file_activity import FileActivityMonitor
+from mochi.media_activity import MediaActivityMonitor
 from mochi.interaction_tuning import (
     COMPUTER_IDLE_DELAY_SECONDS,
-    COMPUTER_TYPING_DURATION_SECONDS,
     DRAG_BODY_SWAY_PX,
     DRAG_SETTLE_DIRECTIONAL_MS,
     DRAG_SETTLE_NEUTRAL_MS,
+    DRAG_SWAY_ENTER_DELAY_SECONDS,
+    DRAG_SWAY_EXIT_INTENSITY,
     DRAG_VISUAL_IDLE_DELAY_SECONDS,
     InteractionTuning,
 )
 from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.sound import SoundEvent, SoundManager
 from mochi.state import MochiState, StateMachine
+from mochi.presence_activity import PresenceActivityMonitor
+from mochi.typing_activity import TypingActivityMonitor
 from mochi.windowing import WindowPlacement
 
 
@@ -115,6 +120,7 @@ class Buddy(Gtk.DrawingArea):
         self._drag_frame_index = 0
         self._drag_visual_key: tuple[str, int] | None = None
         self._last_drag_update_time = 0.0
+        self._drag_neutral_since: float | None = None
         self._drag_sample_position: tuple[int, int] | None = None
         self._drag_sample_time: float | None = None
         self._hovered = False
@@ -122,8 +128,12 @@ class Buddy(Gtk.DrawingArea):
         self._idle_action_source_id: int | None = None
         self._blink_source_id: int | None = None
         self._computer_idle_source_id: int | None = None
-        self._computer_typing_source_id: int | None = None
+        self._typing_monitor: TypingActivityMonitor | None = None
+        self._presence_monitor: PresenceActivityMonitor | None = None
+        self._media_monitor: MediaActivityMonitor | None = None
+        self._file_activity_monitor: FileActivityMonitor | None = None
         self._context_menu_open = False
+        self._user_idle = False
         self._pending_context_action: Callable[[], None] | None = None
         self._size = self._config.load_size()
 
@@ -139,7 +149,10 @@ class Buddy(Gtk.DrawingArea):
 
         context_click = Gtk.GestureClick.new()
         context_click.set_button(Gdk.BUTTON_SECONDARY)
-        context_click.connect("pressed", self._show_context_menu)
+        # Open after the button is released. Under XWayland, opening on
+        # ``pressed`` lets the matching release immediately dismiss the new
+        # popover before the user can interact with it.
+        context_click.connect("released", self._show_context_menu)
         self.add_controller(context_click)
 
         motion = Gtk.EventControllerMotion.new()
@@ -160,6 +173,30 @@ class Buddy(Gtk.DrawingArea):
 
         GLib.timeout_add(self.TICK_MS, self._tick)
         if not self._preview_mode:
+            self._typing_monitor = TypingActivityMonitor(
+                on_typing_activity=self._on_typing_activity,
+                on_typing_stopped=self._on_typing_stopped,
+                logger=self._logger,
+            )
+            self._typing_monitor.start()
+            self._presence_monitor = PresenceActivityMonitor(
+                on_user_idle=self._on_user_idle,
+                on_user_active=self._on_user_active,
+                logger=self._logger,
+            )
+            self._presence_monitor.start()
+            self._media_monitor = MediaActivityMonitor(
+                on_youtube_started=self._on_youtube_started,
+                on_youtube_stopped=self._on_youtube_stopped,
+                logger=self._logger,
+            )
+            self._media_monitor.start()
+            self._file_activity_monitor = FileActivityMonitor(
+                on_file_activity_started=self._on_file_activity_started,
+                on_file_activity_stopped=self._on_file_activity_stopped,
+                logger=self._logger,
+            )
+            self._file_activity_monitor.start()
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
@@ -443,17 +480,34 @@ class Buddy(Gtk.DrawingArea):
         if application is not None:
             application.quit()
 
+    def _update_pointer_cursor(self) -> None:
+        # Keep a visible hand cursor through hover, press, pickup, and drag.
+        # Apply it to both the drawing area and the toplevel because XWayland
+        # hands an active window move to the compositor, which can otherwise
+        # override a child-widget cursor.
+        held = (
+            self._hovered
+            or self._press is not None
+            or self._drag_started
+            or self.state.current in (MochiState.PICKUP, MochiState.DRAGGED)
+        )
+        cursor_name = "pointer" if held else None
+        self.set_cursor_from_name(cursor_name)
+        self._window.set_cursor_from_name(cursor_name)
+
     def _on_enter(
         self, _controller: Gtk.EventControllerMotion, _x: float, _y: float
     ) -> None:
         if self._hovered:
             return
         self._hovered = True
+        self._update_pointer_cursor()
         self._mark_interaction()
         self._start_heart_emote()
 
     def _on_leave(self, _controller: Gtk.EventControllerMotion) -> None:
         self._hovered = False
+        self._update_pointer_cursor()
 
     def _start_heart_emote(self, ignore_cooldown: bool = False) -> bool:
         now = time.monotonic()
@@ -487,15 +541,176 @@ class Buddy(Gtk.DrawingArea):
         if self._computer_idle_source_id is not None:
             GLib.source_remove(self._computer_idle_source_id)
             self._computer_idle_source_id = None
-        self._play_animation("computer_intro", after=None)
+        self._play_animation("computer", after="idle")
         return True
 
-    def _cancel_active_emote(self) -> bool:
-        if self._computer_typing_source_id is not None:
-            GLib.source_remove(self._computer_typing_source_id)
-            self._computer_typing_source_id = None
-        if self.state.current not in (MochiState.HEART, MochiState.COMPUTER):
+    def _on_typing_activity(self) -> None:
+        """Mirror a recognized typing burst without inspecting typed content."""
+        self._last_interaction = time.monotonic()
+        if self.state.current is MochiState.TYPING:
+            return
+        self._start_typing_emote()
+
+    def _start_typing_emote(self) -> bool:
+        if (
+            self.state.current not in (
+                MochiState.IDLE,
+                MochiState.WATCHING,
+                MochiState.SEARCHING,
+            )
+            or self._context_menu_open
+            or (
+                self.state.current is MochiState.IDLE
+                and self.player.animation is not ANIMATIONS["idle"]
+            )
+        ):
             return False
+        if not self._transition_to(MochiState.TYPING):
+            return False
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._play_animation("typing_intro", after="typing_loop")
+        self._logger.debug("Typing mirror animation started")
+        return True
+
+    def _on_typing_stopped(self) -> None:
+        if self.state.current is not MochiState.TYPING:
+            return
+        self._last_interaction = time.monotonic()
+        if self._current_animation == "typing_intro":
+            self._pending_animation = "typing_outro"
+        elif self._current_animation == "typing_loop":
+            self._play_animation("typing_outro", after="idle")
+        self._logger.debug("Typing mirror animation stopping")
+
+    def _on_youtube_started(self) -> None:
+        """Start Mochi's low-priority watch-along when YouTube is playing."""
+        self._start_watching_emote()
+
+    def _on_youtube_stopped(self) -> None:
+        if self.state.current is not MochiState.WATCHING:
+            return
+
+        self._transition_to(MochiState.IDLE)
+        self._play_animation("idle")
+        self._logger.debug("YouTube watch-along stopped")
+
+        # Resolve the next state immediately. This matters when the user tabs
+        # from YouTube into Files: the file-browsing signal may have arrived
+        # while WATCHING still had higher priority.
+        if self._user_idle:
+            self._begin_sleep()
+        elif not self._maybe_resume_searching():
+            self._schedule_computer_idle_emote()
+
+    def _start_watching_emote(self) -> bool:
+        if (
+            self.state.current not in (MochiState.IDLE, MochiState.SEARCHING)
+            or self._context_menu_open
+            or (
+                self.state.current is MochiState.IDLE
+                and self.player.animation is not ANIMATIONS["idle"]
+            )
+        ):
+            return False
+        if not self._transition_to(MochiState.WATCHING):
+            return False
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._play_animation("watch", after=None)
+        self._logger.debug("YouTube watch-along started")
+        return True
+
+    def _maybe_resume_watching(self) -> bool:
+        if (
+            self._media_monitor is None
+            or not self._media_monitor.youtube_playing
+            or self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        return self._start_watching_emote()
+
+    def _on_file_activity_started(self) -> None:
+        """Start Mochi's low-priority magnifying-glass file activity emote."""
+        self._start_searching_emote()
+
+    def _on_file_activity_stopped(self) -> None:
+        if self.state.current is not MochiState.SEARCHING:
+            return
+        self._transition_to(MochiState.IDLE)
+        self._play_animation("idle")
+        self._logger.debug("File activity emote stopped")
+        if not self._maybe_resume_watching():
+            self._schedule_computer_idle_emote()
+
+    def _start_searching_emote(self) -> bool:
+        if (
+            self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        if not self._transition_to(MochiState.SEARCHING):
+            return False
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._play_animation("searching", after=None)
+        self._logger.debug("File activity emote started")
+        return True
+
+    def _maybe_resume_searching(self) -> bool:
+        if (
+            self._file_activity_monitor is None
+            or not self._file_activity_monitor.file_activity_active
+            or self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        return self._start_searching_emote()
+
+    def _maybe_resume_ambient_activity(self) -> bool:
+        # Ambient priority: watching > searching > idle. Typing and direct
+        # interaction sit above both and call this only after they finish.
+        return self._maybe_resume_watching() or self._maybe_resume_searching()
+
+    def _on_user_idle(self) -> None:
+        """Put Mochi to sleep when truly idle, except during active playback."""
+        self._user_idle = True
+        if self._preview_mode or self.state.current is MochiState.SLEEPING:
+            return
+        if self._context_menu_open:
+            self._logger.debug("Presence idle deferred while context menu is open")
+            return
+        if self._media_monitor is not None and self._media_monitor.youtube_playing:
+            self._logger.debug("Presence idle deferred while YouTube is playing")
+            return
+        self._logger.debug("User presence: idle")
+        self._begin_sleep()
+
+    def _on_user_active(self) -> None:
+        """Wake sleeping Mochi on the first real user input after idle."""
+        self._user_idle = False
+        self._logger.debug("User presence: active")
+        if self.state.current is MochiState.SLEEPING:
+            self._wake_up()
+
+    def _cancel_active_emote(self) -> bool:
+        if self.state.current not in (
+            MochiState.HEART,
+            MochiState.COMPUTER,
+            MochiState.TYPING,
+            MochiState.WATCHING,
+            MochiState.SEARCHING,
+        ):
+            return False
+        if self.state.current is MochiState.TYPING and self._typing_monitor is not None:
+            self._typing_monitor.reset()
         self._transition_to(MochiState.IDLE)
         self._play_animation("idle")
         return True
@@ -510,6 +725,7 @@ class Buddy(Gtk.DrawingArea):
         self._drag_move_started = False
         self._drag_release_handled = False
         self._drag_end_handled = False
+        self._update_pointer_cursor()
 
     def _on_drag_begin(self, _gesture: Gtk.GestureDrag, _x: float, _y: float) -> None:
         self._drag_origin = self._placement.position
@@ -553,9 +769,12 @@ class Buddy(Gtk.DrawingArea):
     def _on_drag_end(
         self, _gesture: Gtk.GestureDrag, _offset_x: float, _offset_y: float
     ) -> None:
+        self._press = None
         if not self._drag_started and not self._drag_release_handled:
+            self._update_pointer_cursor()
             return
         self._finish_drag_interaction()
+        self._update_pointer_cursor()
         if self._drag_end_handled:
             return
         self._drag_end_handled = True
@@ -622,6 +841,7 @@ class Buddy(Gtk.DrawingArea):
         self, _gesture: Gtk.GestureClick, _presses: int, _x: float, _y: float
     ) -> None:
         self._press = None
+        self._update_pointer_cursor()
         if self._finish_drag_interaction() or self._drag_release_handled:
             return
         self.react_to_click()
@@ -635,7 +855,7 @@ class Buddy(Gtk.DrawingArea):
         self._drag_sample_position = None
         self._drag_sample_time = None
         if self.state.current in (MochiState.PICKUP, MochiState.DRAGGED):
-            self._transition_to(MochiState.IDLE)
+            self._transition_to(MochiState.DROPPING)
             self._play_drag_settle()
             self._drag_motion.reset()
             self._drag_visual_key = None
@@ -734,22 +954,14 @@ class Buddy(Gtk.DrawingArea):
             self._transition_to(MochiState.DRAGGED)
             self._play_drag_pose()
             return
-        if self._current_animation == "computer_intro":
-            if self.state.current is not MochiState.COMPUTER:
-                return
-            self._play_animation("computer_typing", after=None)
-            typing_seconds = random.uniform(*COMPUTER_TYPING_DURATION_SECONDS)
-            self._computer_typing_source_id = GLib.timeout_add(
-                round(typing_seconds * 1_000), self._finish_computer_typing
-            )
-            self._logger.debug(
-                "Computer typing loop started for %.1f seconds", typing_seconds
-            )
-            return
         next_animation = self._pending_animation
         self._pending_animation = None
         if next_animation == "sleeping":
             self._play_animation("sleeping")
+        elif next_animation == "typing_loop":
+            self._play_animation("typing_loop", after=None)
+        elif next_animation == "typing_outro":
+            self._play_animation("typing_outro", after="idle")
         elif self._click_reactions.consume() and self._current_animation in (
             "bounce",
             "squish",
@@ -761,7 +973,10 @@ class Buddy(Gtk.DrawingArea):
         else:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
-            if finished_animation.name == "computer_outro":
+            if not self._maybe_resume_ambient_activity() and finished_animation.name in (
+                "computer",
+                "typing_outro",
+            ):
                 self._schedule_computer_idle_emote()
 
     def _play_animation(self, name: str, after: str | None = None) -> None:
@@ -788,6 +1003,7 @@ class Buddy(Gtk.DrawingArea):
 
     def _begin_pickup(self) -> bool:
         self._cancel_active_emote()
+        self._drag_neutral_since = None
         if not self._transition_to(MochiState.PICKUP):
             return False
         self._play_animation("pickup", after=None)
@@ -806,6 +1022,7 @@ class Buddy(Gtk.DrawingArea):
         )
         self._logger.debug("Animation: %s -> idle (resumed)", previous)
         self.queue_draw()
+        self._maybe_resume_ambient_activity()
 
     def _begin_sleep(self) -> None:
         self._cancel_active_emote()
@@ -868,15 +1085,6 @@ class Buddy(Gtk.DrawingArea):
             self._schedule_computer_idle_emote()
         return GLib.SOURCE_REMOVE
 
-    def _finish_computer_typing(self) -> bool:
-        self._computer_typing_source_id = None
-        if (
-            self.state.current is MochiState.COMPUTER
-            and self._current_animation == "computer_typing"
-        ):
-            self._play_animation("computer_outro", after="idle")
-        return GLib.SOURCE_REMOVE
-
     def _try_blink(self) -> bool:
         self._blink_source_id = None
         try:
@@ -919,10 +1127,9 @@ class Buddy(Gtk.DrawingArea):
         try:
             if self.state.current is not MochiState.IDLE or self._context_menu_open:
                 return GLib.SOURCE_REMOVE
-            if time.monotonic() - self._last_interaction >= 120:
-                self._begin_sleep()
-                return GLib.SOURCE_REMOVE
-
+            # Automatic sleep is driven by the GNOME Shell presence monitor.
+            # Local Mochi interaction timestamps are not a proxy for whether the
+            # user is actually present at the computer.
             action = random.choice(("walk", "squish", None, None))
             if action == "squish":
                 self._transition_to(MochiState.SQUISHING)
@@ -975,6 +1182,7 @@ class Buddy(Gtk.DrawingArea):
             self._config.save_position(self._placement.position)
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
+            self._maybe_resume_ambient_activity()
 
     def _tick(self) -> bool:
         walking = self.state.current is MochiState.WALKING and not self._preview_mode
@@ -982,6 +1190,12 @@ class Buddy(Gtk.DrawingArea):
             self._advance_walk()
         picking_up = self.state.current is MochiState.PICKUP
         dragging = self.state.current is MochiState.DRAGGED
+
+        # Reassert the hand cursor while the compositor owns the native
+        # XWayland move so it stays visually consistent for the whole drag.
+        if picking_up or dragging:
+            self._update_pointer_cursor()
+
         if (picking_up or dragging) and not self._placement.layer_shell_enabled:
             self._sample_x11_drag(render=dragging)
         elif (
@@ -990,7 +1204,12 @@ class Buddy(Gtk.DrawingArea):
             > DRAG_VISUAL_IDLE_DELAY_SECONDS
         ):
             self._settle_drag_visual()
-        if not walking and not dragging and self.player.tick(self.TICK_MS):
+        held_sway = dragging and self._current_animation == "sway_idle"
+        if (
+            not walking
+            and (not dragging or held_sway)
+            and self.player.tick(self.TICK_MS)
+        ):
             self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
@@ -1044,11 +1263,54 @@ class Buddy(Gtk.DrawingArea):
 
     def _play_drag_pose(self) -> None:
         sprite = self._drag_motion.pose_sprite()
-        self._drag_frame_index = next(
+        candidate_frame_index = next(
             index
             for index, frame in enumerate(ANIMATIONS["dragged"].frames)
             if frame.sprite == sprite
         )
+        intensity = abs(self._drag_motion.horizontal_intensity)
+        now = time.monotonic()
+
+        # While the authored held sway is active, ignore tiny motion jitter.
+        # A deliberate movement still interrupts sway immediately.
+        if (
+            self._current_animation == "sway_idle"
+            and sprite != "drag/drag_neutral.png"
+            and intensity < DRAG_SWAY_EXIT_INTENSITY
+        ):
+            self._drag_frame_index = 0
+            return
+
+        # A neutral held pose means Mochi is still picked up but the pointer has
+        # settled. Require a short quiet window before entering sway so filtered
+        # velocity can decay without the drag pose and sway loop fighting.
+        if sprite == "drag/drag_neutral.png":
+            self._drag_frame_index = 0
+            if self._drag_neutral_since is None:
+                self._drag_neutral_since = now
+            if (
+                self._current_animation != "sway_idle"
+                and now - self._drag_neutral_since < DRAG_SWAY_ENTER_DELAY_SECONDS
+            ):
+                return
+            visual_key = ("sway_idle", 0)
+            if (
+                self._current_animation == "sway_idle"
+                and visual_key == self._drag_visual_key
+            ):
+                return
+            self._drag_visual_key = visual_key
+            self._current_animation = "sway_idle"
+            self._active_animation = ANIMATIONS["sway_idle"]
+            self._pending_animation = None
+            self.player.play(ANIMATIONS["sway_idle"])
+            self._logger.debug("Held drag settled -> sway_idle")
+            self.queue_draw()
+            return
+
+        self._drag_neutral_since = None
+        self._drag_frame_index = candidate_frame_index
+
         body_offset = round(self._drag_motion.body_sway * DRAG_BODY_SWAY_PX)
         visual_key = (sprite, body_offset)
         if visual_key == self._drag_visual_key:
@@ -1070,31 +1332,7 @@ class Buddy(Gtk.DrawingArea):
         self.queue_draw()
 
     def _play_drag_settle(self) -> None:
-        dragged_frames = ANIMATIONS["dragged"].frames
-        pose_sprite = dragged_frames[self._drag_frame_index].sprite
-        settle_sprite = drag_settle_sprite(pose_sprite)
-        current = next(
-            frame for frame in dragged_frames if frame.sprite == settle_sprite
-        )
-        neutral = next(
-            frame
-            for frame in dragged_frames
-            if frame.sprite == "drag/drag_settle_neutral.png"
-        )
-        settle = Animation(
-            name="drag_settle",
-            frames=(
-                replace(current, duration_ms=DRAG_SETTLE_DIRECTIONAL_MS),
-                replace(neutral, duration_ms=DRAG_SETTLE_NEUTRAL_MS),
-            ),
-            frame_duration_ms=DRAG_SETTLE_NEUTRAL_MS,
-            next_state="idle",
-        )
-        self._current_animation = settle.name
-        self._active_animation = settle
-        self._pending_animation = "idle"
-        self.player.play(settle)
-        self.queue_draw()
+        self._play_animation("drop", after="idle")
 
     def _cancel_walk(self) -> None:
         self._walk_motion = None

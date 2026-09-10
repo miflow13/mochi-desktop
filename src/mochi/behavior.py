@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import random
 from dataclasses import dataclass
 
 from mochi.animation import Animation
@@ -15,7 +14,14 @@ CLICK_REACTION_STATES = frozenset(
     (MochiState.BOUNCING, MochiState.SQUISHING)
 )
 REACTION_STATES = CLICK_REACTION_STATES | frozenset(
-    (MochiState.EXCITED, MochiState.HEART, MochiState.COMPUTER)
+    (
+        MochiState.EXCITED,
+        MochiState.HEART,
+        MochiState.COMPUTER,
+        MochiState.TYPING,
+        MochiState.WATCHING,
+        MochiState.SEARCHING,
+    )
 )
 
 
@@ -40,9 +46,13 @@ def can_transition(current: MochiState, requested: MochiState) -> bool:
     if current is requested or requested is MochiState.IDLE:
         return True
     if current is MochiState.PICKUP:
-        return requested is MochiState.DRAGGED
+        return requested in (MochiState.DRAGGED, MochiState.DROPPING)
     if current is MochiState.DRAGGED:
-        return False
+        return requested is MochiState.DROPPING
+    if current is MochiState.DROPPING:
+        return requested is MochiState.PICKUP
+    if requested is MochiState.DROPPING:
+        return current in (MochiState.PICKUP, MochiState.DRAGGED)
     if requested is MochiState.PICKUP:
         return current is not MochiState.SLEEPING
     if requested is MochiState.DRAGGED:
@@ -63,6 +73,16 @@ def can_transition(current: MochiState, requested: MochiState) -> bool:
     if requested is MochiState.BLINKING:
         return current is MochiState.IDLE
     if requested is MochiState.WALKING:
+        return current is MochiState.IDLE
+    if requested is MochiState.TYPING:
+        return current in (
+            MochiState.IDLE,
+            MochiState.WATCHING,
+            MochiState.SEARCHING,
+        )
+    if requested is MochiState.WATCHING:
+        return current in (MochiState.IDLE, MochiState.SEARCHING)
+    if requested is MochiState.SEARCHING:
         return current is MochiState.IDLE
     if requested in (MochiState.HEART, MochiState.COMPUTER):
         return current is MochiState.IDLE
@@ -142,12 +162,11 @@ class WalkMotion:
 
 
 def choose_click_reaction(
-    recent: tuple[str, ...] = (), rng: random.Random | None = None
+    _recent: tuple[str, ...] = (), _rng=None
 ) -> Animation:
-    """Choose a tactile reaction, gently discouraging three repeats in a row."""
-    generator = rng or random
-    bounce_probability = 0.55
-    if len(recent) >= 2 and recent[-1] == recent[-2]:
-        bounce_probability = 0.40 if recent[-1] == "bounce" else 0.60
-    name = "bounce" if generator.random() < bounce_probability else "squish"
-    return ANIMATIONS[name]
+    """Clicks always use the bounce reaction.
+
+    Squish remains available to autonomous idle behavior; it is no longer
+    selected as a direct click reaction.
+    """
+    return ANIMATIONS["bounce"]

@@ -81,7 +81,10 @@ class DragMotionModelTests(unittest.TestCase):
     def test_medium_pose_uses_hysteresis_instead_of_fighting_near_boundary(self) -> None:
         selector = DragPoseSelector()
 
-        self.assertIn("soft", selector.select(0.27, 0.0))
+        self.assertIn(
+            "soft",
+            selector.select(DRAG_MEDIUM_ENTER_THRESHOLD - 0.01, 0.0),
+        )
         self.assertIn("medium", selector.select(DRAG_MEDIUM_ENTER_THRESHOLD, 0.1))
         self.assertIn("medium", selector.select(0.25, 0.2))
         self.assertIn("medium", selector.select(DRAG_MEDIUM_EXIT_THRESHOLD, 0.3))
