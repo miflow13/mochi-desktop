@@ -31,9 +31,9 @@ class WindowPlacement:
 
     DEFAULT_POSITION = Position(48, 48)
 
-    # Invisible breathing room around Mochi so he never visually touches an edge.
-    EDGE_PADDING_PX = 24
-    BOTTOM_PADDING_PX = 32
+    # Small safety margin so Mochi can get close to screen edges without clipping.
+    EDGE_PADDING_PX = 8
+    BOTTOM_PADDING_PX = 12
 
     def __init__(self, window: Gtk.Window, saved_position: Position | None) -> None:
         self.window = window
