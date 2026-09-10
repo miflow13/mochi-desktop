@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import sys
 
 import cairo
 
@@ -110,6 +111,7 @@ class SpriteAtlas:
         self.frames: dict[str, cairo.ImageSurface] = {}
         for name in ASSET_SET.animations:
             self.frames.update(ASSET_SET.load_frames(name))
+        self._visible_bounds_cache: dict[str, tuple[int, int, int, int]] = {}
 
     def draw(
         self, context: cairo.Context, frame: AnimationFrame, width: int, height: int
@@ -133,3 +135,70 @@ class SpriteAtlas:
         context.get_source().set_filter(cairo.FILTER_NEAREST)
         context.paint()
         context.restore()
+
+    def visible_bounds(
+        self, frame: AnimationFrame, width: int, height: int
+    ) -> tuple[float, float, float, float]:
+        """Return the current frame's opaque bounds in Buddy-widget coordinates.
+
+        Speech bubbles and future overlays should follow the visible character,
+        not the full transparent 256x256 authoring canvas. Bounds are cached per
+        sprite and transformed with the same scale/offset math used by draw().
+        """
+        left, top, right, bottom = self._source_visible_bounds(frame.sprite)
+        source_width, source_height = self.CANVAS_SIZE
+        scale = min(width / source_width, height / source_height)
+        offset_scale = min(width, height) / self.OFFSET_COORDINATE_SIZE
+        origin_x = (
+            (width - source_width * scale) / 2
+            + frame.horizontal_offset * offset_scale
+        )
+        origin_y = (
+            (height - source_height * scale) / 2
+            + frame.vertical_offset * offset_scale
+        )
+        return (
+            origin_x + left * scale,
+            origin_y + top * scale,
+            max(1.0, (right - left) * scale),
+            max(1.0, (bottom - top) * scale),
+        )
+
+    def _source_visible_bounds(self, sprite_name: str) -> tuple[int, int, int, int]:
+        cached = self._visible_bounds_cache.get(sprite_name)
+        if cached is not None:
+            return cached
+
+        surface = self.frames[sprite_name]
+        width = surface.get_width()
+        height = surface.get_height()
+        if surface.get_format() != cairo.FORMAT_ARGB32:
+            bounds = (0, 0, width, height)
+            self._visible_bounds_cache[sprite_name] = bounds
+            return bounds
+
+        surface.flush()
+        data = memoryview(surface.get_data())
+        stride = surface.get_stride()
+        alpha_offset = 3 if sys.byteorder == "little" else 0
+        left = width
+        top = height
+        right = -1
+        bottom = -1
+
+        for y in range(height):
+            row = y * stride
+            for x in range(width):
+                if data[row + x * 4 + alpha_offset] == 0:
+                    continue
+                left = min(left, x)
+                top = min(top, y)
+                right = max(right, x)
+                bottom = max(bottom, y)
+
+        if right < left or bottom < top:
+            bounds = (0, 0, width, height)
+        else:
+            bounds = (left, top, right + 1, bottom + 1)
+        self._visible_bounds_cache[sprite_name] = bounds
+        return bounds
