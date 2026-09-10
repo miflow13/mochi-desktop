@@ -24,6 +24,10 @@ class PresenceBuddyMixin:
 
     def __init__(self, *args, **kwargs) -> None:
         self._ambient_presence_engine = PresenceEngine()
+        # Temporary feature-branch default: make presence easy to observe while
+        # the behavior is being tuned. Disable this before merging to main.
+        self._presence_chatty_test_mode = True
+        self._apply_presence_chatty_test_mode(True, clear_cooldowns=False)
         self._presence_started_at = time.monotonic()
         self._presence_active_session_started_at = self._presence_started_at
         self._presence_bubble: SpeechBubble | None = None
@@ -119,6 +123,14 @@ class PresenceBuddyMixin:
         card.append(quiet_row)
         animated_rows.append(quiet_row)
 
+        chatty_row = self._make_presence_switch_row(
+            "Chatty test mode",
+            self._presence_chatty_test_mode,
+            self._change_presence_chatty_test_mode,
+        )
+        card.append(chatty_row)
+        animated_rows.append(chatty_row)
+
         ambient_button, _ = self._make_menu_button(
             "Say something now",
             "dialog-information-symbolic",
@@ -147,8 +159,8 @@ class PresenceBuddyMixin:
 
         # The presence rows extend Mochi Lab's natural height. Keep the menu
         # positioner aware of that size so it clamps correctly on each monitor.
-        popover._preferred_height = 900
-        popover.window.set_default_size(332, 900)
+        popover._preferred_height = 940
+        popover.window.set_default_size(332, 940)
         return popover
 
     def _make_presence_switch_row(self, label: str, active: bool, callback):
@@ -198,6 +210,63 @@ class PresenceBuddyMixin:
 
     def _change_presence_quiet_mode(self, switch: Gtk.Switch, _pspec=None) -> None:
         self.set_presence_quiet_mode(switch.get_active())
+
+    def _change_presence_chatty_test_mode(
+        self, switch: Gtk.Switch, _pspec=None
+    ) -> None:
+        self._apply_presence_chatty_test_mode(switch.get_active())
+
+    def _apply_presence_chatty_test_mode(
+        self, enabled: bool, *, clear_cooldowns: bool = True
+    ) -> None:
+        """Swap between production-ish and intentionally chatty test pacing."""
+        self._presence_chatty_test_mode = bool(enabled)
+        engine = self._ambient_presence_engine
+        tuning = engine.tuning
+
+        if enabled:
+            tuning.ambient_min_seconds = 45.0
+            tuning.ambient_max_seconds = 120.0
+            tuning.ambient_silence_probability = 0.15
+            tuning.global_cooldown_seconds = 45.0
+            tuning.same_category_min_seconds = 2 * 60.0
+            tuning.same_category_max_seconds = 5 * 60.0
+            tuning.max_phrases_per_hour = 20
+            tuning.typing_medium_sustain_seconds = 15.0
+            tuning.typing_high_sustain_seconds = 10.0
+            tuning.typing_comment_probability = 1.0
+            tuning.return_probability = 0.90
+            tuning.media_probability = 0.75
+            tuning.system_event_probability = 0.90
+            tuning.build_event_probability = 0.90
+        else:
+            tuning.ambient_min_seconds = 7 * 60.0
+            tuning.ambient_max_seconds = 16 * 60.0
+            tuning.ambient_silence_probability = 0.65
+            tuning.global_cooldown_seconds = 5 * 60.0
+            tuning.same_category_min_seconds = 20 * 60.0
+            tuning.same_category_max_seconds = 40 * 60.0
+            tuning.max_phrases_per_hour = 4
+            tuning.typing_medium_sustain_seconds = 35.0
+            tuning.typing_high_sustain_seconds = 25.0
+            tuning.typing_comment_probability = 0.70
+            tuning.return_probability = 0.45
+            tuning.media_probability = 0.30
+            tuning.system_event_probability = 0.55
+            tuning.build_event_probability = 0.65
+
+        engine.cooldowns.global_gap_seconds = tuning.global_cooldown_seconds
+        engine.cooldowns.max_per_hour = tuning.max_phrases_per_hour
+        if clear_cooldowns:
+            engine.cooldowns.clear()
+        engine._next_ambient_at = time.monotonic() + engine._ambient_delay()
+
+        logger = getattr(self, "_logger", None)
+        if logger is not None:
+            logger.info(
+                "Ambient presence chatty test mode %s",
+                "enabled" if enabled else "disabled",
+            )
 
     def _test_presence_ambient(self, _button: Gtk.Button) -> None:
         self._preview_presence_category("ambient")
