@@ -17,7 +17,7 @@ except (ImportError, ValueError):
     GdkWayland = None
 
 from mochi.config import Position
-from mochi.x11 import get_window_position, move_window
+from mochi.x11 import get_window_position, move_window, primary_button_pressed
 
 try:
     gi.require_version("Gtk4LayerShell", "1.0")
@@ -128,13 +128,16 @@ class WindowPlacement:
         if coordinates is None:
             return self.position
 
+        # Never fight Mutter/XWayland while the user is actively holding Mochi.
+        # Track the compositor-owned position freely, even if it crosses the
+        # safety margin. The next sync after button release clamps once.
+        if primary_button_pressed(self.window):
+            self.position = Position(round(coordinates[0]), round(coordinates[1]))
+            return self.position
+
         clamped = self.clamp_position(*coordinates)
         self.position = clamped
 
-        # XWayland native drags are compositor-owned, so move_to() is bypassed
-        # while the pointer is actively moving the window. Re-apply only the
-        # out-of-bounds correction here. Buddy samples the native drag every
-        # frame, which makes the monitor edge behave like an invisible wall.
         if coordinates != (clamped.x, clamped.y):
             move_window(self.window, clamped.x, clamped.y)
 
