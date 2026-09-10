@@ -14,6 +14,7 @@ from mochi.config import ConfigStore
 from mochi.sound import SoundEvent, SoundManager
 from mochi.windowing import WindowPlacement
 from mochi.x11 import request_keep_above
+from mochi.x11_buddy import X11Buddy
 
 
 class MochiApplication(Gtk.Application):
@@ -52,7 +53,8 @@ class MochiApplication(Gtk.Application):
 
         placement = WindowPlacement(window, self.config.load_position())
         window.connect("map", self._configure_mapped_window, placement)
-        buddy = Buddy(
+        buddy_class = Buddy if placement.layer_shell_enabled else X11Buddy
+        buddy = buddy_class(
             window,
             placement,
             self.config,
