@@ -13,7 +13,7 @@
 Mochi is a lightweight Linux desktop companion that idles, reacts, wanders, sleeps, and generally tries to make the desktop feel a little more alive without becoming another thing demanding your attention.
 
 > [!IMPORTANT]
-> Mochi is currently in **alpha development** and is not ready for a public release. Features, artwork, behavior, architecture, and documentation may change significantly while development continues.
+> Mochi is currently in **alpha development**. The first public alpha is planned for **September 21, 2026**. If you'd like to follow development, **star or watch this repository** for updates.
 
 ---
 
@@ -124,30 +124,7 @@ Mochi is built with:
 
 ---
 
-## Development Setup
-
-Install the Fedora runtime packages:
-
-```bash
-sudo dnf install python3 python3-gobject gtk4 gtk4-layer-shell
-```
-
-Install Mochi from the checkout and launch it:
-
-```bash
-python3 -m pip install -e .
-mochi
-```
-
-Useful development commands:
-
-```bash
-mochi --debug
-mochi --reset-position
-mochi --preview-animations
-python3 -m unittest discover -s tests -v
-python3 tools/export_animation_gifs.py
-```
+## Development Notes
 
 <details>
 <summary><strong>Project Structure</strong></summary>
@@ -192,6 +169,8 @@ When adding or replacing art, update `assets/mochi/manifest.json`. Sprite paths 
 ## Contributing & Feedback
 
 Mochi is early-stage software, so bug reports, Linux desktop compatibility notes, design feedback, and ideas are welcome through [GitHub Issues](https://github.com/miflow13/mochi-desktop/issues).
+
+If you're interested in the project, **star or watch the repository** to follow Mochi's progress toward the September 21 alpha.
 
 Licensed under the **MIT License**.
 
