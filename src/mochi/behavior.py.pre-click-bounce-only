@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass
 
 from mochi.animation import Animation
@@ -158,11 +159,12 @@ class WalkMotion:
 
 
 def choose_click_reaction(
-    _recent: tuple[str, ...] = (), _rng=None
+    recent: tuple[str, ...] = (), rng: random.Random | None = None
 ) -> Animation:
-    """Clicks always use the bounce reaction.
-
-    Squish remains available to autonomous idle behavior; it is no longer
-    selected as a direct click reaction.
-    """
-    return ANIMATIONS["bounce"]
+    """Choose a tactile reaction, gently discouraging three repeats in a row."""
+    generator = rng or random
+    bounce_probability = 0.55
+    if len(recent) >= 2 and recent[-1] == recent[-2]:
+        bounce_probability = 0.40 if recent[-1] == "bounce" else 0.60
+    name = "bounce" if generator.random() < bounce_probability else "squish"
+    return ANIMATIONS[name]
