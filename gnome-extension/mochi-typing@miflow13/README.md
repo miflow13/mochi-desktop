@@ -4,12 +4,16 @@ This optional GNOME Shell extension gives Mochi privacy-safe desktop activity si
 
 It currently provides:
 
-- `Pulse` — anonymous keyboard activity used by the typing-reactive emote.
+- `Pulse` — anonymous keyboard activity used by the typing-reactive emote and presence intensity tracking.
 - `UserIdle` — emitted after 120 seconds of real server-global inactivity.
 - `UserActive` — emitted on the first real input after `UserIdle`.
 - `FileBrowsingStarted` / `FileBrowsingStopped` — semantic focus state for supported file managers such as GNOME Files/Nautilus.
+- `YouTubeFocusedStarted` / `YouTubeFocusedStopped` — a privacy-reduced focused-YouTube boolean used by watch-along behavior.
+- `AppCategoryChanged` — a coarse category only: `editor`, `terminal`, `browser`, `media`, `pixel_art`, or `unknown`.
 
-Presence uses Mutter's server-global idle monitor. Typing inspects only the broad input-device type needed to distinguish keyboard activity. File browsing is classified inside GNOME Shell from application identifiers and reduced to a yes/no state before it reaches Mochi. The extension never reads, stores, logs, or transmits key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, text, pointer coordinates, window titles, file names, folder names, paths, or application content.
+Presence uses Mutter's server-global idle monitor. Typing inspects only the broad input-device type needed to distinguish keyboard activity. File browsing and app category are classified inside GNOME Shell from application identifiers and reduced to semantic state before reaching Mochi. General app-category detection never sends application IDs or window titles. The extension never stores or transmits key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, typed text, pointer coordinates, file names, folder names, paths, or application content.
+
+The existing YouTube-focus helper may transiently inspect the focused browser title only to reduce it to a yes/no YouTube state; the title itself is never retained, logged, or transmitted.
 
 ## Local development install
 

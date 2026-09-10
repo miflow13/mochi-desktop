@@ -9,12 +9,11 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, Gtk  # noqa: E402
 
-from mochi.buddy import Buddy
 from mochi.config import ConfigStore
+from mochi.presence.integration import PresenceBuddy, PresenceX11Buddy
 from mochi.sound import SoundEvent, SoundManager
 from mochi.windowing import WindowPlacement
 from mochi.x11 import request_keep_above
-from mochi.x11_buddy import X11Buddy
 
 
 class MochiApplication(Gtk.Application):
@@ -32,6 +31,7 @@ class MochiApplication(Gtk.Application):
         self.config = config
         self.preview_animations = preview_animations
         self._logger = logging.getLogger(__name__)
+        self._buddy: PresenceBuddy | PresenceX11Buddy | None = None
         self.sound = SoundManager(
             volume=config.load_volume(),
             muted=config.load_muted(),
@@ -53,7 +53,7 @@ class MochiApplication(Gtk.Application):
 
         placement = WindowPlacement(window, self.config.load_position())
         window.connect("map", self._configure_mapped_window, placement)
-        buddy_class = Buddy if placement.layer_shell_enabled else X11Buddy
+        buddy_class = PresenceBuddy if placement.layer_shell_enabled else PresenceX11Buddy
         buddy = buddy_class(
             window,
             placement,
@@ -61,6 +61,7 @@ class MochiApplication(Gtk.Application):
             self.sound,
             preview_mode=self.preview_animations,
         )
+        self._buddy = buddy
         window.set_child(buddy)
 
         css = Gtk.CssProvider()
@@ -162,6 +163,9 @@ class MochiApplication(Gtk.Application):
             self.sound.play(SoundEvent.SPAWN)
 
     def do_shutdown(self) -> None:
+        if self._buddy is not None:
+            self._buddy.shutdown_presence()
+            self._buddy = None
         if not self.preview_animations:
             self.sound.play(SoundEvent.EXIT)
         Gtk.Application.do_shutdown(self)

@@ -18,6 +18,7 @@ const FILE_BROWSING_STARTED_SIGNAL_NAME = 'FileBrowsingStarted';
 const FILE_BROWSING_STOPPED_SIGNAL_NAME = 'FileBrowsingStopped';
 const YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME = 'YouTubeFocusedStarted';
 const YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME = 'YouTubeFocusedStopped';
+const APP_CATEGORY_SIGNAL_NAME = 'AppCategoryChanged';
 const DEVELOPER_MENU_SIGNAL_NAME = 'DeveloperMenuRequested';
 const DEVELOPER_MENU_KEYBINDING = 'developer-menu-shortcut';
 
@@ -35,6 +36,51 @@ const FILE_MANAGER_MARKERS = [
     'caja',
 ];
 
+// Presence receives only one of these broad categories. The raw application
+// identity used to classify it remains inside GNOME Shell.
+const EDITOR_MARKERS = [
+    'code',
+    'code-oss',
+    'vscodium',
+    'codium',
+    'cursor',
+    'zed',
+    'sublime_text',
+    'sublime-text',
+    'org.gnome.builder',
+    'gnome-builder',
+    'jetbrains-',
+    'pycharm',
+    'idea',
+    'kate',
+];
+const TERMINAL_MARKERS = [
+    'org.gnome.terminal',
+    'gnome-terminal',
+    'org.gnome.ptyxis',
+    'ptyxis',
+    'kitty',
+    'alacritty',
+    'wezterm',
+    'org.gnome.console',
+    'kgx',
+    'konsole',
+    'foot',
+];
+const PIXEL_ART_MARKERS = [
+    'pixelorama',
+    'com.orama-interactive.pixelorama',
+];
+const MEDIA_APP_MARKERS = [
+    'org.videolan.vlc',
+    'vlc',
+    'mpv',
+    'celluloid',
+    'org.gnome.totem',
+    'totem',
+    'showtime',
+];
+
 // Keep the existing two-minute sleep behavior, but drive it from Mutter's
 // server-global idle monitor instead of Mochi-local interaction timestamps.
 const USER_IDLE_AFTER_MS = 120_000;
@@ -46,9 +92,9 @@ const USER_IDLE_AFTER_MS = 120_000;
 // idle monitor to notice each new input event.
 //
 // Privacy boundary: we never inspect key symbols, keycodes, Unicode values,
-// modifiers, text, shortcuts, window titles, file names, folder names, or
-// application content. Typing and file browsing are reduced to zero-argument
-// semantic signals before they leave GNOME Shell.
+// modifiers, text, shortcuts, file names, folder names, or application content.
+// Application identity is inspected only inside GNOME Shell and reduced to a
+// coarse category before it crosses D-Bus.
 const POLL_INTERVAL_MS = 50;
 const EVENT_TIME_EPSILON_MS = 12;
 const VIDEO_FOCUS_HEARTBEAT_MS = 1_000;
@@ -66,6 +112,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._presenceIsIdle = false;
         this._fileBrowsingActive = false;
         this._youtubeFocusedActive = false;
+        this._appCategory = 'unknown';
         this._videoFocusHeartbeatId = 0;
         this._focusChangedId = 0;
         this._settings = this.getSettings();
@@ -99,10 +146,12 @@ export default class MochiTypingActivityExtension extends Extension {
             () => {
                 this._updateFileBrowsingState();
                 this._updateYouTubeFocusedState(false);
+                this._updateAppCategory();
             },
         );
         this._updateFileBrowsingState();
         this._updateYouTubeFocusedState(false);
+        this._updateAppCategory();
         this._videoFocusHeartbeatId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT,
             VIDEO_FOCUS_HEARTBEAT_MS,
@@ -129,6 +178,7 @@ export default class MochiTypingActivityExtension extends Extension {
                         ? YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME
                         : YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME,
                 );
+                this._emitAppCategory();
             },
             () => {
                 this._nameReady = false;
@@ -167,6 +217,71 @@ export default class MochiTypingActivityExtension extends Extension {
             // Never log input-, window-, or file-related data. Dropping a
             // semantic signal is safe.
         }
+    }
+
+    _emitAppCategory() {
+        if (!this._nameReady || this._connection === null)
+            return;
+
+        try {
+            this._connection.emit_signal(
+                null,
+                OBJECT_PATH,
+                INTERFACE_NAME,
+                APP_CATEGORY_SIGNAL_NAME,
+                new GLib.Variant('(s)', [this._appCategory]),
+            );
+        } catch (_error) {
+            // Category is best-effort. Never fall back to transmitting raw
+            // application identity when this semantic signal cannot be sent.
+        }
+    }
+
+    _updateAppCategory() {
+        const category = this._classifyAppCategory(global.display.get_focus_window());
+        if (category === this._appCategory)
+            return;
+        this._appCategory = category;
+        this._emitAppCategory();
+    }
+
+    _classifyAppCategory(window) {
+        if (window === null)
+            return 'unknown';
+
+        const identities = [];
+        for (const methodName of [
+            'get_gtk_application_id',
+            'get_wm_class',
+            'get_wm_class_instance',
+        ]) {
+            try {
+                const method = window[methodName];
+                if (typeof method !== 'function')
+                    continue;
+                const value = method.call(window);
+                if (typeof value === 'string' && value.length > 0)
+                    identities.push(value.toLowerCase());
+            } catch (_error) {
+                // Unknown identity means unknown category; never inspect title
+                // as a fallback for general application classification.
+            }
+        }
+
+        const matches = markers => identities.some(identity =>
+            markers.some(marker => identity === marker || identity.includes(marker))
+        );
+        if (matches(PIXEL_ART_MARKERS))
+            return 'pixel_art';
+        if (matches(EDITOR_MARKERS))
+            return 'editor';
+        if (matches(TERMINAL_MARKERS))
+            return 'terminal';
+        if (matches(BROWSER_MARKERS))
+            return 'browser';
+        if (matches(MEDIA_APP_MARKERS))
+            return 'media';
+        return 'unknown';
     }
 
     _updateFileBrowsingState() {
@@ -389,6 +504,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._presenceIsIdle = false;
         this._fileBrowsingActive = false;
         this._youtubeFocusedActive = false;
+        this._appCategory = 'unknown';
         this._nameReady = false;
 
         if (this._nameOwnerId) {
