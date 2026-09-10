@@ -133,6 +133,12 @@ class SpeechBubble:
             self._window.set_opacity(0.0)
             self._window.set_visible(True)
             serial = self._animation_serial
+
+            # Position once immediately before fading. The map/idle/follow passes
+            # then refine the allocation as GTK and XWayland settle at startup.
+            # This avoids briefly fading in at the transient window's default
+            # coordinates during Mochi's spawn sequence.
+            self._position_x11()
             GLib.idle_add(self._position_x11)
             GLib.timeout_add(24, self._position_x11)
             self._follow_source_id = GLib.timeout_add(
@@ -251,6 +257,38 @@ class SpeechBubble:
                 )
         return (0.0, 0.0, float(owner_width), float(owner_height))
 
+    @staticmethod
+    def _x11_coordinate_scale(window: Gtk.Window) -> float:
+        """Return GTK application-pixel -> X11 root/device-pixel scale.
+
+        get_window_position()/move_window() operate in X11 root coordinates,
+        while Gtk widget allocations and monitor geometries are application
+        pixels. On scaled displays those are not interchangeable.
+        """
+        surface = window.get_surface()
+        if surface is None:
+            return 1.0
+
+        get_scale = getattr(surface, "get_scale", None)
+        if callable(get_scale):
+            try:
+                scale = float(get_scale())
+            except (TypeError, ValueError):
+                scale = 1.0
+            if scale > 0:
+                return scale
+
+        get_scale_factor = getattr(surface, "get_scale_factor", None)
+        if callable(get_scale_factor):
+            try:
+                scale = float(get_scale_factor())
+            except (TypeError, ValueError):
+                scale = 1.0
+            if scale > 0:
+                return scale
+
+        return 1.0
+
     def _position_wayland_anchor(self) -> None:
         width = max(1, self._anchor.get_width())
         height = max(1, self._anchor.get_height())
@@ -283,9 +321,24 @@ class SpeechBubble:
         if height <= 1:
             height = 46
 
+        owner_scale = self._x11_coordinate_scale(self._owner)
+        bubble_scale = self._x11_coordinate_scale(self._window)
         visible_x, visible_y, visible_width, visible_height = self._visible_anchor_bounds(
             owner_width, owner_height
         )
+
+        # owner_x/owner_y come from X11 in device pixels. Convert every GTK
+        # allocation-derived value into that same coordinate space before doing
+        # anchor, monitor-clamp, or move calculations.
+        visible_x *= owner_scale
+        visible_y *= owner_scale
+        visible_width *= owner_scale
+        visible_height *= owner_scale
+        bubble_width = width * bubble_scale
+        bubble_height = height * bubble_scale
+        gap = self.GAP_PX * owner_scale
+        monitor_padding = self.MONITOR_PADDING_PX * owner_scale
+
         center_x = owner_x + visible_x + visible_width / 2
         center_y = owner_y + visible_y + visible_height / 2
         visible_top = owner_y + visible_y
@@ -298,30 +351,45 @@ class SpeechBubble:
             for index in range(monitors.get_n_items())
         ]
         if geometries:
-            monitor = min(
-                geometries,
+            # GDK monitor geometry is reported in application pixels. Convert
+            # each candidate to X11 coordinates before comparing to center_x/y.
+            scaled_geometries = [
+                (
+                    geometry.x * owner_scale,
+                    geometry.y * owner_scale,
+                    geometry.width * owner_scale,
+                    geometry.height * owner_scale,
+                )
+                for geometry in geometries
+            ]
+            monitor_x, monitor_y, monitor_width, monitor_height = min(
+                scaled_geometries,
                 key=lambda geometry: (
-                    max(geometry.x, min(center_x, geometry.x + geometry.width)) - center_x
-                ) ** 2
+                    max(geometry[0], min(center_x, geometry[0] + geometry[2]))
+                    - center_x
+                )
+                ** 2
                 + (
-                    max(geometry.y, min(center_y, geometry.y + geometry.height)) - center_y
-                ) ** 2,
+                    max(geometry[1], min(center_y, geometry[1] + geometry[3]))
+                    - center_y
+                )
+                ** 2,
             )
-            left = monitor.x + self.MONITOR_PADDING_PX
-            top = monitor.y + self.MONITOR_PADDING_PX
-            right = monitor.x + monitor.width - self.MONITOR_PADDING_PX
-            bottom = monitor.y + monitor.height - self.MONITOR_PADDING_PX
+            left = monitor_x + monitor_padding
+            top = monitor_y + monitor_padding
+            right = monitor_x + monitor_width - monitor_padding
+            bottom = monitor_y + monitor_height - monitor_padding
         else:
-            left, top = 0, 0
-            right = owner_x + owner_width + width
-            bottom = owner_y + owner_height + height
+            left, top = 0.0, 0.0
+            right = owner_x + owner_width * owner_scale + bubble_width
+            bottom = owner_y + owner_height * owner_scale + bubble_height
 
-        x = round(center_x - width / 2)
-        y_above = round(visible_top - height - self.GAP_PX)
-        y_below = round(visible_bottom + self.GAP_PX)
+        x = round(center_x - bubble_width / 2)
+        y_above = round(visible_top - bubble_height - gap)
+        y_below = round(visible_bottom + gap)
         y = y_above if y_above >= top else y_below
-        x = max(left, min(x, max(left, right - width)))
-        y = max(top, min(y, max(top, bottom - height)))
+        x = max(round(left), min(x, max(round(left), round(right - bubble_width))))
+        y = max(round(top), min(y, max(round(top), round(bottom - bubble_height))))
         move_window(self._window, x, y)
         return GLib.SOURCE_REMOVE
 
