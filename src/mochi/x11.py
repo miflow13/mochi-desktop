@@ -180,6 +180,67 @@ def primary_button_pressed(window: Gtk.Window) -> bool:
         x11.XCloseDisplay(display)
 
 
+def nudge_pointer(window: Gtk.Window, delta_x: int, delta_y: int = 0) -> bool:
+    """Move the X11 pointer by a small root-coordinate delta during a native drag.
+
+    Mutter owns Gdk.Toplevel.begin_move() until button release. Moving the window
+    alone cannot reliably constrain that interactive move, because Mutter can
+    immediately place it back under the pointer. Nudging the pointer by the same
+    overshoot keeps the compositor-owned drag on the requested boundary.
+    """
+    if delta_x == 0 and delta_y == 0:
+        return True
+
+    surface = window.get_surface()
+    if GdkX11 is None or not isinstance(surface, GdkX11.X11Surface):
+        return False
+
+    x11, display = _open_x11()
+    if display is None:
+        return False
+
+    try:
+        root = ctypes.c_ulong()
+        child = ctypes.c_ulong()
+        root_x = ctypes.c_int()
+        root_y = ctypes.c_int()
+        window_x = ctypes.c_int()
+        window_y = ctypes.c_int()
+        mask = ctypes.c_uint()
+        queried = x11.XQueryPointer(
+            display,
+            surface.get_xid(),
+            ctypes.byref(root),
+            ctypes.byref(child),
+            ctypes.byref(root_x),
+            ctypes.byref(root_y),
+            ctypes.byref(window_x),
+            ctypes.byref(window_y),
+            ctypes.byref(mask),
+        )
+        if not queried:
+            return False
+
+        destination_root = root.value or x11.XRootWindow(
+            display, x11.XDefaultScreen(display)
+        )
+        x11.XWarpPointer(
+            display,
+            0,
+            destination_root,
+            0,
+            0,
+            0,
+            0,
+            root_x.value + round(delta_x),
+            root_y.value + round(delta_y),
+        )
+        x11.XFlush(display)
+        return True
+    finally:
+        x11.XCloseDisplay(display)
+
+
 def _open_x11() -> tuple[ctypes.CDLL, int | None]:
     library_name = ctypes.util.find_library("X11")
     if library_name is None:
@@ -213,6 +274,18 @@ def _open_x11() -> tuple[ctypes.CDLL, int | None]:
         ctypes.POINTER(ctypes.c_uint),
     ]
     x11.XQueryPointer.restype = ctypes.c_int
+    x11.XWarpPointer.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_uint,
+        ctypes.c_uint,
+        ctypes.c_int,
+        ctypes.c_int,
+    ]
+    x11.XWarpPointer.restype = ctypes.c_int
     x11.XFlush.argtypes = [ctypes.c_void_p]
     x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
     return x11, x11.XOpenDisplay(None)
