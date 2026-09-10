@@ -17,18 +17,21 @@ from .signals import TypingIntensityTracker
 
 @dataclass(slots=True)
 class PresenceTuning:
-    ambient_min_seconds: float = 8 * 60.0
-    ambient_max_seconds: float = 20 * 60.0
-    ambient_silence_probability: float = 0.72
+    # Still intentionally quiet, but a little more present than the first pass.
+    ambient_min_seconds: float = 7 * 60.0
+    ambient_max_seconds: float = 16 * 60.0
+    ambient_silence_probability: float = 0.65
     global_cooldown_seconds: float = 5 * 60.0
     same_category_min_seconds: float = 20 * 60.0
     same_category_max_seconds: float = 40 * 60.0
     body_care_cooldown_seconds: float = 60 * 60.0
     system_event_cooldown_seconds: float = 30 * 60.0
     max_phrases_per_hour: int = 4
-    typing_medium_sustain_seconds: float = 60.0
-    typing_high_sustain_seconds: float = 120.0
-    typing_comment_probability: float = 0.45
+    # Sustained typing should be noticeable in a normal work session without
+    # making Mochi comment on every short message or search query.
+    typing_medium_sustain_seconds: float = 35.0
+    typing_high_sustain_seconds: float = 25.0
+    typing_comment_probability: float = 0.70
     return_probability: float = 0.45
     media_probability: float = 0.30
     system_event_probability: float = 0.55
@@ -125,7 +128,12 @@ class PresenceEngine:
         self._user_idle_since: float | None = None
         self._bubble_dismissed_until = 0.0
         self._forced_context_category: str | None = None
-        self._typing_attempted_for_level: TypingIntensity | None = None
+        # The presence layer receives activity only after TypingActivityMonitor
+        # has recognized a real typing burst. Track that session independently
+        # of LOW/MEDIUM/HIGH pace changes so normal fluctuations do not reset
+        # the sustained-typing clock.
+        self._typing_session_started_at: float | None = None
+        self._typing_comment_attempted = False
 
     def set_quiet_mode(self, enabled: bool) -> None:
         self.tuning.quiet_mode = bool(enabled)
@@ -154,12 +162,21 @@ class PresenceEngine:
         self.emit("force_contextual")
 
     def record_typing_activity(self, *, now: float | None = None) -> TypingIntensity:
-        intensity = self.typing.record(now)
+        timestamp = self._clock() if now is None else now
+        if self._typing_session_started_at is None:
+            self._typing_session_started_at = timestamp
+            self._typing_comment_attempted = False
+            self._logger.debug("[presence] sustained typing session started")
+        intensity = self.typing.record(timestamp)
         self._logger.debug("[presence] typing intensity -> %s", intensity.value)
         return intensity
 
     def record_typing_stopped(self, *, now: float | None = None) -> None:
-        self.typing.stopped(now)
+        timestamp = self._clock() if now is None else now
+        self.typing.stopped(timestamp)
+        self._typing_session_started_at = None
+        self._typing_comment_attempted = False
+        self._logger.debug("[presence] sustained typing session stopped")
 
     def note_user_idle(self, *, now: float | None = None) -> None:
         self._user_idle_since = self._clock() if now is None else now
@@ -176,7 +193,14 @@ class PresenceEngine:
         self._bubble_dismissed_until = timestamp + 120.0
 
     def typing_snapshot(self, *, now: float | None = None) -> tuple[TypingIntensity, float]:
-        return self.typing.snapshot(now)
+        timestamp = self._clock() if now is None else now
+        intensity, _level_sustained = self.typing.snapshot(timestamp)
+        sustained = (
+            0.0
+            if self._typing_session_started_at is None
+            else max(0.0, timestamp - self._typing_session_started_at)
+        )
+        return intensity, sustained
 
     def evaluate(
         self, context: AmbientContext, *, now: float | None = None
@@ -286,8 +310,6 @@ class PresenceEngine:
     def _evaluate_typing(self, context: AmbientContext, now: float) -> PresenceAction | None:
         intensity = context.typing_intensity
         sustained = context.typing_sustained_seconds
-        if intensity is TypingIntensity.LOW:
-            self._typing_attempted_for_level = None
         threshold = None
         if intensity is TypingIntensity.HIGH:
             threshold = self.tuning.typing_high_sustain_seconds
@@ -295,18 +317,23 @@ class PresenceEngine:
             threshold = self.tuning.typing_medium_sustain_seconds
         if threshold is None or sustained < threshold:
             return None
-        if self._typing_attempted_for_level is intensity:
+        if self._typing_comment_attempted:
             return None
-        self._typing_attempted_for_level = intensity
         ready, reason = self.cooldowns.category_ready("typing", now)
         if not ready:
             self._logger.debug("[presence] candidate=typing suppressed: %s", reason)
             return None
+        self._typing_comment_attempted = True
         if self._rng.random() >= self.tuning.typing_comment_probability:
             self._logger.debug("[presence] candidate=typing suppressed: silence roll")
             return None
         text = self.phrases.choose("typing", exclude_recent=True)
-        self._logger.debug("[presence] candidate=typing selected=%r", text)
+        self._logger.debug(
+            "[presence] candidate=typing selected=%r intensity=%s sustained=%.1fs",
+            text,
+            intensity.value,
+            sustained,
+        )
         return PresenceAction("speech", "typing", text, 30, "typing_sustained", speech_display_seconds(text))
 
     def _select_unsolicited_category(self, context: AmbientContext) -> str | None:
