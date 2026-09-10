@@ -31,6 +31,23 @@ class X11BuddyDragTests(unittest.TestCase):
         bubble.show.assert_called_once_with("wheee!", duration_seconds=2.5)
         self.assertEqual(buddy._last_drag_speech_at, 100.0)
 
+    def test_existing_speech_is_preserved_when_drag_starts(self) -> None:
+        bubble = SimpleNamespace(visible=True, hide=Mock(), show=Mock(return_value=True))
+        tuning = SimpleNamespace(speech_enabled=True, quiet_mode=False)
+        buddy = SimpleNamespace(
+            _presence_bubble=bubble,
+            _ambient_presence_engine=SimpleNamespace(tuning=tuning),
+            _last_drag_speech_at=float("-inf"),
+            _logger=Mock(),
+            DRAG_SPEECH_COOLDOWN_SECONDS=30.0,
+            DRAG_SPEECH_DURATION_SECONDS=2.5,
+        )
+
+        X11Buddy._maybe_show_drag_speech(buddy)
+
+        bubble.hide.assert_not_called()
+        bubble.show.assert_not_called()
+
     def test_drag_speech_has_thirty_second_cooldown(self) -> None:
         bubble = SimpleNamespace(visible=False, hide=Mock(), show=Mock(return_value=True))
         tuning = SimpleNamespace(speech_enabled=True, quiet_mode=False)
