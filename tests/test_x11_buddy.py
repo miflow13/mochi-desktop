@@ -80,6 +80,22 @@ class X11BuddyDragTests(unittest.TestCase):
 
         placement.drag_to_pointer.assert_called_once_with(37.0, 61.0)
 
+    def test_active_drag_immediately_resyncs_visible_speech_bubble(self) -> None:
+        placement = SimpleNamespace(drag_to_pointer=Mock())
+        bubble = SimpleNamespace(visible=True, follow_owner_now=Mock())
+        buddy = SimpleNamespace(
+            _drag_started=True,
+            _press=(37.0, 61.0),
+            state=SimpleNamespace(current=MochiState.DRAGGED),
+            _placement=placement,
+            _presence_bubble=bubble,
+        )
+
+        X11Buddy._move_with_x11_pointer(buddy)
+
+        placement.drag_to_pointer.assert_called_once_with(37.0, 61.0)
+        bubble.follow_owner_now.assert_called_once_with()
+
     def test_idle_buddy_does_not_move_from_pointer(self) -> None:
         placement = SimpleNamespace(drag_to_pointer=Mock())
         buddy = SimpleNamespace(
