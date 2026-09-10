@@ -142,6 +142,7 @@ class SpeechBubble:
             self._fade(self._window, 0.0, 1.0, self.FADE_IN_SECONDS, serial)
         else:
             self._mode = "wayland"
+            self._position_wayland_anchor()
             self._popover.set_opacity(0.0)
             self._popover.popup()
             serial = self._animation_serial
@@ -233,6 +234,36 @@ class SpeechBubble:
         self._position_x11()
         return GLib.SOURCE_CONTINUE
 
+    def _visible_anchor_bounds(
+        self, owner_width: int, owner_height: int
+    ) -> tuple[float, float, float, float]:
+        """Return visible Mochi bounds, falling back to the full Buddy widget."""
+        atlas = getattr(self._anchor, "atlas", None)
+        player = getattr(self._anchor, "player", None)
+        frame = getattr(player, "frame", None)
+        if atlas is not None and frame is not None and hasattr(atlas, "visible_bounds"):
+            try:
+                return atlas.visible_bounds(frame, owner_width, owner_height)
+            except Exception as exc:
+                self._logger.debug(
+                    "Speech bubble visible-bounds lookup failed; using widget bounds: %s",
+                    exc,
+                )
+        return (0.0, 0.0, float(owner_width), float(owner_height))
+
+    def _position_wayland_anchor(self) -> None:
+        width = max(1, self._anchor.get_width())
+        height = max(1, self._anchor.get_height())
+        visible_x, visible_y, visible_width, _visible_height = self._visible_anchor_bounds(
+            width, height
+        )
+        rectangle = Gdk.Rectangle()
+        rectangle.x = round(visible_x + visible_width / 2)
+        rectangle.y = round(visible_y)
+        rectangle.width = 1
+        rectangle.height = 1
+        self._popover.set_pointing_to(rectangle)
+
     def _position_x11(self) -> bool:
         if self._mode != "x11" or not self._window.get_visible():
             return GLib.SOURCE_REMOVE
@@ -252,14 +283,20 @@ class SpeechBubble:
         if height <= 1:
             height = 46
 
+        visible_x, visible_y, visible_width, visible_height = self._visible_anchor_bounds(
+            owner_width, owner_height
+        )
+        center_x = owner_x + visible_x + visible_width / 2
+        center_y = owner_y + visible_y + visible_height / 2
+        visible_top = owner_y + visible_y
+        visible_bottom = visible_top + visible_height
+
         display = self._owner.get_display()
         monitors = display.get_monitors()
         geometries = [
             monitors.get_item(index).get_geometry()
             for index in range(monitors.get_n_items())
         ]
-        center_x = owner_x + owner_width / 2
-        center_y = owner_y + owner_height / 2
         if geometries:
             monitor = min(
                 geometries,
@@ -279,9 +316,9 @@ class SpeechBubble:
             right = owner_x + owner_width + width
             bottom = owner_y + owner_height + height
 
-        x = round(owner_x + owner_width / 2 - width / 2)
-        y_above = owner_y - height - self.GAP_PX
-        y_below = owner_y + owner_height + self.GAP_PX
+        x = round(center_x - width / 2)
+        y_above = round(visible_top - height - self.GAP_PX)
+        y_below = round(visible_bottom + self.GAP_PX)
         y = y_above if y_above >= top else y_below
         x = max(left, min(x, max(left, right - width)))
         y = max(top, min(y, max(top, bottom - height)))
