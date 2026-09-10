@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from mochi.buddy import Buddy
 from mochi.state import MochiState
 
@@ -16,6 +18,9 @@ class X11Buddy(Buddy):
     top-left, clamp it, and move the X11 window ourselves.
     """
 
+    DRAG_SPEECH_COOLDOWN_SECONDS = 30.0
+    DRAG_SPEECH_DURATION_SECONDS = 2.5
+
     def _on_motion(self, _controller, _x: float, _y: float) -> None:
         # Do not call Gdk.Toplevel.begin_move(). Gtk.GestureDrag still owns the
         # button sequence and _on_drag_update starts the normal pickup state.
@@ -26,8 +31,46 @@ class X11Buddy(Buddy):
     ) -> None:
         # Reuse all normal pickup/state/animation behavior. On X11 the base
         # implementation intentionally does not move the window from offsets.
+        was_drag_started = self._drag_started
         super()._on_drag_update(gesture, offset_x, offset_y)
+        if not was_drag_started and self._drag_started:
+            self._maybe_show_drag_speech()
         self._move_with_x11_pointer()
+
+    def _maybe_show_drag_speech(self) -> None:
+        """Show the playful drag line through the ambient branch's bubble system.
+
+        This intentionally reuses PresenceBuddyMixin's `_presence_bubble`
+        instead of reviving the older standalone speech.py implementation from
+        feat/drag-wheee-dialogue. Direct drag speech does not consume ambient
+        rate-limit budget, but it still respects speech/quiet-mode preferences.
+        """
+        bubble = getattr(self, "_presence_bubble", None)
+        if bubble is None:
+            return
+
+        engine = getattr(self, "_ambient_presence_engine", None)
+        if engine is not None:
+            tuning = engine.tuning
+            if not tuning.speech_enabled or tuning.quiet_mode:
+                return
+
+        now = time.monotonic()
+        last_spoken_at = getattr(self, "_last_drag_speech_at", float("-inf"))
+        if now - last_spoken_at < self.DRAG_SPEECH_COOLDOWN_SECONDS:
+            return
+
+        # A direct interaction wins over a lingering ambient line. _on_pressed
+        # normally clears it already, but replacing here keeps the drag trigger
+        # deterministic if another bubble appears in the same frame.
+        if bubble.visible:
+            bubble.hide()
+
+        if bubble.show("wheee!", duration_seconds=self.DRAG_SPEECH_DURATION_SECONDS):
+            self._last_drag_speech_at = now
+            logger = getattr(self, "_logger", None)
+            if logger is not None:
+                logger.debug("Drag dialogue: wheee!")
 
     def _tick(self) -> bool:
         # Keep the window attached to the root pointer at Mochi's normal 60-ish
