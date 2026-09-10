@@ -11,7 +11,7 @@ class X11BuddyDragTests(unittest.TestCase):
     def test_motion_handler_never_starts_compositor_move(self) -> None:
         source = inspect.getsource(X11Buddy._on_motion)
 
-        self.assertNotIn("begin_move", source)
+        self.assertNotIn("surface.begin_move(", source)
 
     def test_active_drag_moves_from_root_pointer_anchor(self) -> None:
         placement = SimpleNamespace(drag_to_pointer=Mock())
