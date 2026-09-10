@@ -104,7 +104,7 @@ A right-click developer menu is currently retained for testing while the future 
 | Version | Focus |
 | --- | --- |
 | **v0.1 — Exists** | ~~Core desktop buddy functionality~~ |
-| **v0.2 — Feels alive** | Animation polish, reactions, sleep/wake behavior, interaction polish, and reliability |
+| **v0.2 — Feels alive** | ~~Animation polish, reactions, sleep/wake behavior, interaction polish, and reliability~~ |
 | **v0.3 — Needs care** | Health, fullness, feeding, XP, and leveling |
 | **v0.4 — Develops personality** | Unlockable behaviors, expressions, traits, and cosmetic progression |
 | **v0.5 — Lives on your desktop** | Deeper interactions with windows, cursor behavior, screen edges, and the desktop environment |
