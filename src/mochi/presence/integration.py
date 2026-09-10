@@ -1,7 +1,8 @@
-"""Thin integration layer between Buddy and the ambient presence engine."""
+"""Thin integration layer between Buddy and Mochi Sense ambient awareness."""
 
 from __future__ import annotations
 
+import random
 import time
 
 from gi.repository import GLib, Gtk
@@ -12,23 +13,24 @@ from mochi.x11_buddy import X11Buddy
 
 from .bubble import SpeechBubble
 from .context import AmbientContext
-from .engine import PresenceEngine, speech_display_seconds
+from .engine import PresenceEngine, PresenceTuning, speech_display_seconds
 from .signals import AppCategorySignalAdapter, SystemSignalMonitor
 
 
 class PresenceBuddyMixin:
-    """Add ambient presence without changing Buddy's proven interaction code."""
+    """Add Mochi Sense without changing Buddy's proven interaction code."""
 
     PRESENCE_EVALUATION_SECONDS = 5
     STARTUP_GREETING_DELAY_MS = 1_100
 
     def __init__(self, *args, **kwargs) -> None:
         self._ambient_presence_engine = PresenceEngine()
-        # Temporary feature-branch default: make presence easy to observe while
-        # the behavior is being tuned. Disable this before merging to main.
-        self._presence_chatty_test_mode = True
+        # Mochi Sense is lively by default. Extra-chatty remains an optional
+        # developer stress-test profile rather than defining normal behavior.
+        self._presence_chatty_test_mode = False
         self._presence_chatty_switch: Gtk.Switch | None = None
-        self._apply_presence_chatty_test_mode(True, clear_cooldowns=False)
+        self._stay_put = False
+        self._stay_put_switch: Gtk.Switch | None = None
         self._presence_started_at = time.monotonic()
         self._presence_active_session_started_at = self._presence_started_at
         self._presence_bubble: SpeechBubble | None = None
@@ -79,15 +81,102 @@ class PresenceBuddyMixin:
 
     @property
     def presence_engine(self) -> PresenceEngine:
-        """Developer/test access to the ambient presence engine."""
+        """Developer/test access to the Mochi Sense decision engine."""
         return self._ambient_presence_engine
 
-    def _build_developer_menu(self):
-        """Extend Mochi Lab with isolated presence controls.
+    def _build_context_menu(self):
+        """Add one persistent movement preference to the tiny user menu."""
+        popover = super()._build_context_menu()
+        self._stay_put = self._config.load_stay_put()
 
-        Buddy still owns the developer surface and lifecycle. Presence appends
-        its widgets without touching the user-facing right-click menu, then
-        promotes the Lab surface into a normal resizable, scrollable GTK window.
+        stay_row, self._stay_put_switch = self._make_stay_put_row()
+        card = self._context_menu_content
+        card.insert_child_after(stay_row, self._sleep_button)
+
+        existing_rows = list(self._context_menu_animated_rows)
+        if existing_rows:
+            self._context_menu_animated_rows = (
+                existing_rows[0],
+                stay_row,
+                *existing_rows[1:],
+            )
+        else:
+            self._context_menu_animated_rows = (stay_row,)
+
+        popover._preferred_height = max(popover._preferred_height, 224)
+        popover.window.set_default_size(popover._preferred_width, popover._preferred_height)
+        return popover
+
+    def _make_stay_put_row(self) -> tuple[Gtk.Button, Gtk.Switch]:
+        button = Gtk.Button()
+        button.add_css_class("mochi-menu-row")
+        button.set_tooltip_text("Prevent Mochi from wandering on his own")
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        icon = Gtk.Image.new_from_icon_name("media-playback-pause-symbolic")
+        icon.add_css_class("mochi-menu-icon")
+        row.append(icon)
+
+        text = Gtk.Label(label="Stay put")
+        text.set_xalign(0)
+        text.set_hexpand(True)
+        row.append(text)
+
+        switch = Gtk.Switch()
+        switch.set_valign(Gtk.Align.CENTER)
+        switch.set_active(self._stay_put)
+        # Let the parent button own the pointer sequence. This mirrors the
+        # reliable Extra-chatty row and avoids nested click targets in MenuWindow.
+        switch.set_can_target(False)
+        switch.set_focusable(False)
+        row.append(switch)
+
+        button.set_child(row)
+        button.connect("clicked", self._toggle_stay_put)
+        return button, switch
+
+    def _toggle_stay_put(self, _button: Gtk.Button) -> None:
+        self._stay_put = not self._stay_put
+        self._config.save_stay_put(self._stay_put)
+        if self._stay_put_switch is not None:
+            self._stay_put_switch.set_active(self._stay_put)
+
+        # Enabling Stay put while Mochi is already strolling should take effect
+        # immediately. Manual dragging and developer-forced walks remain allowed.
+        if self._stay_put and self.state.current is MochiState.WALKING:
+            self._cancel_walk()
+            if self._transition_to(MochiState.IDLE):
+                self._play_animation("idle")
+
+        self._logger.info("Stay put %s", "enabled" if self._stay_put else "disabled")
+
+    def _choose_idle_action(self) -> bool:
+        """Suppress only autonomous walking while Stay put is enabled."""
+        if not self._stay_put:
+            return super()._choose_idle_action()
+
+        self._idle_action_source_id = None
+        try:
+            if self.state.current is not MochiState.IDLE or self._context_menu_open:
+                return GLib.SOURCE_REMOVE
+
+            # Keep the same 25% squish chance as the normal idle pool; only the
+            # autonomous walk slot is removed. Reading/other quiet emotes can be
+            # added to this ambient pool later without changing movement logic.
+            action = random.choice(("squish", None, None, None))
+            if action == "squish":
+                self._transition_to(MochiState.SQUISHING)
+                self._play_animation("squish")
+            return GLib.SOURCE_REMOVE
+        finally:
+            self._schedule_idle_action()
+
+    def _build_developer_menu(self):
+        """Extend Mochi Lab with isolated Mochi Sense controls.
+
+        Buddy still owns the developer surface and lifecycle. Mochi Sense appends
+        its widgets without changing the user menu lifecycle, then promotes the
+        Lab surface into a conventional resizable, scrollable GTK window.
         """
         popover = super()._build_developer_menu()
         card = self._developer_menu_content
@@ -95,7 +184,7 @@ class PresenceBuddyMixin:
 
         card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        presence_label = Gtk.Label(label="Presence")
+        presence_label = Gtk.Label(label="Mochi Sense")
         presence_label.set_xalign(0)
         presence_label.add_css_class("mochi-menu-section")
         card.append(presence_label)
@@ -124,9 +213,8 @@ class PresenceBuddyMixin:
         card.append(quiet_row)
         animated_rows.append(quiet_row)
 
-        # Chatty mode intentionally uses a button-backed switch. The visual
-        # control stays switch-like, while the entire row gets the same reliable
-        # click path as Mochi Lab's action buttons on XWayland.
+        # Extra-chatty is intentionally button-backed. The normal Mochi Sense
+        # profile is already lively; this control exists only for stress testing.
         chatty_row, self._presence_chatty_switch = self._make_presence_chatty_row()
         card.append(chatty_row)
         animated_rows.append(chatty_row)
@@ -203,11 +291,11 @@ class PresenceBuddyMixin:
         button = Gtk.Button()
         button.add_css_class("mochi-menu-row")
         button.set_tooltip_text(
-            "Temporarily increases ambient speech frequency for testing"
+            "Stress-test Mochi Sense with much faster ambient speech"
         )
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        text = Gtk.Label(label="Chatty test mode")
+        text = Gtk.Label(label="Extra chatty")
         text.set_xalign(0)
         text.set_hexpand(True)
         row.append(text)
@@ -265,48 +353,54 @@ class PresenceBuddyMixin:
         if self._presence_chatty_switch is not None:
             self._presence_chatty_switch.set_active(enabled)
         self._logger.info(
-            "Mochi Lab chatty test mode toggled to %s",
+            "Mochi Lab extra-chatty mode toggled to %s",
             "ON" if enabled else "OFF",
         )
 
     def _apply_presence_chatty_test_mode(
         self, enabled: bool, *, clear_cooldowns: bool = True
     ) -> None:
-        """Swap between production-ish and intentionally chatty test pacing."""
+        """Swap between normal Mochi Sense and an aggressive stress-test profile."""
         self._presence_chatty_test_mode = bool(enabled)
         engine = self._ambient_presence_engine
         tuning = engine.tuning
 
+        profile_fields = (
+            "ambient_min_seconds",
+            "ambient_max_seconds",
+            "ambient_silence_probability",
+            "global_cooldown_seconds",
+            "same_category_min_seconds",
+            "same_category_max_seconds",
+            "max_phrases_per_hour",
+            "typing_medium_sustain_seconds",
+            "typing_high_sustain_seconds",
+            "typing_comment_probability",
+            "return_probability",
+            "media_probability",
+            "system_event_probability",
+            "build_event_probability",
+        )
+
         if enabled:
-            tuning.ambient_min_seconds = 45.0
-            tuning.ambient_max_seconds = 120.0
-            tuning.ambient_silence_probability = 0.15
-            tuning.global_cooldown_seconds = 45.0
-            tuning.same_category_min_seconds = 2 * 60.0
-            tuning.same_category_max_seconds = 5 * 60.0
-            tuning.max_phrases_per_hour = 20
-            tuning.typing_medium_sustain_seconds = 15.0
-            tuning.typing_high_sustain_seconds = 10.0
+            tuning.ambient_min_seconds = 8.0
+            tuning.ambient_max_seconds = 20.0
+            tuning.ambient_silence_probability = 0.05
+            tuning.global_cooldown_seconds = 10.0
+            tuning.same_category_min_seconds = 30.0
+            tuning.same_category_max_seconds = 75.0
+            tuning.max_phrases_per_hour = 60
+            tuning.typing_medium_sustain_seconds = 6.0
+            tuning.typing_high_sustain_seconds = 4.0
             tuning.typing_comment_probability = 1.0
-            tuning.return_probability = 0.90
-            tuning.media_probability = 0.75
-            tuning.system_event_probability = 0.90
-            tuning.build_event_probability = 0.90
+            tuning.return_probability = 1.0
+            tuning.media_probability = 1.0
+            tuning.system_event_probability = 1.0
+            tuning.build_event_probability = 1.0
         else:
-            tuning.ambient_min_seconds = 7 * 60.0
-            tuning.ambient_max_seconds = 16 * 60.0
-            tuning.ambient_silence_probability = 0.65
-            tuning.global_cooldown_seconds = 5 * 60.0
-            tuning.same_category_min_seconds = 20 * 60.0
-            tuning.same_category_max_seconds = 40 * 60.0
-            tuning.max_phrases_per_hour = 4
-            tuning.typing_medium_sustain_seconds = 35.0
-            tuning.typing_high_sustain_seconds = 25.0
-            tuning.typing_comment_probability = 0.70
-            tuning.return_probability = 0.45
-            tuning.media_probability = 0.30
-            tuning.system_event_probability = 0.55
-            tuning.build_event_probability = 0.65
+            defaults = PresenceTuning()
+            for field_name in profile_fields:
+                setattr(tuning, field_name, getattr(defaults, field_name))
 
         engine.cooldowns.global_gap_seconds = tuning.global_cooldown_seconds
         engine.cooldowns.max_per_hour = tuning.max_phrases_per_hour
@@ -317,7 +411,7 @@ class PresenceBuddyMixin:
         logger = getattr(self, "_logger", None)
         if logger is not None:
             logger.info(
-                "Ambient presence chatty test mode %s",
+                "Mochi Sense extra-chatty mode %s",
                 "enabled" if enabled else "disabled",
             )
 
@@ -562,8 +656,8 @@ class PresenceBuddyMixin:
 
 
 class PresenceBuddy(PresenceBuddyMixin, Buddy):
-    """Wayland/layer-shell Buddy with ambient presence."""
+    """Wayland/layer-shell Buddy with Mochi Sense."""
 
 
 class PresenceX11Buddy(PresenceBuddyMixin, X11Buddy):
-    """X11/XWayland Buddy with ambient presence and unchanged drag behavior."""
+    """X11/XWayland Buddy with Mochi Sense and unchanged drag behavior."""
