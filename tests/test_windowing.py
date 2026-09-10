@@ -39,10 +39,11 @@ class WindowPlacementMonitorTests(unittest.TestCase):
 
         self.assertEqual((position.x, position.y), (2200, 300))
 
+    @patch("mochi.windowing.primary_button_pressed", return_value=False)
     @patch("mochi.windowing.move_window")
     @patch("mochi.windowing.get_window_position", return_value=(-40, 760))
     def test_sync_from_window_pushes_out_of_bounds_window_back_inside(
-        self, _get_window_position, move_window
+        self, _get_window_position, move_window, _primary_button_pressed
     ) -> None:
         monitors = MonitorList(monitor(0, 0, 1000, 800))
         window = SimpleNamespace(
@@ -56,13 +57,35 @@ class WindowPlacementMonitorTests(unittest.TestCase):
 
         position = WindowPlacement.sync_from_window(placement)
 
-        self.assertEqual((position.x, position.y), (24, 668))
-        move_window.assert_called_once_with(window, 24, 668)
+        self.assertEqual((position.x, position.y), (8, 688))
+        move_window.assert_called_once_with(window, 8, 688)
 
+    @patch("mochi.windowing.primary_button_pressed", return_value=True)
+    @patch("mochi.windowing.move_window")
+    @patch("mochi.windowing.get_window_position", return_value=(-40, 760))
+    def test_sync_from_window_does_not_correct_during_active_native_drag(
+        self, _get_window_position, move_window, _primary_button_pressed
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1000, 800))
+        window = SimpleNamespace(
+            get_default_size=lambda: (100, 100),
+            get_display=lambda: SimpleNamespace(get_monitors=lambda: monitors),
+        )
+        placement = object.__new__(WindowPlacement)
+        placement.window = window
+        placement.position = SimpleNamespace(x=100, y=100)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.sync_from_window(placement)
+
+        self.assertEqual((position.x, position.y), (-40, 760))
+        move_window.assert_not_called()
+
+    @patch("mochi.windowing.primary_button_pressed", return_value=False)
     @patch("mochi.windowing.move_window")
     @patch("mochi.windowing.get_window_position", return_value=(250, 300))
     def test_sync_from_window_does_not_fight_an_in_bounds_native_drag(
-        self, _get_window_position, move_window
+        self, _get_window_position, move_window, _primary_button_pressed
     ) -> None:
         monitors = MonitorList(monitor(0, 0, 1000, 800))
         window = SimpleNamespace(
@@ -92,8 +115,8 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         top_left = WindowPlacement.clamp_position(placement, -50, -50)
         bottom_right = WindowPlacement.clamp_position(placement, 990, 790)
 
-        self.assertEqual((top_left.x, top_left.y), (24, 24))
-        self.assertEqual((bottom_right.x, bottom_right.y), (876, 668))
+        self.assertEqual((top_left.x, top_left.y), (8, 8))
+        self.assertEqual((bottom_right.x, bottom_right.y), (892, 688))
 
     def test_gap_position_uses_the_nearest_monitor(self) -> None:
         monitors = MonitorList(
@@ -110,7 +133,7 @@ class WindowPlacementMonitorTests(unittest.TestCase):
 
         position = WindowPlacement.clamp_position(placement, 1150, 200)
 
-        self.assertEqual((position.x, position.y), (1224, 200))
+        self.assertEqual((position.x, position.y), (1208, 200))
 
 
 if __name__ == "__main__":
