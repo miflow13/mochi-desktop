@@ -23,9 +23,9 @@ class SpeechBubble:
     """
 
     FOLLOW_INTERVAL_MS = 100
-    FADE_IN_SECONDS = 0.18
-    FADE_OUT_SECONDS = 0.22
-    GAP_PX = 9
+    FADE_IN_SECONDS = 0.20
+    FADE_OUT_SECONDS = 0.26
+    GAP_PX = 8
     MONITOR_PADDING_PX = 14
 
     def __init__(
@@ -44,24 +44,8 @@ class SpeechBubble:
         self._animation_serial = 0
         self._mode: str | None = None
 
-        self._label = Gtk.Label()
-        self._label.set_wrap(True)
-        self._label.set_max_width_chars(34)
-        self._label.set_xalign(0.5)
-        self._label.set_justify(Gtk.Justification.CENTER)
-        self._label.set_focusable(False)
-        self._label.set_can_target(False)
-        self._label.add_css_class("mochi-speech-text")
-
-        self._bubble_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._bubble_box.add_css_class("mochi-speech-bubble")
-        self._bubble_box.set_margin_top(9)
-        self._bubble_box.set_margin_bottom(9)
-        self._bubble_box.set_margin_start(14)
-        self._bubble_box.set_margin_end(14)
-        self._bubble_box.set_focusable(False)
-        self._bubble_box.set_can_target(False)
-        self._bubble_box.append(self._label)
+        self._label = self._make_label()
+        self._bubble_box = self._make_bubble_content(self._label)
 
         self._window = Gtk.Window()
         self._window.set_decorated(False)
@@ -74,25 +58,9 @@ class SpeechBubble:
         self._window.set_child(self._bubble_box)
         self._window.connect("map", self._on_window_map)
 
-        # The popover needs a distinct child because a Gtk.Widget may only have
-        # one parent at a time. Its visual styling intentionally matches X11.
-        self._popover_label = Gtk.Label()
-        self._popover_label.set_wrap(True)
-        self._popover_label.set_max_width_chars(34)
-        self._popover_label.set_xalign(0.5)
-        self._popover_label.set_justify(Gtk.Justification.CENTER)
-        self._popover_label.set_focusable(False)
-        self._popover_label.set_can_target(False)
-        self._popover_label.add_css_class("mochi-speech-text")
-        self._popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._popover_box.add_css_class("mochi-speech-bubble")
-        self._popover_box.set_margin_top(9)
-        self._popover_box.set_margin_bottom(9)
-        self._popover_box.set_margin_start(14)
-        self._popover_box.set_margin_end(14)
-        self._popover_box.set_focusable(False)
-        self._popover_box.set_can_target(False)
-        self._popover_box.append(self._popover_label)
+        # A widget may only have one parent, so Wayland gets an equivalent copy.
+        self._popover_label = self._make_label()
+        self._popover_box = self._make_bubble_content(self._popover_label)
 
         self._popover = Gtk.Popover()
         self._popover.set_parent(anchor_widget)
@@ -106,6 +74,48 @@ class SpeechBubble:
         self._popover.set_child(self._popover_box)
 
         self._install_css(owner.get_display())
+
+    @staticmethod
+    def _make_label() -> Gtk.Label:
+        label = Gtk.Label()
+        label.set_wrap(True)
+        label.set_max_width_chars(30)
+        label.set_xalign(0.0)
+        label.set_justify(Gtk.Justification.LEFT)
+        label.set_focusable(False)
+        label.set_can_target(False)
+        label.add_css_class("mochi-speech-text")
+        return label
+
+    @staticmethod
+    def _make_bubble_content(label: Gtk.Label) -> Gtk.Box:
+        # Keep a little transparent breathing room outside the painted capsule
+        # so GTK has room to render the soft shadow without clipping it.
+        shell = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        shell.add_css_class("mochi-speech-shell")
+        shell.set_margin_top(7)
+        shell.set_margin_bottom(7)
+        shell.set_margin_start(7)
+        shell.set_margin_end(7)
+        shell.set_focusable(False)
+        shell.set_can_target(False)
+
+        capsule = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        capsule.add_css_class("mochi-speech-bubble")
+        capsule.set_focusable(False)
+        capsule.set_can_target(False)
+
+        dot = Gtk.Box()
+        dot.set_size_request(6, 6)
+        dot.set_valign(Gtk.Align.CENTER)
+        dot.set_focusable(False)
+        dot.set_can_target(False)
+        dot.add_css_class("mochi-speech-dot")
+
+        capsule.append(dot)
+        capsule.append(label)
+        shell.append(capsule)
+        return shell
 
     @property
     def visible(self) -> bool:
@@ -238,9 +248,9 @@ class SpeechBubble:
         width = self._window.get_width()
         height = self._window.get_height()
         if width <= 1:
-            width = 224
+            width = 218
         if height <= 1:
-            height = 48
+            height = 46
 
         display = self._owner.get_display()
         monitors = display.get_monitors()
@@ -307,12 +317,22 @@ class SpeechBubble:
             window.mochi-speech-window {
                 background: transparent;
             }
+            .mochi-speech-shell {
+                background: transparent;
+            }
             .mochi-speech-bubble {
-                background: alpha(@window_bg_color, 0.92);
+                background: alpha(@window_bg_color, 0.96);
                 color: @window_fg_color;
-                border: 1px solid alpha(@window_fg_color, 0.08);
-                border-radius: 16px;
-                box-shadow: 0 6px 18px alpha(black, 0.16);
+                border: 1px solid alpha(#79c98b, 0.30);
+                border-radius: 999px;
+                box-shadow: 0 5px 16px alpha(black, 0.14);
+                padding: 8px 12px 8px 10px;
+            }
+            .mochi-speech-dot {
+                background: #79c98b;
+                border-radius: 999px;
+                min-width: 6px;
+                min-height: 6px;
             }
             .mochi-speech-text {
                 font-size: 12px;
@@ -325,8 +345,8 @@ class SpeechBubble:
                 padding: 0;
             }
             popover.mochi-speech-popover > arrow {
-                background: alpha(@window_bg_color, 0.92);
-                border-color: alpha(@window_fg_color, 0.08);
+                background: alpha(@window_bg_color, 0.96);
+                border-color: alpha(#79c98b, 0.30);
             }
             """
         )
