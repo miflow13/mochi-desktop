@@ -250,7 +250,14 @@ export default class MochiTypingActivityExtension extends Extension {
             return false;
         }
 
-        return title.includes('youtube') && !title.includes('youtube music');
+        // Treat only a YouTube-style video/page title as YouTube context.
+        // A plain substring check was too broad: unrelated browser tabs whose
+        // titles merely mentioned "YouTube" could produce false WATCHING
+        // transitions when Chromium still had an MPRIS Playing session.
+        return (
+            title.endsWith(' - youtube') &&
+            !title.includes('youtube music')
+        );
     }
 
     _armPresenceIdleWatch() {
