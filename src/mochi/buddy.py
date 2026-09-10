@@ -481,13 +481,19 @@ class Buddy(Gtk.DrawingArea):
             application.quit()
 
     def _update_pointer_cursor(self) -> None:
-        if self._press is not None or self._drag_started:
-            cursor_name = "grabbing"
-        elif self._hovered:
-            cursor_name = "grab"
-        else:
-            cursor_name = None
+        # Keep a visible hand cursor through hover, press, pickup, and drag.
+        # Apply it to both the drawing area and the toplevel because XWayland
+        # hands an active window move to the compositor, which can otherwise
+        # override a child-widget cursor.
+        held = (
+            self._hovered
+            or self._press is not None
+            or self._drag_started
+            or self.state.current in (MochiState.PICKUP, MochiState.DRAGGED)
+        )
+        cursor_name = "pointer" if held else None
         self.set_cursor_from_name(cursor_name)
+        self._window.set_cursor_from_name(cursor_name)
 
     def _on_enter(
         self, _controller: Gtk.EventControllerMotion, _x: float, _y: float
@@ -1184,6 +1190,12 @@ class Buddy(Gtk.DrawingArea):
             self._advance_walk()
         picking_up = self.state.current is MochiState.PICKUP
         dragging = self.state.current is MochiState.DRAGGED
+
+        # Reassert the hand cursor while the compositor owns the native
+        # XWayland move so it stays visually consistent for the whole drag.
+        if picking_up or dragging:
+            self._update_pointer_cursor()
+
         if (picking_up or dragging) and not self._placement.layer_shell_enabled:
             self._sample_x11_drag(render=dragging)
         elif (
