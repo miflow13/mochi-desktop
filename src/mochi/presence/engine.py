@@ -1,4 +1,4 @@
-"""Decision engine for Mochi's quiet ambient presence."""
+"""Decision engine for Mochi Sense ambient awareness."""
 
 from __future__ import annotations
 
@@ -17,25 +17,27 @@ from .signals import TypingIntensityTracker
 
 @dataclass(slots=True)
 class PresenceTuning:
-    # Still intentionally quiet, but a little more present than the first pass.
-    ambient_min_seconds: float = 7 * 60.0
-    ambient_max_seconds: float = 16 * 60.0
-    ambient_silence_probability: float = 0.65
-    global_cooldown_seconds: float = 5 * 60.0
-    same_category_min_seconds: float = 20 * 60.0
-    same_category_max_seconds: float = 40 * 60.0
-    body_care_cooldown_seconds: float = 60 * 60.0
-    system_event_cooldown_seconds: float = 30 * 60.0
-    max_phrases_per_hour: int = 4
-    # Sustained typing should be noticeable in a normal work session without
-    # making Mochi comment on every short message or search query.
-    typing_medium_sustain_seconds: float = 35.0
-    typing_high_sustain_seconds: float = 25.0
-    typing_comment_probability: float = 0.70
-    return_probability: float = 0.45
-    media_probability: float = 0.30
-    system_event_probability: float = 0.55
-    build_event_probability: float = 0.65
+    # Mochi's default personality is intentionally lively. These are candidate
+    # opportunities, not guaranteed speech: context suppression, category
+    # cooldowns, current animations, media, and the silence roll still apply.
+    ambient_min_seconds: float = 20.0
+    ambient_max_seconds: float = 60.0
+    ambient_silence_probability: float = 0.10
+    global_cooldown_seconds: float = 25.0
+    same_category_min_seconds: float = 90.0
+    same_category_max_seconds: float = 4 * 60.0
+    body_care_cooldown_seconds: float = 45 * 60.0
+    system_event_cooldown_seconds: float = 20 * 60.0
+    max_phrases_per_hour: int = 30
+    # Sustained typing is one of Mochi's strongest ambient signals. React soon
+    # enough to feel companionable, but never inspect actual key content.
+    typing_medium_sustain_seconds: float = 12.0
+    typing_high_sustain_seconds: float = 8.0
+    typing_comment_probability: float = 1.0
+    return_probability: float = 0.90
+    media_probability: float = 0.75
+    system_event_probability: float = 0.90
+    build_event_probability: float = 0.90
     speech_enabled: bool = True
     ambient_reactions_enabled: bool = True
     quiet_mode: bool = False
@@ -101,7 +103,7 @@ def speech_display_seconds(text: str) -> float:
 
 
 class PresenceEngine:
-    """Choose at most one subtle action; silence is the normal result."""
+    """Choose at most one context-aware action; silence remains a valid result."""
 
     def __init__(
         self,
