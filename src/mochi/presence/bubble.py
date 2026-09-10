@@ -23,10 +23,10 @@ class SpeechBubble:
     """
 
     FOLLOW_INTERVAL_MS = 100
-    FADE_IN_SECONDS = 0.14
-    FADE_OUT_SECONDS = 0.18
-    GAP_PX = 10
-    MONITOR_PADDING_PX = 12
+    FADE_IN_SECONDS = 0.18
+    FADE_OUT_SECONDS = 0.22
+    GAP_PX = 9
+    MONITOR_PADDING_PX = 14
 
     def __init__(
         self,
@@ -46,18 +46,19 @@ class SpeechBubble:
 
         self._label = Gtk.Label()
         self._label.set_wrap(True)
-        self._label.set_max_width_chars(38)
+        self._label.set_max_width_chars(34)
         self._label.set_xalign(0.5)
         self._label.set_justify(Gtk.Justification.CENTER)
         self._label.set_focusable(False)
         self._label.set_can_target(False)
+        self._label.add_css_class("mochi-speech-text")
 
         self._bubble_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._bubble_box.add_css_class("mochi-speech-bubble")
-        self._bubble_box.set_margin_top(8)
-        self._bubble_box.set_margin_bottom(8)
-        self._bubble_box.set_margin_start(12)
-        self._bubble_box.set_margin_end(12)
+        self._bubble_box.set_margin_top(9)
+        self._bubble_box.set_margin_bottom(9)
+        self._bubble_box.set_margin_start(14)
+        self._bubble_box.set_margin_end(14)
         self._bubble_box.set_focusable(False)
         self._bubble_box.set_can_target(False)
         self._bubble_box.append(self._label)
@@ -77,17 +78,18 @@ class SpeechBubble:
         # one parent at a time. Its visual styling intentionally matches X11.
         self._popover_label = Gtk.Label()
         self._popover_label.set_wrap(True)
-        self._popover_label.set_max_width_chars(38)
+        self._popover_label.set_max_width_chars(34)
         self._popover_label.set_xalign(0.5)
         self._popover_label.set_justify(Gtk.Justification.CENTER)
         self._popover_label.set_focusable(False)
         self._popover_label.set_can_target(False)
+        self._popover_label.add_css_class("mochi-speech-text")
         self._popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._popover_box.add_css_class("mochi-speech-bubble")
-        self._popover_box.set_margin_top(8)
-        self._popover_box.set_margin_bottom(8)
-        self._popover_box.set_margin_start(12)
-        self._popover_box.set_margin_end(12)
+        self._popover_box.set_margin_top(9)
+        self._popover_box.set_margin_bottom(9)
+        self._popover_box.set_margin_start(14)
+        self._popover_box.set_margin_end(14)
         self._popover_box.set_focusable(False)
         self._popover_box.set_can_target(False)
         self._popover_box.append(self._popover_label)
@@ -236,9 +238,9 @@ class SpeechBubble:
         width = self._window.get_width()
         height = self._window.get_height()
         if width <= 1:
-            width = 240
+            width = 224
         if height <= 1:
-            height = 52
+            height = 48
 
         display = self._owner.get_display()
         monitors = display.get_monitors()
@@ -306,18 +308,25 @@ class SpeechBubble:
                 background: transparent;
             }
             .mochi-speech-bubble {
-                background: alpha(@window_bg_color, 0.95);
+                background: alpha(@window_bg_color, 0.92);
                 color: @window_fg_color;
-                border: 1px solid alpha(@window_fg_color, 0.10);
-                border-radius: 14px;
-                box-shadow: 0 8px 24px alpha(black, 0.20);
+                border: 1px solid alpha(@window_fg_color, 0.08);
+                border-radius: 16px;
+                box-shadow: 0 6px 18px alpha(black, 0.16);
+            }
+            .mochi-speech-text {
                 font-size: 12px;
+                font-weight: 500;
             }
             popover.mochi-speech-popover > contents {
                 background: transparent;
                 border: none;
                 box-shadow: none;
                 padding: 0;
+            }
+            popover.mochi-speech-popover > arrow {
+                background: alpha(@window_bg_color, 0.92);
+                border-color: alpha(@window_fg_color, 0.08);
             }
             """
         )
