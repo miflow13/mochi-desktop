@@ -36,18 +36,16 @@ class PresenceTuning:
     speech_enabled: bool = True
     ambient_reactions_enabled: bool = True
     quiet_mode: bool = False
-    category_weights: dict[str, float] = field(
-        default_factory=lambda: {
-            "ambient": 55.0,
-            "encouragement": 12.0,
-            "developer": 6.0,
-            "creative": 6.0,
-            "focus": 10.0,
-            "companionship": 5.0,
-            "body_care": 3.0,
-            "rest": 3.0,
-        }
-    )
+    category_weights: dict[str, float] = field(default_factory=lambda: {
+        "ambient": 55.0,
+        "encouragement": 12.0,
+        "developer": 6.0,
+        "creative": 6.0,
+        "focus": 10.0,
+        "companionship": 5.0,
+        "body_care": 3.0,
+        "rest": 3.0,
+    })
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +76,6 @@ _EVENT_PRIORITY = {
     "build_failed": 30,
     "build_succeeded": 30,
 }
-
 _EVENT_CATEGORY = {
     "user_returned": "return_from_idle",
     "media_started": "media",
@@ -92,7 +89,6 @@ _EVENT_CATEGORY = {
 
 
 def speech_display_seconds(text: str) -> float:
-    """Readable but unobtrusive bubble lifetime."""
     length = len(text.strip())
     if length <= 28:
         return 3.5
@@ -102,7 +98,7 @@ def speech_display_seconds(text: str) -> float:
 
 
 class PresenceEngine:
-    """Decide whether Mochi should say one small thing—or, usually, nothing."""
+    """Choose at most one subtle action; silence is the normal result."""
 
     def __init__(
         self,
@@ -145,10 +141,9 @@ class PresenceEngine:
             self._logger.debug("[presence] ignored unknown event=%s", name)
             return False
         timestamp = self._clock() if now is None else now
-        if any(event.name == name for event in self._events):
-            return True
-        self._events.append(_QueuedEvent(name=name, created_at=timestamp))
-        self._logger.debug("[presence] event=%s queued", name)
+        if not any(event.name == name for event in self._events):
+            self._events.append(_QueuedEvent(name, timestamp))
+            self._logger.debug("[presence] event=%s queued", name)
         return True
 
     def force_ambient(self) -> None:
@@ -180,46 +175,39 @@ class PresenceEngine:
         timestamp = self._clock() if now is None else now
         self._bubble_dismissed_until = timestamp + 120.0
 
-    def typing_snapshot(
-        self, *, now: float | None = None
-    ) -> tuple[TypingIntensity, float]:
+    def typing_snapshot(self, *, now: float | None = None) -> tuple[TypingIntensity, float]:
         return self.typing.snapshot(now)
 
     def evaluate(
         self, context: AmbientContext, *, now: float | None = None
     ) -> PresenceAction | None:
         timestamp = self._clock() if now is None else now
-        # Expire deferred context before suppression checks. This prevents an
-        # old media event from accidentally disabling the normal playback
-        # quiet bias after its useful reaction window has passed.
         self._prune_events(timestamp)
         reason = self._suppression_reason(context, timestamp)
         if reason is not None:
             self._logger.debug("[presence] suppressed: %s", reason)
             return None
 
-        forced = self._peek_forced_event()
-        if forced is None:
+        if self._peek_forced_event() is None:
             allowed, reason = self.cooldowns.can_speak(timestamp)
             if not allowed:
                 self._logger.debug("[presence] suppressed: %s", reason)
                 return None
 
-        event_action = self._evaluate_events(context, timestamp)
-        if event_action is not None:
-            return event_action
-
-        typing_action = self._evaluate_typing(context, timestamp)
-        if typing_action is not None:
-            return typing_action
+        action = self._evaluate_events(timestamp)
+        if action is not None:
+            return action
+        action = self._evaluate_typing(context, timestamp)
+        if action is not None:
+            return action
 
         if timestamp < self._next_ambient_at:
             return None
-
         self._next_ambient_at = timestamp + self._ambient_delay()
         if self._rng.random() < self.tuning.ambient_silence_probability:
             self._logger.debug("[presence] candidate=ambient suppressed: silence roll")
             return None
+
         category = self._select_unsolicited_category(context)
         if category is None:
             return None
@@ -229,24 +217,17 @@ class PresenceEngine:
             return None
         text = self.phrases.choose(category, exclude_recent=True)
         self._logger.debug("[presence] candidate=%s selected=%r", category, text)
-        return PresenceAction(
-            type="speech",
-            category=category,
-            text=text,
-            priority=10,
-            display_seconds=speech_display_seconds(text),
-        )
+        return PresenceAction("speech", category, text, 10, display_seconds=speech_display_seconds(text))
 
     def record_delivered(
         self, action: PresenceAction, *, now: float | None = None
     ) -> None:
         timestamp = self._clock() if now is None else now
         self.phrases.remember(action.text)
-        cooldown = self._category_cooldown(action.category)
         self.cooldowns.record(
             action.category,
             now=timestamp,
-            category_cooldown_seconds=cooldown,
+            category_cooldown_seconds=self._category_cooldown(action.category),
         )
         self._logger.debug(
             "[presence] delivered category=%s event=%s text=%r",
@@ -255,9 +236,7 @@ class PresenceEngine:
             action.text,
         )
 
-    def _evaluate_events(
-        self, context: AmbientContext, now: float
-    ) -> PresenceAction | None:
+    def _evaluate_events(self, now: float) -> PresenceAction | None:
         if not self._events:
             return None
         ordered = sorted(
@@ -270,9 +249,7 @@ class PresenceEngine:
             if event.name == "force_ambient":
                 text = self.phrases.choose("ambient", exclude_recent=True)
                 self._events.clear()
-                return PresenceAction(
-                    "speech", "ambient", text, 20, event.name, speech_display_seconds(text)
-                )
+                return PresenceAction("speech", "ambient", text, 20, event.name, speech_display_seconds(text))
             if event.name == "force_contextual":
                 category = self._forced_context_category or "ambient"
                 self._forced_context_category = None
@@ -282,22 +259,15 @@ class PresenceEngine:
                     category = "ambient"
                     text = self.phrases.choose(category, exclude_recent=True)
                 self._events.clear()
-                return PresenceAction(
-                    "speech", category, text, 30, event.name, speech_display_seconds(text)
-                )
+                return PresenceAction("speech", category, text, 30, event.name, speech_display_seconds(text))
 
             category = _EVENT_CATEGORY[event.name]
             ready, reason = self.cooldowns.category_ready(category, now)
             if not ready:
-                self._logger.debug(
-                    "[presence] event=%s suppressed: %s", event.name, reason
-                )
+                self._logger.debug("[presence] event=%s suppressed: %s", event.name, reason)
                 continue
-            probability = self._event_probability(event.name)
-            if self._rng.random() >= probability:
-                self._logger.debug(
-                    "[presence] event=%s suppressed: silence roll", event.name
-                )
+            if self._rng.random() >= self._event_probability(event.name):
+                self._logger.debug("[presence] event=%s suppressed: silence roll", event.name)
                 continue
             choices = EVENT_PHRASES.get(event.name)
             text = (
@@ -308,18 +278,12 @@ class PresenceEngine:
             self._logger.debug("[presence] event=%s selected=%r", event.name, text)
             self._events.clear()
             return PresenceAction(
-                type="speech",
-                category=category,
-                text=text,
-                priority=_EVENT_PRIORITY[event.name],
-                event=event.name,
-                display_seconds=speech_display_seconds(text),
+                "speech", category, text, _EVENT_PRIORITY[event.name], event.name,
+                speech_display_seconds(text),
             )
         return None
 
-    def _evaluate_typing(
-        self, context: AmbientContext, now: float
-    ) -> PresenceAction | None:
+    def _evaluate_typing(self, context: AmbientContext, now: float) -> PresenceAction | None:
         intensity = context.typing_intensity
         sustained = context.typing_sustained_seconds
         if intensity is TypingIntensity.LOW:
@@ -343,9 +307,7 @@ class PresenceEngine:
             return None
         text = self.phrases.choose("typing", exclude_recent=True)
         self._logger.debug("[presence] candidate=typing selected=%r", text)
-        return PresenceAction(
-            "speech", "typing", text, 30, "typing_sustained", speech_display_seconds(text)
-        )
+        return PresenceAction("speech", "typing", text, 30, "typing_sustained", speech_display_seconds(text))
 
     def _select_unsolicited_category(self, context: AmbientContext) -> str | None:
         weights = dict(self.tuning.category_weights)
@@ -371,6 +333,8 @@ class PresenceEngine:
             return "ambient reactions disabled"
         if self.tuning.quiet_mode:
             return "quiet mode"
+        if not context.user_active:
+            return "user inactive"
         if context.application_shutting_down:
             return "application shutting down"
         if context.context_menu_open:
@@ -386,8 +350,6 @@ class PresenceEngine:
         state = context.mochi_state.lower()
         if state in {"sleeping", "pickup", "dragged", "dropping", "waking"}:
             return f"state={state}"
-        # Playback is allowed one event-driven acknowledgement; normal ambient
-        # chatter should stay out of the way while watching/listening.
         if context.media_playing and not any(
             event.name == "media_started" for event in self._events
         ):
@@ -427,7 +389,4 @@ class PresenceEngine:
         return self._rng.uniform(low, high)
 
     def _peek_forced_event(self) -> _QueuedEvent | None:
-        return next(
-            (event for event in self._events if event.name.startswith("force_")),
-            None,
-        )
+        return next((event for event in self._events if event.name.startswith("force_")), None)
