@@ -1,11 +1,10 @@
-
 <div align="center">
 
 # Mochi 🌱
 
 ### Your new Deskling Companion
 
-<img width="800" height="475" alt="Mochi on the Linux desktop" src="https://github.com/user-attachments/assets/5c574911-c899-4b5e-ad3e-49c8083a9199" />
+<img width="800" height="475" alt="Mochi on the Linux desktop" src="https://github.com/user-attachments/assets/cd9a4907-3f53-47a1-b0d6-0526ccd674bc" />
 
 **A tiny pixel-art companion quietly living on your Linux desktop.**
 
