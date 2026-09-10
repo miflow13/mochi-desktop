@@ -20,6 +20,7 @@ class PresenceBuddyMixin:
     """Add ambient presence without changing Buddy's proven interaction code."""
 
     PRESENCE_EVALUATION_SECONDS = 5
+    STARTUP_GREETING_DELAY_MS = 1_100
 
     def __init__(self, *args, **kwargs) -> None:
         self._ambient_presence_engine = PresenceEngine()
@@ -30,6 +31,7 @@ class PresenceBuddyMixin:
         self._app_category_monitor: AppCategorySignalAdapter | None = None
         self._presence_app_category = "unknown"
         self._presence_source_id: int | None = None
+        self._presence_startup_source_id: int | None = None
         self._presence_shutting_down = False
         super().__init__(*args, **kwargs)
 
@@ -64,6 +66,10 @@ class PresenceBuddyMixin:
         self._presence_source_id = GLib.timeout_add_seconds(
             self.PRESENCE_EVALUATION_SECONDS,
             self._evaluate_ambient_presence,
+        )
+        self._presence_startup_source_id = GLib.timeout_add(
+            self.STARTUP_GREETING_DELAY_MS,
+            self._show_startup_greeting,
         )
 
     @property
@@ -129,12 +135,20 @@ class PresenceBuddyMixin:
         card.append(contextual_button)
         animated_rows.append(contextual_button)
 
+        typing_button, _ = self._make_menu_button(
+            "Preview typing phrase",
+            "input-keyboard-symbolic",
+            self._test_presence_typing,
+        )
+        card.append(typing_button)
+        animated_rows.append(typing_button)
+
         self._developer_menu_animated_rows = tuple(animated_rows)
 
         # The presence rows extend Mochi Lab's natural height. Keep the menu
         # positioner aware of that size so it clamps correctly on each monitor.
-        popover._preferred_height = 860
-        popover.window.set_default_size(332, 860)
+        popover._preferred_height = 900
+        popover.window.set_default_size(332, 900)
         return popover
 
     def _make_presence_switch_row(self, label: str, active: bool, callback):
@@ -154,11 +168,19 @@ class PresenceBuddyMixin:
     def _close_developer_menu_then(self, action) -> None:
         """Run developer actions without closing Mochi Lab.
 
-        The lab is a persistent tuning/debug surface. Buttons, switches, and
-        test actions should be repeatable in place; the explicit Quit action
-        still exits the application because its callback itself quits Mochi.
+        Buddy's test actions normally refuse to run while a menu is open. The
+        Lab is a persistent debug surface, so temporarily relax only that guard
+        for the dispatched action, then restore the real menu-open state.
         """
-        GLib.idle_add(self._dispatch_context_action, action)
+        GLib.idle_add(self._dispatch_presence_developer_action, action)
+
+    def _dispatch_presence_developer_action(self, action) -> bool:
+        self._context_menu_open = False
+        try:
+            action()
+        finally:
+            self._context_menu_open = bool(self._developer_menu.get_visible())
+        return GLib.SOURCE_REMOVE
 
     def _change_presence_speech_enabled(self, switch: Gtk.Switch, _pspec=None) -> None:
         enabled = switch.get_active()
@@ -189,6 +211,9 @@ class PresenceBuddyMixin:
             "browser": "focus",
         }.get(self._presence_app_category, "ambient")
         self._preview_presence_category(category)
+
+    def _test_presence_typing(self, _button: Gtk.Button) -> None:
+        self._preview_presence_category("typing")
 
     def _preview_presence_category(self, category: str) -> None:
         """Deterministically preview one phrase while Mochi Lab stays open.
@@ -225,6 +250,35 @@ class PresenceBuddyMixin:
                 category,
                 text,
             )
+
+    def _show_startup_greeting(self) -> bool:
+        """Give Mochi one tiny hello shortly after the desktop buddy appears."""
+        self._presence_startup_source_id = None
+        if self._presence_shutting_down or self._preview_mode:
+            return GLib.SOURCE_REMOVE
+        tuning = self._ambient_presence_engine.tuning
+        if (
+            not tuning.speech_enabled
+            or not tuning.ambient_reactions_enabled
+            or tuning.quiet_mode
+            or self._user_idle
+            or self._presence_bubble is None
+        ):
+            return GLib.SOURCE_REMOVE
+
+        text = self._ambient_presence_engine.phrases.choose(
+            "startup",
+            exclude_recent=True,
+        )
+        if self._presence_bubble.show(
+            text,
+            duration_seconds=speech_display_seconds(text),
+        ):
+            # Startup is a greeting, not an ambient interruption. Remember the
+            # phrase for variety but do not spend the normal cooldown budget.
+            self._ambient_presence_engine.phrases.remember(text)
+            self._logger.debug("[presence] startup greeting text=%r", text)
+        return GLib.SOURCE_REMOVE
 
     def set_presence_quiet_mode(self, enabled: bool) -> None:
         self._ambient_presence_engine.set_quiet_mode(enabled)
@@ -368,6 +422,13 @@ class PresenceBuddyMixin:
         if source_id is not None:
             try:
                 GLib.source_remove(source_id)
+            except Exception:
+                pass
+        startup_source_id = self._presence_startup_source_id
+        self._presence_startup_source_id = None
+        if startup_source_id is not None:
+            try:
+                GLib.source_remove(startup_source_id)
             except Exception:
                 pass
         if self._system_signal_monitor is not None:
