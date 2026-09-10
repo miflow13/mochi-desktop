@@ -22,6 +22,7 @@ class MochiState(Enum):
     SEARCHING = auto()
     PICKUP = auto()
     DRAGGED = auto()
+    DROPPING = auto()
 
 
 class StateMachine:

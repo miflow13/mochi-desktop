@@ -9,24 +9,14 @@ from mochi.state import MochiState
 
 
 class BuddyDragReleaseTests(unittest.TestCase):
-    def test_drag_release_builds_settle_animation_from_current_pose(self) -> None:
+    def test_drag_release_plays_authored_drop_animation(self) -> None:
         buddy = SimpleNamespace(
-            _drag_frame_index=4,
-            _current_animation="dragged",
-            _active_animation=None,
-            _pending_animation=None,
-            player=Mock(),
-            queue_draw=Mock(),
+            _play_animation=Mock(),
         )
 
         Buddy._play_drag_settle(buddy)
 
-        settle = buddy.player.play.call_args.args[0]
-        self.assertEqual(
-            tuple(frame.sprite for frame in settle.frames),
-            ("drag/drag_settle_right.png", "drag/drag_settle_neutral.png"),
-        )
-        self.assertEqual(buddy._pending_animation, "idle")
+        buddy._play_animation.assert_called_once_with("drop", after="idle")
 
     def test_pickup_completion_enters_the_existing_drag_visual(self) -> None:
         pickup = Animation("pickup", (), 120)
@@ -131,7 +121,7 @@ class BuddyDragReleaseTests(unittest.TestCase):
 
         Buddy._on_released(buddy, None, 1, 0.0, 0.0)
 
-        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._transition_to.assert_called_once_with(MochiState.DROPPING)
         buddy._play_drag_settle.assert_called_once()
         buddy._drag_motion.reset.assert_called_once()
         self.assertTrue(buddy._drag_release_handled)
@@ -162,6 +152,7 @@ class BuddyDragReleaseTests(unittest.TestCase):
 
         self.assertFalse(buddy._drag_started)
         self.assertTrue(buddy._drag_release_handled)
+        buddy._transition_to.assert_called_once_with(MochiState.DROPPING)
         buddy._play_drag_settle.assert_called_once()
         buddy._config.save_position.assert_called_once_with((10, 20))
 

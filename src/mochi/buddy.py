@@ -16,7 +16,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
-from mochi.animation import Animation, AnimationPlayer
+from mochi.animation import AnimationPlayer
 from mochi.behavior import (
     ClickReactionBuffer,
     WalkMotion,
@@ -27,7 +27,7 @@ from mochi.behavior import (
     choose_walk_animation,
 )
 from mochi.config import ConfigStore
-from mochi.drag_motion import DragMotionModel, DragPoseSelector, drag_settle_sprite
+from mochi.drag_motion import DragMotionModel, DragPoseSelector
 from mochi.file_activity import FileActivityMonitor
 from mochi.media_activity import MediaActivityMonitor
 from mochi.interaction_tuning import (
@@ -855,7 +855,7 @@ class Buddy(Gtk.DrawingArea):
         self._drag_sample_position = None
         self._drag_sample_time = None
         if self.state.current in (MochiState.PICKUP, MochiState.DRAGGED):
-            self._transition_to(MochiState.IDLE)
+            self._transition_to(MochiState.DROPPING)
             self._play_drag_settle()
             self._drag_motion.reset()
             self._drag_visual_key = None
@@ -1332,31 +1332,7 @@ class Buddy(Gtk.DrawingArea):
         self.queue_draw()
 
     def _play_drag_settle(self) -> None:
-        dragged_frames = ANIMATIONS["dragged"].frames
-        pose_sprite = dragged_frames[self._drag_frame_index].sprite
-        settle_sprite = drag_settle_sprite(pose_sprite)
-        current = next(
-            frame for frame in dragged_frames if frame.sprite == settle_sprite
-        )
-        neutral = next(
-            frame
-            for frame in dragged_frames
-            if frame.sprite == "drag/drag_settle_neutral.png"
-        )
-        settle = Animation(
-            name="drag_settle",
-            frames=(
-                replace(current, duration_ms=DRAG_SETTLE_DIRECTIONAL_MS),
-                replace(neutral, duration_ms=DRAG_SETTLE_NEUTRAL_MS),
-            ),
-            frame_duration_ms=DRAG_SETTLE_NEUTRAL_MS,
-            next_state="idle",
-        )
-        self._current_animation = settle.name
-        self._active_animation = settle
-        self._pending_animation = "idle"
-        self.player.play(settle)
-        self.queue_draw()
+        self._play_animation("drop", after="idle")
 
     def _cancel_walk(self) -> None:
         self._walk_motion = None

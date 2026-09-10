@@ -56,8 +56,8 @@ class WindowPlacementMonitorTests(unittest.TestCase):
 
         position = WindowPlacement.sync_from_window(placement)
 
-        self.assertEqual((position.x, position.y), (16, 676))
-        move_window.assert_called_once_with(window, 16, 676)
+        self.assertEqual((position.x, position.y), (24, 668))
+        move_window.assert_called_once_with(window, 24, 668)
 
     @patch("mochi.windowing.move_window")
     @patch("mochi.windowing.get_window_position", return_value=(250, 300))
@@ -92,8 +92,8 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         top_left = WindowPlacement.clamp_position(placement, -50, -50)
         bottom_right = WindowPlacement.clamp_position(placement, 990, 790)
 
-        self.assertEqual((top_left.x, top_left.y), (16, 16))
-        self.assertEqual((bottom_right.x, bottom_right.y), (884, 676))
+        self.assertEqual((top_left.x, top_left.y), (24, 24))
+        self.assertEqual((bottom_right.x, bottom_right.y), (876, 668))
 
     def test_gap_position_uses_the_nearest_monitor(self) -> None:
         monitors = MonitorList(
@@ -110,7 +110,7 @@ class WindowPlacementMonitorTests(unittest.TestCase):
 
         position = WindowPlacement.clamp_position(placement, 1150, 200)
 
-        self.assertEqual((position.x, position.y), (1216, 200))
+        self.assertEqual((position.x, position.y), (1224, 200))
 
 
 if __name__ == "__main__":

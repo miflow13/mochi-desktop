@@ -45,6 +45,7 @@ where = ["src"]
 "share/mochi/watch" = ["assets/mochi/watch/*.png"]
 "share/mochi/searching" = ["assets/mochi/searching/*.png"]
 "share/mochi/sway_idle" = ["assets/mochi/sway_idle/*.png"]
+"share/mochi/drop" = ["assets/mochi/drop/*.png"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

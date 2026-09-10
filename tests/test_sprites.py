@@ -39,7 +39,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
-            "watch", "searching",
+            "watch", "searching", "drop",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -48,6 +48,15 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(len(pickup.frames), 6)
         self.assertEqual(pickup.frame_duration_ms, PICKUP_FRAME_DURATION_MS)
         self.assertFalse(pickup.looping)
+
+    def test_drop_is_a_quick_six_frame_one_shot(self) -> None:
+        drop = ANIMATIONS["drop"]
+        self.assertEqual(len(drop.frames), 6)
+        self.assertLessEqual(
+            len(drop.frames) * drop.frame_duration_ms,
+            400,
+        )
+        self.assertFalse(drop.looping)
 
     def test_sleep_transitions_to_sleeping(self) -> None:
         self.assertEqual(ANIMATIONS["sleep"].next_state, "sleeping")
