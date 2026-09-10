@@ -85,6 +85,20 @@ class ConfigStore:
         self._save(data)
         self._logger.debug("Audio muted: %s", bool(muted))
 
+    def load_stay_put(self) -> bool:
+        """Return whether autonomous walking is disabled."""
+        try:
+            stay_put = self._load()["stay_put"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return stay_put if isinstance(stay_put, bool) else False
+
+    def save_stay_put(self, enabled: bool) -> None:
+        data = self._load_or_empty()
+        data["stay_put"] = bool(enabled)
+        self._save(data)
+        self._logger.debug("Stay put: %s", bool(enabled))
+
     def reset_position(self) -> None:
         try:
             data = self._load()
