@@ -94,9 +94,19 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(len(dragged.frames), 8)
         self.assertEqual(dragged.frame_duration_ms, 167)
         self.assertTrue(dragged.looping)
-        surfaces = SpriteAtlas().frames
-        drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
-        self.assertEqual(len(set(drag_pixels)), 8)
+        self.assertEqual(
+            tuple(frame.sprite for frame in dragged.frames),
+            (
+                "drag/drag_neutral.png",
+                "drag/drag_left_soft.png",
+                "drag/drag_left_medium.png",
+                "drag/drag_right_soft.png",
+                "drag/drag_right_medium.png",
+                "drag/drag_settle_left.png",
+                "drag/drag_settle_right.png",
+                "drag/drag_settle_neutral.png",
+            ),
+        )
 
     def test_walk_uses_the_manifest_directional_frames(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)

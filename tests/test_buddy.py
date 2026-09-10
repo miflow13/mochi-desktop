@@ -92,10 +92,12 @@ class BuddyDragReleaseTests(unittest.TestCase):
         buddy = SimpleNamespace(
             _drag_motion=SimpleNamespace(
                 pose_sprite=Mock(return_value="drag/drag_left_soft.png"),
+                horizontal_intensity=0.20,
                 body_sway=-0.09,
             ),
             _drag_frame_index=0,
             _drag_visual_key=None,
+            _drag_neutral_since=None,
             player=Mock(),
             _current_animation="pickup",
             _active_animation=None,

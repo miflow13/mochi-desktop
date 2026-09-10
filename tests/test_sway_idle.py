@@ -128,6 +128,14 @@ class BuddyHeldSwayTests(unittest.TestCase):
             _placement=SimpleNamespace(layer_shell_enabled=True),
             _last_drag_update_time=10.0,
             _current_animation="sway_idle",
+            _drag_started=True,
+            _drag_frame_index=0,
+            _drag_visual_key=("sway_idle", 0),
+            _drag_neutral_since=9.9,
+            _drag_motion=SimpleNamespace(
+                horizontal_intensity=0.0,
+                body_sway=0.0,
+            ),
             player=Mock(),
             queue_draw=Mock(),
             _sample_x11_drag=Mock(),
@@ -137,10 +145,10 @@ class BuddyHeldSwayTests(unittest.TestCase):
         buddy.player.tick.return_value = True
 
         # Keep the layer-shell idle-settle condition false for this unit test.
-        from unittest.mock import patch
         with patch("mochi.buddy.time.monotonic", return_value=10.0):
             self.assertTrue(Buddy._tick(buddy))
 
+        buddy._settle_drag_visual.assert_not_called()
         buddy.player.tick.assert_called_once_with(Buddy.TICK_MS)
         buddy.queue_draw.assert_called_once_with()
 

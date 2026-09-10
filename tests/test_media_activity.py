@@ -118,6 +118,30 @@ class MprisMediaBackendTests(unittest.TestCase):
             }
         )
         self.assertFalse(backend.sample_youtube_playing())
+    def test_focused_youtube_allows_chromium_without_url_metadata(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:title": "A video"},
+                }
+            }
+        )
+        backend._youtube_focused = True
+        self.assertTrue(backend.sample_youtube_playing())
+
+    def test_youtube_focus_does_not_turn_spotify_into_video(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.spotify": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:title": "A song"},
+                }
+            }
+        )
+        backend._youtube_focused = True
+        self.assertFalse(backend.sample_youtube_playing())
+
     def test_paused_youtube_is_not_playing(self) -> None:
         backend = self._backend(
             {
