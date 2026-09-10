@@ -18,9 +18,9 @@ except (ImportError, ValueError):
 
 from mochi.config import Position
 from mochi.x11 import (
+    get_pointer_position,
     get_window_position,
     move_window,
-    nudge_pointer,
     primary_button_pressed,
 )
 
@@ -85,6 +85,33 @@ class WindowPlacement:
             move_window(self.window, x, y)
         return self.position
 
+    def drag_to_pointer(self, anchor_x: float, anchor_y: float) -> Position:
+        """Move the X11/XWayland window under the pointer without compositor drag.
+
+        ``anchor_x`` and ``anchor_y`` are GTK/application-pixel coordinates inside
+        Mochi captured on button press. X11 pointer/window coordinates are device
+        pixels, so the anchor is scaled before calculating the requested top-left.
+
+        Horizontal movement is clamped before XMoveWindow, making the left/right
+        edges true hard walls. Vertical movement remains unconstrained while held;
+        the normal release sync restores the established top/bottom bounds.
+        """
+        if getattr(self, "layer_shell_enabled", False):
+            return self.position
+
+        pointer = get_pointer_position(self.window)
+        if pointer is None:
+            return self.position
+
+        scale = self._x11_coordinate_scale()
+        target_x = round(pointer[0] - anchor_x * scale)
+        target_y = round(pointer[1] - anchor_y * scale)
+        clamped = self.clamp_position(target_x, target_y)
+
+        self.position = Position(clamped.x, target_y)
+        move_window(self.window, self.position.x, self.position.y)
+        return self.position
+
     def clamp_position(self, x: int, y: int) -> Position:
         monitor = self._monitor_for_position(x, y)
         edge_padding = self.EDGE_PADDING_PX
@@ -113,7 +140,7 @@ class WindowPlacement:
             # GDK monitor geometry is expressed in application pixels, while the
             # low-level X11 helpers return/move the window in device pixels.
             # Convert all four full-window bounds into X11 coordinates before
-            # comparing them with the compositor-owned window position.
+            # comparing them with the window position.
             scale = self._x11_coordinate_scale()
 
             min_x = (geometry.x + edge_padding) * scale
@@ -141,20 +168,16 @@ class WindowPlacement:
             return self.position
 
         if primary_button_pressed(self.window):
-            # Mutter owns Gdk.Toplevel.begin_move() until release. XMoveWindow
-            # alone cannot make a hard wall because Mutter immediately follows
-            # the still-outside pointer. Clamp X, then nudge the pointer by the
-            # exact overshoot so Mutter's own interactive move stays bounded.
+            # XWayland dragging is owned by Mochi rather than Gdk.Toplevel.begin_move.
+            # Preserve free vertical motion while held, but never allow the actual
+            # X11 window to exist beyond the horizontal desktop bounds.
             clamped = self.clamp_position(*coordinates)
             current_x = round(coordinates[0])
             current_y = round(coordinates[1])
-            constrained_x = clamped.x
-            self.position = Position(constrained_x, current_y)
+            self.position = Position(clamped.x, current_y)
 
-            overshoot_x = constrained_x - current_x
-            if overshoot_x:
-                nudge_pointer(self.window, overshoot_x, 0)
-                move_window(self.window, constrained_x, current_y)
+            if current_x != clamped.x:
+                move_window(self.window, clamped.x, current_y)
 
             return self.position
 
