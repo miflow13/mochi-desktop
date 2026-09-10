@@ -1,9 +1,8 @@
 """Privacy-conscious media activity detection for Mochi.
 
-Mochi uses the standard MPRIS D-Bus interface exposed by Linux media players
-and browsers. Runtime metadata is inspected only long enough to answer one
-question: "is a YouTube session currently playing?" Metadata values are never
-logged, stored, emitted, or exposed to the rest of Mochi.
+Mochi uses MPRIS for playback state and the optional GNOME Shell companion
+extension for a privacy-reduced "YouTube is focused" boolean. Metadata is
+inspected transiently and is never retained, logged, or exposed elsewhere.
 """
 
 from __future__ import annotations
@@ -21,9 +20,23 @@ VIDEO_FILE_EXTENSIONS = frozenset(
     )
 )
 
+_BROWSER_PLAYER_MARKERS = (
+    "chromium",
+    "chrome",
+    "google.chrome",
+    "google-chrome",
+    "com.google.chrome",
+    "firefox",
+    "mozilla.firefox",
+    "brave",
+    "vivaldi",
+    "microsoft-edge",
+    "microsoft.edge",
+)
+
 
 class MprisMediaBackend:
-    """Read a minimal boolean YouTube-playing signal from MPRIS."""
+    """Read a minimal boolean watchable-video signal from MPRIS."""
 
     name = "MPRIS media playback"
     DBUS_NAME = "org.freedesktop.DBus"
@@ -64,9 +77,7 @@ class MprisMediaBackend:
     @staticmethod
     def _load_gio():
         import gi
-
         from gi.repository import Gio, GLib
-
         return Gio, GLib
 
     def start(self) -> bool:
@@ -89,35 +100,38 @@ class MprisMediaBackend:
 
     def _subscribe_youtube_focus(self) -> None:
         connection = self._connection
-        if connection is None or not hasattr(connection, 'signal_subscribe'):
+        if connection is None or not hasattr(connection, "signal_subscribe"):
             return
+
         try:
             Gio, _GLib = self._load_gio()
             flags = Gio.DBusSignalFlags.NONE
-            self._youtube_focus_started_subscription_id = int(
-                connection.signal_subscribe(
-                    self.ACTIVITY_BUS_NAME,
-                    self.ACTIVITY_INTERFACE_NAME,
-                    self.YOUTUBE_FOCUSED_STARTED_SIGNAL,
-                    self.ACTIVITY_OBJECT_PATH,
-                    None,
-                    flags,
-                    self._on_youtube_focused_started,
-                )
+            started_id = connection.signal_subscribe(
+                self.ACTIVITY_BUS_NAME,
+                self.ACTIVITY_INTERFACE_NAME,
+                self.YOUTUBE_FOCUSED_STARTED_SIGNAL,
+                self.ACTIVITY_OBJECT_PATH,
+                None,
+                flags,
+                self._on_youtube_focused_started,
             )
-            self._youtube_focus_stopped_subscription_id = int(
-                connection.signal_subscribe(
-                    self.ACTIVITY_BUS_NAME,
-                    self.ACTIVITY_INTERFACE_NAME,
-                    self.YOUTUBE_FOCUSED_STOPPED_SIGNAL,
-                    self.ACTIVITY_OBJECT_PATH,
-                    None,
-                    flags,
-                    self._on_youtube_focused_stopped,
-                )
+            stopped_id = connection.signal_subscribe(
+                self.ACTIVITY_BUS_NAME,
+                self.ACTIVITY_INTERFACE_NAME,
+                self.YOUTUBE_FOCUSED_STOPPED_SIGNAL,
+                self.ACTIVITY_OBJECT_PATH,
+                None,
+                flags,
+                self._on_youtube_focused_stopped,
+            )
+            self._youtube_focus_started_subscription_id = (
+                int(started_id) if started_id else None
+            )
+            self._youtube_focus_stopped_subscription_id = (
+                int(stopped_id) if stopped_id else None
             )
         except Exception:
-            # Metadata-based detection still works if the Shell helper is absent.
+            # Metadata-only detection can still operate without the Shell helper.
             self._youtube_focus_started_subscription_id = None
             self._youtube_focus_stopped_subscription_id = None
 
@@ -134,16 +148,20 @@ class MprisMediaBackend:
             self._on_youtube_focus_changed(False)
 
     def stop(self) -> None:
-        if self._connection is not None and hasattr(self._connection, 'signal_unsubscribe'):
+        if self._connection is not None and hasattr(
+            self._connection, "signal_unsubscribe"
+        ):
             for subscription_id in (
                 self._youtube_focus_started_subscription_id,
                 self._youtube_focus_stopped_subscription_id,
             ):
-                if subscription_id is not None:
-                    try:
-                        self._connection.signal_unsubscribe(subscription_id)
-                    except Exception:
-                        pass
+                if subscription_id is None:
+                    continue
+                try:
+                    self._connection.signal_unsubscribe(subscription_id)
+                except Exception:
+                    pass
+
         self._youtube_focus_started_subscription_id = None
         self._youtube_focus_stopped_subscription_id = None
         self._youtube_focused = False
@@ -151,7 +169,7 @@ class MprisMediaBackend:
         self._connection = None
 
     def sample_youtube_playing(self) -> bool | None:
-        """Return True/False, or None if MPRIS could not be sampled safely."""
+        """Return True/False, or None when MPRIS could not be sampled safely."""
         if self._connection is None:
             return None
 
@@ -168,25 +186,45 @@ class MprisMediaBackend:
                 1_000,
                 None,
             )
-            names = _deep_unpack(reply)
-            if isinstance(names, tuple) and len(names) == 1:
-                names = names[0]
-            if not isinstance(names, (list, tuple)):
-                return False
-
-            for bus_name in names:
-                if not isinstance(bus_name, str) or not bus_name.startswith(
-                    self.PLAYER_PREFIX
-                ):
-                    continue
-                if self._player_is_youtube_playing(bus_name, Gio, GLib):
-                    return True
-            return False
         except Exception as exc:
-            # D-Bus errors contain no media metadata. Do not include property
-            # values in this message or retain them on the backend.
             self.last_error = f"{type(exc).__name__}: {exc}"
             return None
+
+        names = _deep_unpack(reply)
+        if isinstance(names, tuple) and len(names) == 1:
+            names = names[0]
+        if not isinstance(names, (list, tuple)):
+            return False
+
+        sampled_player = False
+        player_error = False
+
+        for bus_name in names:
+            if not isinstance(bus_name, str) or not bus_name.startswith(
+                self.PLAYER_PREFIX
+            ):
+                continue
+            try:
+                playing = self._player_is_youtube_playing(bus_name, Gio, GLib)
+                sampled_player = True
+            except Exception:
+                # A stale/partial MPRIS service must not prevent another player
+                # (for example Chrome) from being evaluated.
+                player_error = True
+                continue
+
+            if playing:
+                self.last_error = None
+                return True
+
+        # If every discovered MPRIS player failed to answer, preserve the
+        # previous monitor state rather than manufacturing a false stop.
+        if player_error and not sampled_player:
+            self.last_error = "MPRIS players were present but unavailable"
+            return None
+
+        self.last_error = None
+        return False
 
     def _player_is_youtube_playing(self, bus_name: str, Gio, GLib) -> bool:
         status = self._get_property(bus_name, "PlaybackStatus", Gio, GLib)
@@ -194,32 +232,30 @@ class MprisMediaBackend:
             return False
 
         metadata = self._get_property(bus_name, "Metadata", Gio, GLib)
-        lowered_bus_name = bus_name.lower()
-        is_browser = any(
-            marker in lowered_bus_name
-            for marker in (".chromium.", ".chrome.", ".firefox.")
-        )
+        is_browser = _is_browser_player(bus_name)
 
         # Local/direct video files are playback-driven, not focus-driven.
         if _metadata_indicates_video_file(metadata):
             self._watching_via_youtube_focus = False
             return True
 
-        # Browser YouTube represents the user actively watching something.
-        # Require the privacy-reduced YouTube focus signal so tabbing away
-        # exits WATCHING even if the video continues playing in the background.
-        if _metadata_indicates_youtube(metadata) and is_browser:
+        youtube_metadata = _metadata_indicates_youtube(metadata)
+
+        # Browser YouTube represents the user's active viewing context.
+        # Requiring the Shell's boolean focus signal lets tabbing away stop
+        # WATCHING even if playback continues in the background.
+        if youtube_metadata and is_browser:
             self._watching_via_youtube_focus = True
             return self._youtube_focused
 
-        # Non-browser players that clearly identify YouTube can still use
-        # metadata alone.
-        if _metadata_indicates_youtube(metadata):
+        # Non-browser players that explicitly identify YouTube can use metadata.
+        if youtube_metadata:
             self._watching_via_youtube_focus = False
             return True
 
-        # Chromium on this machine exposes no identifying URL/art metadata.
-        # MPRIS Playing + focused YouTube is the precise fallback.
+        # Chromium-family browsers frequently omit page URL/art metadata.
+        # Active browser playback + the privacy-reduced focused-YouTube signal
+        # is the intended fallback.
         if self._youtube_focused and is_browser:
             self._watching_via_youtube_focus = True
             return True
@@ -290,7 +326,6 @@ class MediaActivityMonitor:
 
         try:
             from gi.repository import GLib
-
             self._source_id = GLib.timeout_add(
                 self.POLL_INTERVAL_MS,
                 self._poll,
@@ -309,7 +344,6 @@ class MediaActivityMonitor:
         if self._source_id is not None:
             try:
                 from gi.repository import GLib
-
                 GLib.source_remove(self._source_id)
             except Exception:
                 pass
@@ -324,8 +358,6 @@ class MediaActivityMonitor:
             return
 
         if active:
-            # Starting/re-entering YouTube should feel immediate rather than
-            # waiting for the next 1-second MPRIS poll.
             self._poll()
             return
 
@@ -333,9 +365,6 @@ class MediaActivityMonitor:
             self.youtube_playing
             and bool(getattr(self._backend, "watching_via_youtube_focus", False))
         ):
-            # Focus loss is intentional context loss, not a playback hiccup.
-            # Stop immediately; keep STOP_GRACE_SECONDS only for pause/seek
-            # flicker while the user remains in the video context.
             self._stop_watching_now("YouTube focus lost")
 
     def _stop_watching_now(self, reason: str) -> None:
@@ -347,8 +376,6 @@ class MediaActivityMonitor:
         self._on_youtube_stopped()
 
     def _poll(self) -> bool:
-        # GLib timeout callbacks continue while they return a truthy value.
-        # Keeping this method GI-free also makes the debounce logic easy to test.
         keep_running = True
 
         sample = self._backend.sample_youtube_playing()
@@ -378,6 +405,13 @@ class MediaActivityMonitor:
         return keep_running
 
 
+def _is_browser_player(bus_name: str) -> bool:
+    lowered = bus_name.lower().replace("_", "-")
+    if lowered.startswith(MprisMediaBackend.PLAYER_PREFIX.lower()):
+        lowered = lowered[len(MprisMediaBackend.PLAYER_PREFIX):]
+    return any(marker in lowered for marker in _BROWSER_PLAYER_MARKERS)
+
+
 def _deep_unpack(value):
     """Recursively unpack GLib.Variant-like values without stringifying them."""
     while hasattr(value, "unpack"):
@@ -403,7 +437,6 @@ def _string_values(value) -> Iterable[str]:
 
 
 def _url_is_youtube_video(value: str) -> bool:
-    # Accept YouTube video URLs while deliberately excluding YouTube Music.
     try:
         parsed = urlparse(value)
     except Exception:
@@ -427,7 +460,6 @@ def _url_is_youtube_video(value: str) -> bool:
 
 
 def _looks_like_video_file(value: str) -> bool:
-    # Classify a local/direct file by extension without retaining its path.
     try:
         parsed = urlparse(value)
         path = unquote(parsed.path if parsed.scheme else value)
@@ -439,7 +471,6 @@ def _looks_like_video_file(value: str) -> bool:
 
 
 def _metadata_indicates_youtube(metadata) -> bool:
-    # Reduce transient MPRIS metadata to a YouTube-video boolean.
     metadata = _deep_unpack(metadata)
     if not isinstance(metadata, dict):
         return False
@@ -454,16 +485,10 @@ def _metadata_indicates_youtube(metadata) -> bool:
         if _url_is_youtube_video(value):
             return True
 
-    # Chrome often omits the page URL from MPRIS, but regular YouTube videos
-    # expose a YouTube thumbnail URL. Use that as a precise fallback instead
-    # of treating every Chrome/Chromium media session as video.
     if not is_youtube_music:
         for value in _string_values(metadata.get("mpris:artUrl")):
             lowered = value.lower()
-            if (
-                "ytimg.com/" in lowered
-                or "img.youtube.com/" in lowered
-            ):
+            if "ytimg.com/" in lowered or "img.youtube.com/" in lowered:
                 return True
 
     for title in titles:
@@ -477,7 +502,6 @@ def _metadata_indicates_youtube(metadata) -> bool:
 
 
 def _metadata_indicates_video_file(metadata) -> bool:
-    # Recognize direct/local video files while rejecting audio files.
     metadata = _deep_unpack(metadata)
     if not isinstance(metadata, dict):
         return False
@@ -494,5 +518,4 @@ def _metadata_indicates_video_file(metadata) -> bool:
 
 
 def _metadata_indicates_watchable_video(metadata) -> bool:
-    # Expose only the semantic boolean used by Mochi.
     return _metadata_indicates_youtube(metadata) or _metadata_indicates_video_file(metadata)
