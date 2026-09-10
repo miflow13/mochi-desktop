@@ -63,10 +63,15 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         move_window.assert_called_once_with(test_window, 8, 688)
 
     @patch("mochi.windowing.primary_button_pressed", return_value=True)
+    @patch("mochi.windowing.nudge_pointer")
     @patch("mochi.windowing.move_window")
     @patch("mochi.windowing.get_window_position", return_value=(-80, 790))
-    def test_active_native_drag_clamps_horizontal_edge_but_preserves_vertical_motion(
-        self, _get_window_position, move_window, _primary_button_pressed
+    def test_active_native_drag_clamps_horizontal_edge_and_pushes_pointer_back(
+        self,
+        _get_window_position,
+        move_window,
+        nudge_pointer,
+        _primary_button_pressed,
     ) -> None:
         monitors = MonitorList(monitor(0, 0, 1000, 800))
         test_window = window(monitors)
@@ -78,13 +83,19 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         position = WindowPlacement.sync_from_window(placement)
 
         self.assertEqual((position.x, position.y), (8, 790))
+        nudge_pointer.assert_called_once_with(test_window, 88, 0)
         move_window.assert_called_once_with(test_window, 8, 790)
 
     @patch("mochi.windowing.primary_button_pressed", return_value=True)
+    @patch("mochi.windowing.nudge_pointer")
     @patch("mochi.windowing.move_window")
     @patch("mochi.windowing.get_window_position", return_value=(250, 790))
     def test_active_native_drag_does_not_touch_in_bounds_horizontal_position(
-        self, _get_window_position, move_window, _primary_button_pressed
+        self,
+        _get_window_position,
+        move_window,
+        nudge_pointer,
+        _primary_button_pressed,
     ) -> None:
         monitors = MonitorList(monitor(0, 0, 1000, 800))
         test_window = window(monitors)
@@ -96,6 +107,7 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         position = WindowPlacement.sync_from_window(placement)
 
         self.assertEqual((position.x, position.y), (250, 790))
+        nudge_pointer.assert_not_called()
         move_window.assert_not_called()
 
     @patch("mochi.windowing.primary_button_pressed", return_value=False)
@@ -141,10 +153,15 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         self.assertEqual((too_far.x, too_far.y), (2800, 274))
 
     @patch("mochi.windowing.primary_button_pressed", return_value=True)
+    @patch("mochi.windowing.nudge_pointer")
     @patch("mochi.windowing.move_window")
     @patch("mochi.windowing.get_window_position", return_value=(2954, 1032))
     def test_scaled_xwayland_active_drag_cannot_cross_right_edge(
-        self, _get_window_position, move_window, _primary_button_pressed
+        self,
+        _get_window_position,
+        move_window,
+        nudge_pointer,
+        _primary_button_pressed,
     ) -> None:
         monitors = MonitorList(monitor(0, 0, 1536, 864))
         test_window = window(monitors, 128, 128, scale=2.0)
@@ -156,6 +173,7 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         position = WindowPlacement.sync_from_window(placement)
 
         self.assertEqual((position.x, position.y), (2800, 1032))
+        nudge_pointer.assert_called_once_with(test_window, -154, 0)
         move_window.assert_called_once_with(test_window, 2800, 1032)
 
     def test_scaled_xwayland_bottom_edge_keeps_full_window_visible(self) -> None:
