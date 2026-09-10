@@ -59,6 +59,38 @@ class AnimationAssetSetTests(unittest.TestCase):
                 path.relative_to(assets.root),
             )
 
+    def test_manifest_is_the_complete_runtime_png_inventory(self) -> None:
+        assets = AnimationAssetSet()
+        declared = {
+            Path(path).as_posix()
+            for animation in assets.animations.values()
+            for path in animation.frame_paths
+        }
+        actual = {
+            path.relative_to(assets.root).as_posix()
+            for path in assets.root.rglob("*.png")
+        }
+
+        self.assertEqual(
+            actual,
+            declared,
+            "assets/mochi must contain only PNG frames declared in manifest.json",
+        )
+
+    def test_runtime_asset_directory_contains_no_archives(self) -> None:
+        assets = AnimationAssetSet()
+        archives = sorted(
+            path.relative_to(assets.root).as_posix()
+            for pattern in ("*.zip", "*.tar", "*.tar.gz", "*.7z")
+            for path in assets.root.rglob(pattern)
+        )
+
+        self.assertEqual(
+            archives,
+            [],
+            "authoring/export archives do not belong in assets/mochi",
+        )
+
     def test_manifest_rejects_a_frame_path_outside_its_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
