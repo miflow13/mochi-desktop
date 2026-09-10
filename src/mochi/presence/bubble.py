@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 
 import gi
@@ -22,11 +23,15 @@ class SpeechBubble:
     Wayland falls back to a Gtk.Popover anchored to the Buddy widget.
     """
 
-    FOLLOW_INTERVAL_MS = 100
+    FOLLOW_INTERVAL_MS = 33
     FADE_IN_SECONDS = 0.20
     FADE_OUT_SECONDS = 0.26
     GAP_PX = 8
     MONITOR_PADDING_PX = 14
+    TYPING_DOT_INTERVAL_MS = 280
+    TYPING_HOLD_MIN_MS = 150
+    TYPING_HOLD_MAX_MS = 500
+    TYPING_LENGTH_EXTRA_MAX_MS = 250
 
     def __init__(
         self,
@@ -41,8 +46,12 @@ class SpeechBubble:
         self._hide_source_id: int | None = None
         self._follow_source_id: int | None = None
         self._animation_source_id: int | None = None
+        self._typing_source_id: int | None = None
         self._animation_serial = 0
         self._mode: str | None = None
+        self._typing_step = 0
+        self._pending_text: str | None = None
+        self._pending_duration_seconds: float | None = None
 
         self._label = self._make_label()
         self._bubble_box = self._make_bubble_content(self._label)
@@ -122,11 +131,19 @@ class SpeechBubble:
         return bool(self._window.get_visible() or self._popover.get_visible())
 
     def show(self, text: str, *, duration_seconds: float) -> bool:
-        if self.visible or not text.strip():
+        typing_preview = bool(getattr(text, "typing_preview", False))
+        final_text = str(text).strip()
+        if self.visible or not final_text:
             return False
+
         self._cancel_sources()
-        self._label.set_text(text)
-        self._popover_label.set_text(text)
+        if typing_preview:
+            self._pending_text = final_text
+            self._pending_duration_seconds = duration_seconds
+            self._typing_step = 0
+            self._set_text("Mochi is typing", typing=True)
+        else:
+            self._set_text(final_text, typing=False)
 
         if get_window_position(self._owner) is not None:
             self._mode = "x11"
@@ -154,17 +171,110 @@ class SpeechBubble:
             serial = self._animation_serial
             self._fade(self._popover, 0.0, 1.0, self.FADE_IN_SECONDS, serial)
 
-        self._hide_source_id = GLib.timeout_add(
-            max(1, round(duration_seconds * 1000)),
-            self._begin_hide,
-        )
+        if typing_preview:
+            self._typing_source_id = GLib.timeout_add(
+                self.TYPING_DOT_INTERVAL_MS,
+                self._advance_typing_preview,
+            )
+            self._logger.debug("Speech bubble typing preview started")
+        else:
+            self._schedule_hide(duration_seconds)
         return True
+
+    def follow_owner_now(self) -> None:
+        """Immediately resync the visible bubble to Mochi's current position."""
+        if not self.visible:
+            return
+        if self._mode == "x11":
+            self._position_x11()
+        elif self._mode == "wayland":
+            self._position_wayland_anchor()
 
     def hide(self) -> None:
         """Hide immediately; used when direct user interaction takes priority."""
         self._animation_serial += 1
         self._cancel_sources()
         self._finish_hide()
+
+    def _set_text(self, text: str, *, typing: bool) -> None:
+        self._label.set_text(text)
+        self._popover_label.set_text(text)
+        for label in (self._label, self._popover_label):
+            if typing:
+                label.add_css_class("mochi-speech-typing")
+            else:
+                label.remove_css_class("mochi-speech-typing")
+        if self.visible:
+            self._reposition_after_text_change()
+
+    def _reposition_after_text_change(self) -> None:
+        if self._mode == "x11":
+            self._position_x11()
+            GLib.idle_add(self._position_x11)
+            GLib.timeout_add(24, self._position_x11)
+        elif self._mode == "wayland":
+            self._position_wayland_anchor()
+
+    def _advance_typing_preview(self) -> bool:
+        if not self.visible or self._pending_text is None:
+            self._typing_source_id = None
+            self._clear_pending_speech()
+            return GLib.SOURCE_REMOVE
+
+        self._typing_step += 1
+        self._set_text(
+            "Mochi is typing" + " ." * min(3, self._typing_step),
+            typing=True,
+        )
+        if self._typing_step < 3:
+            return GLib.SOURCE_CONTINUE
+
+        # Three dots have appeared. Hold for a tiny, slightly randomized beat;
+        # longer phrases get at most another quarter-second before the reveal.
+        final_text = self._pending_text
+        length_extra = min(
+            self.TYPING_LENGTH_EXTRA_MAX_MS,
+            max(0, len(final_text) - 24) * 6,
+        )
+        hold_ms = random.randint(
+            self.TYPING_HOLD_MIN_MS,
+            self.TYPING_HOLD_MAX_MS,
+        ) + length_extra
+        self._typing_source_id = GLib.timeout_add(
+            hold_ms,
+            self._reveal_pending_speech,
+        )
+        return GLib.SOURCE_REMOVE
+
+    def _reveal_pending_speech(self) -> bool:
+        self._typing_source_id = None
+        if not self.visible or self._pending_text is None:
+            self._clear_pending_speech()
+            return GLib.SOURCE_REMOVE
+
+        text = self._pending_text
+        duration_seconds = self._pending_duration_seconds or 3.5
+        self._clear_pending_speech()
+        self._set_text(text, typing=False)
+        self._schedule_hide(duration_seconds)
+        self._logger.debug("Speech bubble typing preview revealed text=%r", text)
+        return GLib.SOURCE_REMOVE
+
+    def _schedule_hide(self, duration_seconds: float) -> None:
+        if self._hide_source_id is not None:
+            try:
+                GLib.source_remove(self._hide_source_id)
+            except Exception:
+                pass
+        self._hide_source_id = GLib.timeout_add(
+            max(1, round(duration_seconds * 1000)),
+            self._begin_hide,
+        )
+
+    def _clear_pending_speech(self) -> None:
+        self._typing_step = 0
+        self._pending_text = None
+        self._pending_duration_seconds = None
 
     def _begin_hide(self) -> bool:
         self._hide_source_id = None
@@ -395,7 +505,7 @@ class SpeechBubble:
 
     def _cancel_sources(self) -> None:
         self._animation_serial += 1
-        for attr in ("_hide_source_id", "_animation_source_id"):
+        for attr in ("_hide_source_id", "_animation_source_id", "_typing_source_id"):
             source_id = getattr(self, attr)
             setattr(self, attr, None)
             if source_id is not None:
@@ -403,6 +513,7 @@ class SpeechBubble:
                     GLib.source_remove(source_id)
                 except Exception:
                     pass
+        self._clear_pending_speech()
         self._stop_following()
 
     def _stop_following(self) -> None:
@@ -442,6 +553,10 @@ class SpeechBubble:
             .mochi-speech-text {
                 font-size: 12px;
                 font-weight: 500;
+            }
+            .mochi-speech-text.mochi-speech-typing {
+                color: alpha(@window_fg_color, 0.62);
+                font-style: italic;
             }
             popover.mochi-speech-popover > contents {
                 background: transparent;
