@@ -4,7 +4,7 @@ import random
 
 from mochi.presence.context import AmbientContext
 from mochi.presence.engine import PresenceEngine, PresenceTuning
-from mochi.presence.phrases import PhraseBank
+from mochi.presence.phrases import CONTEXT_PHRASES, EVENT_PHRASES, PHRASES, PhraseBank
 
 
 class Clock:
@@ -27,6 +27,39 @@ def test_startup_phrase_bank_exists():
     text = PhraseBank(rng=random.Random(1)).choose("startup")
     assert isinstance(text, str)
     assert text
+
+
+def test_large_phrase_bank_is_loaded_by_category():
+    expected_counts = {
+        "ambient": 49,
+        "encouragement": 41,
+        "focus": 38,
+        "developer": 59,
+        "body_care": 42,
+        "rest": 31,
+        "frustration": 32,
+        "creative": 34,
+        "mischief": 47,
+        "companionship": 28,
+    }
+    for category, expected in expected_counts.items():
+        assert len(PHRASES[category]) == expected
+        assert len(set(PHRASES[category])) == expected
+    assert sum(len(PHRASES[name]) for name in expected_counts) == 401
+
+
+def test_context_only_lines_do_not_leak_into_random_ambient_pool():
+    assert CONTEXT_PHRASES["many_browser_tabs"] == ("the tabs are reproducing",)
+    assert CONTEXT_PHRASES["screenshot_taken"] == ("cheese 📸",)
+    assert "the tabs are reproducing" not in PHRASES["ambient"]
+    assert "cheese 📸" not in PHRASES["ambient"]
+
+
+def test_supported_context_events_use_specific_lines():
+    assert "green! 🌱" in EVENT_PHRASES["build_succeeded"]
+    assert "hmm. clues." in EVENT_PHRASES["build_failed"]
+    assert "snack acquired ⚡" in EVENT_PHRASES["charging_started"]
+    assert "oh we're watching something?" in EVENT_PHRASES["media_started"]
 
 
 def test_typing_session_sustain_survives_intensity_changes():
