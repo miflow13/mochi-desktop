@@ -11,7 +11,7 @@ from gi.repository import Gio, Gtk  # noqa: E402
 
 from mochi.buddy import Buddy
 from mochi.config import ConfigStore
-from mochi.sound import SoundManager
+from mochi.sound import SoundEvent, SoundManager
 from mochi.windowing import WindowPlacement
 from mochi.x11 import request_keep_above
 
@@ -74,6 +74,13 @@ class MochiApplication(Gtk.Application):
         )
 
         window.present()
+        if not self.preview_animations:
+            self.sound.play(SoundEvent.SPAWN)
+
+    def do_shutdown(self) -> None:
+        if not self.preview_animations:
+            self.sound.play(SoundEvent.EXIT)
+        Gtk.Application.do_shutdown(self)
 
     def _configure_mapped_window(
         self, window: Gtk.Window, placement: WindowPlacement
