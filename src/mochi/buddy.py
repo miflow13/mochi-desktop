@@ -35,6 +35,8 @@ from mochi.interaction_tuning import (
     DRAG_BODY_SWAY_PX,
     DRAG_SETTLE_DIRECTIONAL_MS,
     DRAG_SETTLE_NEUTRAL_MS,
+    DRAG_SWAY_ENTER_DELAY_SECONDS,
+    DRAG_SWAY_EXIT_INTENSITY,
     DRAG_VISUAL_IDLE_DELAY_SECONDS,
     InteractionTuning,
 )
@@ -118,6 +120,7 @@ class Buddy(Gtk.DrawingArea):
         self._drag_frame_index = 0
         self._drag_visual_key: tuple[str, int] | None = None
         self._last_drag_update_time = 0.0
+        self._drag_neutral_since: float | None = None
         self._drag_sample_position: tuple[int, int] | None = None
         self._drag_sample_time: float | None = None
         self._hovered = False
@@ -973,6 +976,7 @@ class Buddy(Gtk.DrawingArea):
 
     def _begin_pickup(self) -> bool:
         self._cancel_active_emote()
+        self._drag_neutral_since = None
         if not self._transition_to(MochiState.PICKUP):
             return False
         self._play_animation("pickup", after=None)
@@ -1167,7 +1171,12 @@ class Buddy(Gtk.DrawingArea):
             > DRAG_VISUAL_IDLE_DELAY_SECONDS
         ):
             self._settle_drag_visual()
-        if not walking and not dragging and self.player.tick(self.TICK_MS):
+        held_sway = dragging and self._current_animation == "sway_idle"
+        if (
+            not walking
+            and (not dragging or held_sway)
+            and self.player.tick(self.TICK_MS)
+        ):
             self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
@@ -1221,11 +1230,54 @@ class Buddy(Gtk.DrawingArea):
 
     def _play_drag_pose(self) -> None:
         sprite = self._drag_motion.pose_sprite()
-        self._drag_frame_index = next(
+        candidate_frame_index = next(
             index
             for index, frame in enumerate(ANIMATIONS["dragged"].frames)
             if frame.sprite == sprite
         )
+        intensity = abs(self._drag_motion.horizontal_intensity)
+        now = time.monotonic()
+
+        # While the authored held sway is active, ignore tiny motion jitter.
+        # A deliberate movement still interrupts sway immediately.
+        if (
+            self._current_animation == "sway_idle"
+            and sprite != "drag/drag_neutral.png"
+            and intensity < DRAG_SWAY_EXIT_INTENSITY
+        ):
+            self._drag_frame_index = 0
+            return
+
+        # A neutral held pose means Mochi is still picked up but the pointer has
+        # settled. Require a short quiet window before entering sway so filtered
+        # velocity can decay without the drag pose and sway loop fighting.
+        if sprite == "drag/drag_neutral.png":
+            self._drag_frame_index = 0
+            if self._drag_neutral_since is None:
+                self._drag_neutral_since = now
+            if (
+                self._current_animation != "sway_idle"
+                and now - self._drag_neutral_since < DRAG_SWAY_ENTER_DELAY_SECONDS
+            ):
+                return
+            visual_key = ("sway_idle", 0)
+            if (
+                self._current_animation == "sway_idle"
+                and visual_key == self._drag_visual_key
+            ):
+                return
+            self._drag_visual_key = visual_key
+            self._current_animation = "sway_idle"
+            self._active_animation = ANIMATIONS["sway_idle"]
+            self._pending_animation = None
+            self.player.play(ANIMATIONS["sway_idle"])
+            self._logger.debug("Held drag settled -> sway_idle")
+            self.queue_draw()
+            return
+
+        self._drag_neutral_since = None
+        self._drag_frame_index = candidate_frame_index
+
         body_offset = round(self._drag_motion.body_sway * DRAG_BODY_SWAY_PX)
         visual_key = (sprite, body_offset)
         if visual_key == self._drag_visual_key:

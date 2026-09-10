@@ -169,6 +169,26 @@ class MprisMediaBackendTests(unittest.TestCase):
 
     def test_video_filename_title_is_a_fallback(self) -> None:
         self.assertTrue(_metadata_indicates_video_file({"xesam:title": "holiday.webm"}))
+    def test_youtube_thumbnail_art_url_is_detected(self) -> None:
+        self.assertTrue(
+            _metadata_indicates_youtube(
+                {
+                    "xesam:title": "A video",
+                    "mpris:artUrl": "https://i.ytimg.com/vi/abc/hqdefault.jpg",
+                }
+            )
+        )
+
+    def test_youtube_music_thumbnail_is_not_watchable(self) -> None:
+        self.assertFalse(
+            _metadata_indicates_youtube(
+                {
+                    "xesam:title": "A song - YouTube Music",
+                    "mpris:artUrl": "https://i.ytimg.com/vi/abc/hqdefault.jpg",
+                }
+            )
+        )
+
     def test_metadata_is_reduced_without_being_retained(self) -> None:
         secret_title = "private viewing title - YouTube"
         metadata = {"xesam:title": secret_title}

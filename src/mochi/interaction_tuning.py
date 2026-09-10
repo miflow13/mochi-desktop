@@ -23,8 +23,15 @@ PICKUP_FRAME_DURATION_MS = 25
 DRAG_FRAME_DURATION_MS = 167
 DRAG_SETTLE_DIRECTIONAL_MS = 70
 DRAG_SETTLE_NEUTRAL_MS = 140
-DRAG_VISUAL_IDLE_DELAY_SECONDS = 0.05
+DRAG_VISUAL_IDLE_DELAY_SECONDS = 0.08
 DRAG_BODY_SWAY_PX = 14
+
+# Held-neutral handoff. Wait briefly before entering the authored sway loop so
+# decaying drag velocity cannot bounce between a directional pose and sway.
+# Once sway is active, tiny pointer jitter is ignored until the user makes a
+# deliberate horizontal movement (~126 px/s with the default 700 px/s scale).
+DRAG_SWAY_ENTER_DELAY_SECONDS = 0.10
+DRAG_SWAY_EXIT_INTENSITY = 0.18
 
 # Hover only fires on pointer entry. This cooldown absorbs rapid edge skims.
 HOVER_HEART_COOLDOWN_SECONDS = 2.0

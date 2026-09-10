@@ -314,13 +314,33 @@ def _metadata_indicates_youtube(metadata) -> bool:
     if not isinstance(metadata, dict):
         return False
 
+    titles = tuple(_string_values(metadata.get("xesam:title")))
+    is_youtube_music = any(
+        "youtube music" in title.strip().lower()
+        for title in titles
+    )
+
     for value in _string_values(metadata.get("xesam:url")):
         if _url_is_youtube_video(value):
             return True
 
-    for title in _string_values(metadata.get("xesam:title")):
+    # Chrome often omits the page URL from MPRIS, but regular YouTube videos
+    # expose a YouTube thumbnail URL. Use that as a precise fallback instead
+    # of treating every Chrome/Chromium media session as video.
+    if not is_youtube_music:
+        for value in _string_values(metadata.get("mpris:artUrl")):
+            lowered = value.lower()
+            if (
+                "ytimg.com/" in lowered
+                or "img.youtube.com/" in lowered
+            ):
+                return True
+
+    for title in titles:
         lowered = title.strip().lower()
-        if "youtube music" not in lowered and (lowered == "youtube" or lowered.endswith(" - youtube")):
+        if not is_youtube_music and (
+            lowered == "youtube" or lowered.endswith(" - youtube")
+        ):
             return True
 
     return False
