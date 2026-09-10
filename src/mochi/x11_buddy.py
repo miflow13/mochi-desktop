@@ -88,3 +88,12 @@ class X11Buddy(Buddy):
             return
         press_x, press_y = self._press
         self._placement.drag_to_pointer(press_x, press_y)
+
+        # Bubble positioning uses the buddy window as its anchor. Resync it in
+        # the same drag tick instead of waiting for the fallback follow timer so
+        # dialogue feels physically attached to Mochi during fast pointer moves.
+        bubble = getattr(self, "_presence_bubble", None)
+        if bubble is not None and getattr(bubble, "visible", False):
+            follow_now = getattr(bubble, "follow_owner_now", None)
+            if callable(follow_now):
+                follow_now()
