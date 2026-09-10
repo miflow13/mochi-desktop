@@ -35,6 +35,11 @@ class WindowPlacement:
     EDGE_PADDING_PX = 8
     BOTTOM_PADDING_PX = 12
 
+    # The XWayland window contains transparent canvas around the visible sprite.
+    # Keeping the whole window on-screen creates a large invisible wall, so only
+    # require a useful grab-sized portion of the window to remain visible.
+    X11_MIN_VISIBLE_PX = 48
+
     def __init__(self, window: Gtk.Window, saved_position: Position | None) -> None:
         self.window = window
         self.position = saved_position or self.DEFAULT_POSITION
@@ -86,21 +91,18 @@ class WindowPlacement:
         bottom_padding = self.BOTTOM_PADDING_PX
 
         if monitor is None:
-            return Position(
-                max(edge_padding, round(x)),
-                max(bottom_padding, round(y)),
-            )
+            return Position(round(x), round(y))
 
         geometry = monitor.get_geometry()
         width, height = self.window.get_default_size()
 
-        min_x = geometry.x + edge_padding
-        max_x = geometry.x + max(
-            edge_padding,
-            geometry.width - width - edge_padding,
-        )
-
         if self.layer_shell_enabled:
+            min_x = geometry.x + edge_padding
+            max_x = geometry.x + max(
+                edge_padding,
+                geometry.width - width - edge_padding,
+            )
+
             # Layer-shell Y is measured upward from the bottom edge.
             min_y = bottom_padding
             max_y = max(
@@ -108,16 +110,24 @@ class WindowPlacement:
                 geometry.height - height - edge_padding,
             )
         else:
-            # X11/XWayland Y is a normal top-left screen coordinate.
-            min_y = geometry.y + edge_padding
-            max_y = geometry.y + max(
-                edge_padding,
-                geometry.height - height - bottom_padding,
-            )
+            # GDK monitor geometry is expressed in application pixels, while the
+            # low-level X11 helpers return/move the window in device pixels.
+            # Convert the application-space clamp into X11 coordinates before
+            # comparing it with the compositor-owned window position.
+            scale = self._x11_coordinate_scale()
+
+            visible_x = min(width, self.X11_MIN_VISIBLE_PX + edge_padding)
+            visible_top = min(height, self.X11_MIN_VISIBLE_PX + edge_padding)
+            visible_bottom = min(height, self.X11_MIN_VISIBLE_PX + bottom_padding)
+
+            min_x = (geometry.x - max(0, width - visible_x)) * scale
+            max_x = (geometry.x + geometry.width - visible_x) * scale
+            min_y = (geometry.y - max(0, height - visible_top)) * scale
+            max_y = (geometry.y + geometry.height - visible_bottom) * scale
 
         return Position(
-            max(min_x, min(round(x), max_x)),
-            max(min_y, min(round(y), max_y)),
+            max(round(min_x), min(round(x), round(max_x))),
+            max(round(min_y), min(round(y), round(max_y))),
         )
 
     def restore(self) -> None:
@@ -143,6 +153,36 @@ class WindowPlacement:
 
         return self.position
 
+    def _x11_coordinate_scale(self) -> float:
+        """Return the application-pixel to X11 device-pixel scale."""
+        if getattr(self, "layer_shell_enabled", False):
+            return 1.0
+
+        get_surface = getattr(self.window, "get_surface", None)
+        surface = get_surface() if callable(get_surface) else None
+        if surface is None:
+            return 1.0
+
+        get_scale = getattr(surface, "get_scale", None)
+        if callable(get_scale):
+            try:
+                scale = float(get_scale())
+            except (TypeError, ValueError):
+                scale = 1.0
+            if scale > 0:
+                return scale
+
+        get_scale_factor = getattr(surface, "get_scale_factor", None)
+        if callable(get_scale_factor):
+            try:
+                scale = float(get_scale_factor())
+            except (TypeError, ValueError):
+                scale = 1.0
+            if scale > 0:
+                return scale
+
+        return 1.0
+
     def _monitor_for_position(self, x: int, y: int) -> Gdk.Monitor | None:
         if self.layer_shell_enabled and Gtk4LayerShell is not None:
             monitor = Gtk4LayerShell.get_monitor(self.window)
@@ -153,9 +193,12 @@ class WindowPlacement:
         if not monitors.get_n_items():
             return None
 
+        scale = 1.0 if self.layer_shell_enabled else self._x11_coordinate_scale()
+        application_x = x / scale
+        application_y = y / scale
         width, height = self.window.get_default_size()
-        center_x = x + width / 2
-        center_y = y + height / 2
+        center_x = application_x + width / 2
+        center_y = application_y + height / 2
         nearest: tuple[float, Gdk.Monitor] | None = None
         for index in range(monitors.get_n_items()):
             monitor = monitors.get_item(index)
