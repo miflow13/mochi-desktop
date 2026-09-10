@@ -8,6 +8,16 @@ from collections.abc import Iterable
 
 
 PHRASES: dict[str, tuple[str, ...]] = {
+    "startup": (
+        "oh, hi :)",
+        "hello from down here",
+        "i'm here 🌱",
+        "sprout operational 🌱",
+        "mochi online",
+        "ready to loaf",
+        "all systems leafy",
+        "tiny desktop. big world.",
+    ),
     "ambient": (
         "just hanging out 🌱", "i'm here", "no rush", "hmm...", "cozy.",
         "i'm just vibing", "carry on :)", "still here", "tiny desktop. big world.",
