@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from gi.repository import GLib
+from gi.repository import GLib, Gtk
 
 from mochi.buddy import Buddy
 from mochi.state import MochiState
@@ -70,6 +70,123 @@ class PresenceBuddyMixin:
     def presence_engine(self) -> PresenceEngine:
         """Developer/test access without adding fragile menu controls."""
         return self._ambient_presence_engine
+
+    def _build_developer_menu(self):
+        """Extend Mochi Lab with isolated presence controls.
+
+        Buddy still owns all menu behavior. Presence only appends widgets to the
+        finished developer card, avoiding changes to the context-menu path.
+        """
+        popover = super()._build_developer_menu()
+        card = self._developer_menu_content
+        animated_rows = list(self._developer_menu_animated_rows)
+
+        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        presence_label = Gtk.Label(label="Presence")
+        presence_label.set_xalign(0)
+        presence_label.add_css_class("mochi-menu-section")
+        card.append(presence_label)
+
+        speech_row = self._make_presence_switch_row(
+            "Speech bubbles",
+            self._ambient_presence_engine.tuning.speech_enabled,
+            self._change_presence_speech_enabled,
+        )
+        card.append(speech_row)
+        animated_rows.append(speech_row)
+
+        reactions_row = self._make_presence_switch_row(
+            "Ambient reactions",
+            self._ambient_presence_engine.tuning.ambient_reactions_enabled,
+            self._change_presence_reactions_enabled,
+        )
+        card.append(reactions_row)
+        animated_rows.append(reactions_row)
+
+        quiet_row = self._make_presence_switch_row(
+            "Quiet mode",
+            self._ambient_presence_engine.tuning.quiet_mode,
+            self._change_presence_quiet_mode,
+        )
+        card.append(quiet_row)
+        animated_rows.append(quiet_row)
+
+        ambient_button, _ = self._make_menu_button(
+            "Say something now",
+            "dialog-information-symbolic",
+            self._test_presence_ambient,
+        )
+        card.append(ambient_button)
+        animated_rows.append(ambient_button)
+
+        contextual_button, _ = self._make_menu_button(
+            "Say something contextual",
+            "system-run-symbolic",
+            self._test_presence_contextual,
+        )
+        card.append(contextual_button)
+        animated_rows.append(contextual_button)
+
+        self._developer_menu_animated_rows = tuple(animated_rows)
+
+        # The presence rows extend Mochi Lab's natural height. Keep the menu
+        # positioner aware of that size so it clamps correctly on each monitor.
+        popover._preferred_height = 860
+        popover.window.set_default_size(332, 860)
+        return popover
+
+    def _make_presence_switch_row(self, label: str, active: bool, callback):
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        row.add_css_class("mochi-setting-row")
+        text = Gtk.Label(label=label)
+        text.set_xalign(0)
+        text.set_hexpand(True)
+        row.append(text)
+        switch = Gtk.Switch()
+        switch.set_valign(Gtk.Align.CENTER)
+        switch.set_active(active)
+        switch.connect("notify::active", callback)
+        row.append(switch)
+        return row
+
+    def _change_presence_speech_enabled(self, switch: Gtk.Switch, _pspec=None) -> None:
+        enabled = switch.get_active()
+        self._ambient_presence_engine.set_speech_enabled(enabled)
+        if not enabled:
+            self._dismiss_presence_bubble(user_initiated=False)
+
+    def _change_presence_reactions_enabled(
+        self, switch: Gtk.Switch, _pspec=None
+    ) -> None:
+        enabled = switch.get_active()
+        self._ambient_presence_engine.set_ambient_reactions_enabled(enabled)
+        if not enabled:
+            self._dismiss_presence_bubble(user_initiated=False)
+
+    def _change_presence_quiet_mode(self, switch: Gtk.Switch, _pspec=None) -> None:
+        self.set_presence_quiet_mode(switch.get_active())
+
+    def _test_presence_ambient(self, _button: Gtk.Button) -> None:
+        self._close_developer_menu_then(self._force_presence_ambient_now)
+
+    def _force_presence_ambient_now(self) -> None:
+        self._ambient_presence_engine.force_ambient()
+        self._evaluate_ambient_presence()
+
+    def _test_presence_contextual(self, _button: Gtk.Button) -> None:
+        self._close_developer_menu_then(self._force_presence_contextual_now)
+
+    def _force_presence_contextual_now(self) -> None:
+        category = {
+            "editor": "developer",
+            "terminal": "developer",
+            "pixel_art": "creative",
+            "media": "media",
+            "browser": "focus",
+        }.get(self._presence_app_category, "ambient")
+        self._ambient_presence_engine.force_contextual(category)
+        self._evaluate_ambient_presence()
 
     def set_presence_quiet_mode(self, enabled: bool) -> None:
         self._ambient_presence_engine.set_quiet_mode(enabled)
