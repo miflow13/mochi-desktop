@@ -35,13 +35,6 @@ class WindowPlacement:
     EDGE_PADDING_PX = 8
     BOTTOM_PADDING_PX = 12
 
-    # The XWayland window contains transparent canvas around the visible sprite.
-    # Keeping the whole window on-screen creates a large invisible wall, so only
-    # require a useful grab-sized portion of the window to remain visible on the
-    # horizontal edges. Vertically, keep the whole window inside the monitor so
-    # Mochi cannot sink below the desktop or disappear above it.
-    X11_MIN_VISIBLE_PX = 48
-
     def __init__(self, window: Gtk.Window, saved_position: Position | None) -> None:
         self.window = window
         self.position = saved_position or self.DEFAULT_POSITION
@@ -114,20 +107,15 @@ class WindowPlacement:
         else:
             # GDK monitor geometry is expressed in application pixels, while the
             # low-level X11 helpers return/move the window in device pixels.
-            # Convert the application-space clamp into X11 coordinates before
-            # comparing it with the compositor-owned window position.
+            # Convert all four full-window bounds into X11 coordinates before
+            # comparing them with the compositor-owned window position.
             scale = self._x11_coordinate_scale()
 
-            # Horizontal edges are permissive because much of Mochi's GTK
-            # window is transparent. Keep only a grab-sized portion visible so
-            # he can tuck naturally against the sides of the desktop.
-            visible_x = min(width, self.X11_MIN_VISIBLE_PX + edge_padding)
-            min_x = (geometry.x - max(0, width - visible_x)) * scale
-            max_x = (geometry.x + geometry.width - visible_x) * scale
-
-            # Vertical edges are different: the bottom is Mochi's floor. Keep
-            # the entire window vertically inside the monitor so he cannot be
-            # dropped underneath the desktop or above the top edge.
+            min_x = (geometry.x + edge_padding) * scale
+            max_x = (
+                geometry.x
+                + max(edge_padding, geometry.width - width - edge_padding)
+            ) * scale
             min_y = (geometry.y + edge_padding) * scale
             max_y = (
                 geometry.y
