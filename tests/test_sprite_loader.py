@@ -16,7 +16,7 @@ class AnimationAssetSetTests(unittest.TestCase):
 
         self.assertEqual(idle.name, "idle")
         self.assertEqual(len(idle.frames), 6)
-        self.assertEqual(idle.frame_duration_ms, 400)
+        self.assertEqual(idle.frame_duration_ms, 667)
         self.assertTrue(idle.looping)
         self.assertIsNone(idle.next_state)
 

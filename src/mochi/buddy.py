@@ -30,7 +30,6 @@ from mochi.config import ConfigStore
 from mochi.drag_motion import DragMotionModel, DragPoseSelector, drag_settle_sprite
 from mochi.interaction_tuning import (
     COMPUTER_IDLE_DELAY_SECONDS,
-    COMPUTER_TYPING_DURATION_SECONDS,
     DRAG_BODY_SWAY_PX,
     DRAG_SETTLE_DIRECTIONAL_MS,
     DRAG_SETTLE_NEUTRAL_MS,
@@ -40,6 +39,8 @@ from mochi.interaction_tuning import (
 from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.sound import SoundEvent, SoundManager
 from mochi.state import MochiState, StateMachine
+from mochi.presence_activity import PresenceActivityMonitor
+from mochi.typing_activity import TypingActivityMonitor
 from mochi.windowing import WindowPlacement
 
 
@@ -122,7 +123,8 @@ class Buddy(Gtk.DrawingArea):
         self._idle_action_source_id: int | None = None
         self._blink_source_id: int | None = None
         self._computer_idle_source_id: int | None = None
-        self._computer_typing_source_id: int | None = None
+        self._typing_monitor: TypingActivityMonitor | None = None
+        self._presence_monitor: PresenceActivityMonitor | None = None
         self._context_menu_open = False
         self._pending_context_action: Callable[[], None] | None = None
         self._size = self._config.load_size()
@@ -139,7 +141,10 @@ class Buddy(Gtk.DrawingArea):
 
         context_click = Gtk.GestureClick.new()
         context_click.set_button(Gdk.BUTTON_SECONDARY)
-        context_click.connect("pressed", self._show_context_menu)
+        # Open after the button is released. Under XWayland, opening on
+        # ``pressed`` lets the matching release immediately dismiss the new
+        # popover before the user can interact with it.
+        context_click.connect("released", self._show_context_menu)
         self.add_controller(context_click)
 
         motion = Gtk.EventControllerMotion.new()
@@ -160,6 +165,18 @@ class Buddy(Gtk.DrawingArea):
 
         GLib.timeout_add(self.TICK_MS, self._tick)
         if not self._preview_mode:
+            self._typing_monitor = TypingActivityMonitor(
+                on_typing_activity=self._on_typing_activity,
+                on_typing_stopped=self._on_typing_stopped,
+                logger=self._logger,
+            )
+            self._typing_monitor.start()
+            self._presence_monitor = PresenceActivityMonitor(
+                on_user_idle=self._on_user_idle,
+                on_user_active=self._on_user_active,
+                logger=self._logger,
+            )
+            self._presence_monitor.start()
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
@@ -487,15 +504,67 @@ class Buddy(Gtk.DrawingArea):
         if self._computer_idle_source_id is not None:
             GLib.source_remove(self._computer_idle_source_id)
             self._computer_idle_source_id = None
-        self._play_animation("computer_intro", after=None)
+        self._play_animation("computer", after="idle")
         return True
 
-    def _cancel_active_emote(self) -> bool:
-        if self._computer_typing_source_id is not None:
-            GLib.source_remove(self._computer_typing_source_id)
-            self._computer_typing_source_id = None
-        if self.state.current not in (MochiState.HEART, MochiState.COMPUTER):
+    def _on_typing_activity(self) -> None:
+        """Mirror a recognized typing burst without inspecting typed content."""
+        self._last_interaction = time.monotonic()
+        if self.state.current is MochiState.TYPING:
+            return
+        self._start_typing_emote()
+
+    def _start_typing_emote(self) -> bool:
+        if (
+            self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
             return False
+        if not self._transition_to(MochiState.TYPING):
+            return False
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._play_animation("typing_intro", after="typing_loop")
+        self._logger.debug("Typing mirror animation started")
+        return True
+
+    def _on_typing_stopped(self) -> None:
+        if self.state.current is not MochiState.TYPING:
+            return
+        self._last_interaction = time.monotonic()
+        if self._current_animation == "typing_intro":
+            self._pending_animation = "typing_outro"
+        elif self._current_animation == "typing_loop":
+            self._play_animation("typing_outro", after="idle")
+        self._logger.debug("Typing mirror animation stopping")
+
+    def _on_user_idle(self) -> None:
+        """Put Mochi to sleep when Mutter reports real user inactivity."""
+        if self._preview_mode or self.state.current is MochiState.SLEEPING:
+            return
+        if self._context_menu_open:
+            self._logger.debug("Presence idle deferred while context menu is open")
+            return
+        self._logger.debug("User presence: idle")
+        self._begin_sleep()
+
+    def _on_user_active(self) -> None:
+        """Wake sleeping Mochi on the first real user input after idle."""
+        self._logger.debug("User presence: active")
+        if self.state.current is MochiState.SLEEPING:
+            self._wake_up()
+
+    def _cancel_active_emote(self) -> bool:
+        if self.state.current not in (
+            MochiState.HEART,
+            MochiState.COMPUTER,
+            MochiState.TYPING,
+        ):
+            return False
+        if self.state.current is MochiState.TYPING and self._typing_monitor is not None:
+            self._typing_monitor.reset()
         self._transition_to(MochiState.IDLE)
         self._play_animation("idle")
         return True
@@ -734,22 +803,14 @@ class Buddy(Gtk.DrawingArea):
             self._transition_to(MochiState.DRAGGED)
             self._play_drag_pose()
             return
-        if self._current_animation == "computer_intro":
-            if self.state.current is not MochiState.COMPUTER:
-                return
-            self._play_animation("computer_typing", after=None)
-            typing_seconds = random.uniform(*COMPUTER_TYPING_DURATION_SECONDS)
-            self._computer_typing_source_id = GLib.timeout_add(
-                round(typing_seconds * 1_000), self._finish_computer_typing
-            )
-            self._logger.debug(
-                "Computer typing loop started for %.1f seconds", typing_seconds
-            )
-            return
         next_animation = self._pending_animation
         self._pending_animation = None
         if next_animation == "sleeping":
             self._play_animation("sleeping")
+        elif next_animation == "typing_loop":
+            self._play_animation("typing_loop", after=None)
+        elif next_animation == "typing_outro":
+            self._play_animation("typing_outro", after="idle")
         elif self._click_reactions.consume() and self._current_animation in (
             "bounce",
             "squish",
@@ -761,7 +822,7 @@ class Buddy(Gtk.DrawingArea):
         else:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
-            if finished_animation.name == "computer_outro":
+            if finished_animation.name in ("computer", "typing_outro"):
                 self._schedule_computer_idle_emote()
 
     def _play_animation(self, name: str, after: str | None = None) -> None:
@@ -868,15 +929,6 @@ class Buddy(Gtk.DrawingArea):
             self._schedule_computer_idle_emote()
         return GLib.SOURCE_REMOVE
 
-    def _finish_computer_typing(self) -> bool:
-        self._computer_typing_source_id = None
-        if (
-            self.state.current is MochiState.COMPUTER
-            and self._current_animation == "computer_typing"
-        ):
-            self._play_animation("computer_outro", after="idle")
-        return GLib.SOURCE_REMOVE
-
     def _try_blink(self) -> bool:
         self._blink_source_id = None
         try:
@@ -919,10 +971,9 @@ class Buddy(Gtk.DrawingArea):
         try:
             if self.state.current is not MochiState.IDLE or self._context_menu_open:
                 return GLib.SOURCE_REMOVE
-            if time.monotonic() - self._last_interaction >= 120:
-                self._begin_sleep()
-                return GLib.SOURCE_REMOVE
-
+            # Automatic sleep is driven by the GNOME Shell presence monitor.
+            # Local Mochi interaction timestamps are not a proxy for whether the
+            # user is actually present at the computer.
             action = random.choice(("walk", "squish", None, None))
             if action == "squish":
                 self._transition_to(MochiState.SQUISHING)

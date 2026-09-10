@@ -1,0 +1,7 @@
+{
+  "uuid": "mochi-typing@miflow13",
+  "name": "Mochi Desktop Activity",
+  "description": "Sends privacy-safe typing and user-presence activity signals to Mochi. No key identity or text is read or transmitted.",
+  "shell-version": ["50"],
+  "version": 2
+}
