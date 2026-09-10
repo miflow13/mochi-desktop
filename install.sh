@@ -8,6 +8,8 @@ APP_HOME="$DATA_HOME/mochi-desktop"
 VENV="$APP_HOME/venv"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/mochi"
+UNINSTALL_LAUNCHER="$BIN_DIR/mochi-uninstall"
+INSTALLED_UNINSTALLER="$APP_HOME/uninstall.sh"
 APPLICATIONS_DIR="$DATA_HOME/applications"
 DESKTOP_FILE="$APPLICATIONS_DIR/$APP_ID.desktop"
 ICON_DIR="$DATA_HOME/icons/hicolor/256x256/apps"
@@ -32,6 +34,8 @@ if command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1; then
     packages=(
         python3
         python3-pip
+        python3-setuptools
+        python3-wheel
         python3-gobject
         python3-cairo
         gtk4
@@ -86,6 +90,13 @@ exec "$VENV/bin/mochi" "\$@"
 EOF
 chmod 0755 "$LAUNCHER"
 
+install -m 0755 "$ROOT/uninstall.sh" "$INSTALLED_UNINSTALLER"
+cat > "$UNINSTALL_LAUNCHER" <<EOF
+#!/usr/bin/env bash
+exec "$INSTALLED_UNINSTALLER" "\$@"
+EOF
+chmod 0755 "$UNINSTALL_LAUNCHER"
+
 install -m 0644 "$ICON_SOURCE" "$ICON_FILE"
 sed "s|@MOCHI_EXEC@|$LAUNCHER|g" "$DESKTOP_TEMPLATE" > "$DESKTOP_FILE"
 chmod 0644 "$DESKTOP_FILE"
@@ -107,9 +118,9 @@ fi
 
 log "Installation complete"
 printf '%s\n' \
-    "Mochi is now available from the GNOME app grid as 'Mochi'." \
-    "You can also launch him from a terminal with: $LAUNCHER" \
+    "Open Mochi from the GNOME app grid, or run: $LAUNCHER" \
     "Right-click Mochi and choose Quit Mochi to close him." \
+    "Uninstall later with: $UNINSTALL_LAUNCHER" \
     "" \
     "If the GNOME helper reported that it could not enable yet, log out and" \
     "back in once before testing typing/context awareness."
