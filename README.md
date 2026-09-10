@@ -176,10 +176,3 @@ Licensed under the **MIT License**.
 
 ---
 
-<div align="center">
-
-### 🌱 Mochi is growing.
-
-*Built one tiny interaction at a time.*
-
-</div>
