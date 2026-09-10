@@ -2,6 +2,7 @@ import unittest
 
 import cairo
 
+from mochi.interaction_tuning import PICKUP_FRAME_DURATION_MS
 from mochi.sprites import ANIMATIONS, ASSET_SET, SpriteAtlas
 
 
@@ -45,7 +46,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
     def test_pickup_is_a_six_frame_one_shot(self) -> None:
         pickup = ANIMATIONS["pickup"]
         self.assertEqual(len(pickup.frames), 6)
-        self.assertEqual(pickup.frame_duration_ms, 25)
+        self.assertEqual(pickup.frame_duration_ms, PICKUP_FRAME_DURATION_MS)
         self.assertFalse(pickup.looping)
 
     def test_sleep_transitions_to_sleeping(self) -> None:

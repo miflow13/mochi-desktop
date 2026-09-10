@@ -142,6 +142,7 @@ class BuddyHeldSwayTests(unittest.TestCase):
             _sample_x11_drag=Mock(),
             _settle_drag_visual=Mock(),
             _advance_walk=Mock(),
+            _update_pointer_cursor=Mock(),
         )
         buddy.player.tick.return_value = True
 

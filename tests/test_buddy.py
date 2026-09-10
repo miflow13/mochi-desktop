@@ -209,6 +209,8 @@ class BuddyEmoteTests(unittest.TestCase):
             _hovered=False,
             _press=None,
             _drag_started=False,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _window=SimpleNamespace(set_cursor_from_name=Mock()),
             set_cursor_from_name=Mock(),
             _mark_interaction=Mock(),
             _start_heart_emote=Mock(),
@@ -291,10 +293,13 @@ class BuddyEmoteTests(unittest.TestCase):
 
 class BuddyCursorTests(unittest.TestCase):
     def test_hover_uses_grab_cursor_and_leave_restores_default(self) -> None:
+        window = SimpleNamespace(set_cursor_from_name=Mock())
         buddy = SimpleNamespace(
             _hovered=False,
             _press=None,
             _drag_started=False,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _window=window,
             set_cursor_from_name=Mock(),
             _mark_interaction=Mock(),
             _start_heart_emote=Mock(),
@@ -302,12 +307,15 @@ class BuddyCursorTests(unittest.TestCase):
         buddy._update_pointer_cursor = Buddy._update_pointer_cursor.__get__(buddy)
 
         Buddy._on_enter(buddy, None, 0.0, 0.0)
-        buddy.set_cursor_from_name.assert_called_with("grab")
+        buddy.set_cursor_from_name.assert_called_with("pointer")
+        window.set_cursor_from_name.assert_called_with("pointer")
 
         Buddy._on_leave(buddy, None)
         buddy.set_cursor_from_name.assert_called_with(None)
+        window.set_cursor_from_name.assert_called_with(None)
 
     def test_primary_press_uses_grabbing_cursor(self) -> None:
+        window = SimpleNamespace(set_cursor_from_name=Mock())
         buddy = SimpleNamespace(
             _hovered=True,
             _press=None,
@@ -315,6 +323,8 @@ class BuddyCursorTests(unittest.TestCase):
             _drag_move_started=False,
             _drag_release_handled=False,
             _drag_end_handled=False,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _window=window,
             set_cursor_from_name=Mock(),
             _mark_interaction=Mock(),
             _cancel_active_emote=Mock(),
@@ -324,7 +334,8 @@ class BuddyCursorTests(unittest.TestCase):
         Buddy._on_pressed(buddy, None, 1, 12.0, 18.0)
 
         self.assertEqual(buddy._press, (12.0, 18.0))
-        buddy.set_cursor_from_name.assert_called_with("grabbing")
+        buddy.set_cursor_from_name.assert_called_with("pointer")
+        window.set_cursor_from_name.assert_called_with("pointer")
 
 
 class BuddyTypingTests(unittest.TestCase):
