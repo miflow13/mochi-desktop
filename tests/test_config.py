@@ -47,6 +47,15 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertEqual(store.load_volume(), 1.0)
             self.assertTrue(store.load_muted())
 
+    def test_stay_put_defaults_off_and_round_trips(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertFalse(store.load_stay_put())
+            store.save_stay_put(True)
+            self.assertTrue(store.load_stay_put())
+            store.save_stay_put(False)
+            self.assertFalse(store.load_stay_put())
+
 
 if __name__ == "__main__":
     unittest.main()
