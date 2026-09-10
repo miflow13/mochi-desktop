@@ -37,7 +37,9 @@ class WindowPlacement:
 
     # The XWayland window contains transparent canvas around the visible sprite.
     # Keeping the whole window on-screen creates a large invisible wall, so only
-    # require a useful grab-sized portion of the window to remain visible.
+    # require a useful grab-sized portion of the window to remain visible on the
+    # horizontal edges. Vertically, keep the whole window inside the monitor so
+    # Mochi cannot sink below the desktop or disappear above it.
     X11_MIN_VISIBLE_PX = 48
 
     def __init__(self, window: Gtk.Window, saved_position: Position | None) -> None:
@@ -116,14 +118,21 @@ class WindowPlacement:
             # comparing it with the compositor-owned window position.
             scale = self._x11_coordinate_scale()
 
+            # Horizontal edges are permissive because much of Mochi's GTK
+            # window is transparent. Keep only a grab-sized portion visible so
+            # he can tuck naturally against the sides of the desktop.
             visible_x = min(width, self.X11_MIN_VISIBLE_PX + edge_padding)
-            visible_top = min(height, self.X11_MIN_VISIBLE_PX + edge_padding)
-            visible_bottom = min(height, self.X11_MIN_VISIBLE_PX + bottom_padding)
-
             min_x = (geometry.x - max(0, width - visible_x)) * scale
             max_x = (geometry.x + geometry.width - visible_x) * scale
-            min_y = (geometry.y - max(0, height - visible_top)) * scale
-            max_y = (geometry.y + geometry.height - visible_bottom) * scale
+
+            # Vertical edges are different: the bottom is Mochi's floor. Keep
+            # the entire window vertically inside the monitor so he cannot be
+            # dropped underneath the desktop or above the top edge.
+            min_y = (geometry.y + edge_padding) * scale
+            max_y = (
+                geometry.y
+                + max(edge_padding, geometry.height - height - bottom_padding)
+            ) * scale
 
         return Position(
             max(round(min_x), min(round(x), round(max_x))),
