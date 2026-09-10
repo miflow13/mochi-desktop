@@ -37,26 +37,61 @@ class MusicDanceMixin:
             self._music_monitor = None
         super().shutdown_presence()
 
+    def _build_developer_menu(self):
+        """Expose a manual Dance action in Mochi Lab for animation testing."""
+        popover = super()._build_developer_menu()
+        dance_button, _ = self._make_menu_button(
+            "Dance",
+            "media-playback-start-symbolic",
+            self._test_dance_emote,
+        )
+        self._developer_menu_content.append(dance_button)
+        self._developer_menu_animated_rows = (
+            *self._developer_menu_animated_rows,
+            dance_button,
+        )
+        return popover
+
+    def _test_dance_emote(self, _button) -> None:
+        self._close_developer_menu_then(self._start_dancing_emote)
+
+    def _on_user_idle(self) -> None:
+        """Do not auto-sleep while music is actively playing."""
+        self._user_idle = True
+        if (
+            self._music_monitor is not None
+            and self._music_monitor.music_playing
+        ):
+            self._logger.debug("Presence idle deferred while music is playing")
+            return
+        super()._on_user_idle()
+
     def _on_music_started(self) -> None:
         """Start the low-priority dance when recognized music begins."""
         self._start_dancing_emote()
 
     def _on_music_stopped(self) -> None:
-        if self.state.current is not MochiState.DANCING:
-            return
-
-        self._transition_to(MochiState.IDLE)
-        self._play_animation("idle")
-        self._logger.debug("Music dance stopped")
+        was_dancing = self.state.current is MochiState.DANCING
+        if was_dancing:
+            self._transition_to(MochiState.IDLE)
+            self._play_animation("idle")
+            self._logger.debug("Music dance stopped")
 
         if self._user_idle:
-            self._begin_sleep()
-        elif not self._maybe_resume_watching() and not self._maybe_resume_searching():
+            youtube_playing = bool(
+                self._media_monitor is not None
+                and self._media_monitor.youtube_playing
+            )
+            if not self._context_menu_open and not youtube_playing:
+                self._begin_sleep()
+            return
+
+        if was_dancing and not self._maybe_resume_watching() and not self._maybe_resume_searching():
             self._schedule_computer_idle_emote()
 
     def _start_dancing_emote(self) -> bool:
-        # Music should never wake an idle-away user or steal focus from video,
-        # typing, a direct reaction, sleep, pickup, drag, or drop.
+        # Music should not wake an already-idle-away user or steal focus from
+        # video, typing, direct reactions, sleep, pickup, drag, or drop.
         if (
             self._user_idle
             or self.state.current not in (MochiState.IDLE, MochiState.SEARCHING)
