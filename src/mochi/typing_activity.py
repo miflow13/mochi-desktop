@@ -15,9 +15,13 @@ import time
 from typing import Protocol
 
 
-DEFAULT_START_EVENT_COUNT = 2
-DEFAULT_BURST_WINDOW_SECONDS = 0.60
-DEFAULT_STOP_DELAY_SECONDS = 0.80
+# Ignore isolated shortcuts/chords and wait for a brief sustained typing burst.
+DEFAULT_START_EVENT_COUNT = 5
+DEFAULT_BURST_WINDOW_SECONDS = 1.25
+DEFAULT_MINIMUM_START_SPAN_SECONDS = 0.30
+
+# Bridge normal thinking pauses so Mochi does not repeatedly stop/restart.
+DEFAULT_STOP_DELAY_SECONDS = 2.25
 
 
 class TypingBurstDetector:
@@ -28,16 +32,26 @@ class TypingBurstDetector:
         *,
         start_event_count: int = DEFAULT_START_EVENT_COUNT,
         burst_window_seconds: float = DEFAULT_BURST_WINDOW_SECONDS,
+        minimum_start_span_seconds: float = DEFAULT_MINIMUM_START_SPAN_SECONDS,
         stop_delay_seconds: float = DEFAULT_STOP_DELAY_SECONDS,
     ) -> None:
         # One isolated press must not make Mochi start typing.
         if start_event_count < 2:
             raise ValueError("start_event_count must be at least 2")
-        if burst_window_seconds <= 0 or stop_delay_seconds <= 0:
+        if (
+            burst_window_seconds <= 0
+            or minimum_start_span_seconds < 0
+            or stop_delay_seconds <= 0
+        ):
             raise ValueError("typing timing values must be positive")
+        if minimum_start_span_seconds > burst_window_seconds:
+            raise ValueError(
+                "minimum_start_span_seconds must not exceed burst_window_seconds"
+            )
 
         self.start_event_count = start_event_count
         self.burst_window_seconds = burst_window_seconds
+        self.minimum_start_span_seconds = minimum_start_span_seconds
         self.stop_delay_seconds = stop_delay_seconds
         self.active = False
         self._event_times: deque[float] = deque(maxlen=start_event_count)
@@ -54,7 +68,8 @@ class TypingBurstDetector:
         if self.active or len(self._event_times) < self.start_event_count:
             return False
 
-        if self._event_times[-1] - self._event_times[0] <= self.burst_window_seconds:
+        span = self._event_times[-1] - self._event_times[0]
+        if self.minimum_start_span_seconds <= span <= self.burst_window_seconds:
             self.active = True
             return True
 

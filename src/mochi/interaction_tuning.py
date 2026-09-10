@@ -44,7 +44,7 @@ COMPUTER_TYPING_DURATION_SECONDS = (3.0, 4.0)
 
 @dataclass
 class InteractionTuning:
-    """Per-buddy mutable values exposed by the developer context menu."""
+    """Per-buddy mutable values exposed by the private developer menu."""
 
     drag_start_distance_px: float = DRAG_START_DISTANCE_PX
     drag_soft_enter_threshold: float = DRAG_SOFT_ENTER_THRESHOLD

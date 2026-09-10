@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from mochi.animation import Animation
 from mochi.buddy import Buddy
 from mochi.sprites import ANIMATIONS
+from mochi.sound import SoundEvent
 from mochi.state import MochiState
 
 
@@ -158,17 +159,121 @@ class BuddyDragReleaseTests(unittest.TestCase):
 
 
 class BuddyContextMenuTests(unittest.TestCase):
-    def test_context_menu_opens_after_secondary_button_release(self) -> None:
+    def test_context_menu_opens_immediately_on_secondary_button_press(self) -> None:
         import inspect
 
         source = inspect.getsource(Buddy.__init__)
 
         self.assertIn(
-            'context_click.connect("released", self._show_context_menu)', source
-        )
-        self.assertNotIn(
             'context_click.connect("pressed", self._show_context_menu)', source
         )
+        self.assertNotIn(
+            'context_click.connect("released", self._show_context_menu)', source
+        )
+        self.assertIn("Gtk.PropagationPhase.CAPTURE", source)
+
+
+    def test_user_menu_does_not_contain_developer_tuning(self) -> None:
+        import inspect
+
+        user_source = inspect.getsource(Buddy._build_context_menu)
+        dev_source = inspect.getsource(Buddy._build_developer_menu)
+
+        self.assertIn('"Sleep"', user_source)
+        self.assertIn('"Close"', user_source)
+        self.assertNotIn("Take a stroll", user_source)
+        self.assertNotIn("Say hi", user_source)
+        self.assertNotIn("Laptop time", user_source)
+        self.assertNotIn("Reset position", user_source)
+        self.assertNotIn("Quit Mochi", user_source)
+        self.assertNotIn("Interaction tuning", user_source)
+
+        self.assertIn("Take a stroll", dev_source)
+        self.assertIn("Say hi", dev_source)
+        self.assertIn("Laptop time", dev_source)
+        self.assertIn("Reset position", dev_source)
+        self.assertIn("Quit Mochi", dev_source)
+        self.assertIn("Interaction tuning", dev_source)
+
+    def test_user_menu_follows_mochi_and_close_quits(self) -> None:
+        import inspect
+
+        source = inspect.getsource(Buddy._build_context_menu)
+
+        self.assertIn("follow_owner=True", source)
+        self.assertIn("self._quit_from_context_menu", source)
+
+    def test_developer_menu_is_independently_draggable(self) -> None:
+        import inspect
+
+        source = inspect.getsource(Buddy._build_developer_menu)
+
+        self.assertIn("follow_owner=False", source)
+        self.assertIn("popover.set_drag_handle(drag_header)", source)
+
+    def test_user_close_waits_for_menu_close_then_quits(self) -> None:
+        quit_application = Mock()
+        buddy = SimpleNamespace(
+            _close_context_menu_then=Mock(),
+            _quit_application=quit_application,
+        )
+
+        Buddy._quit_from_context_menu(buddy, None)
+
+        buddy._close_context_menu_then.assert_called_once_with(quit_application)
+
+    def test_user_context_menu_is_toggle_and_dismisses_on_focus_loss(self) -> None:
+        import inspect
+
+        build_source = inspect.getsource(Buddy._build_context_menu)
+        show_source = inspect.getsource(Buddy._show_context_menu)
+
+        self.assertIn("dismiss_on_focus_loss=True", build_source)
+        self.assertIn("self._context_menu.get_visible()", show_source)
+        self.assertIn("self._context_menu.popdown()", show_source)
+
+    def test_context_menu_open_plays_one_subtle_menu_sound(self) -> None:
+        sound = SimpleNamespace(play=Mock())
+        sleep_label = SimpleNamespace(set_text=Mock())
+        menu = SimpleNamespace(
+            get_visible=Mock(return_value=False),
+            set_pointing_to=Mock(),
+            popup=Mock(),
+            popdown=Mock(),
+        )
+        developer_menu = SimpleNamespace(
+            get_visible=Mock(return_value=False),
+            popdown=Mock(),
+        )
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _mark_interaction=Mock(),
+            _cancel_active_emote=Mock(),
+            _cancel_walk=Mock(),
+            _transition_to=Mock(),
+            _play_animation=Mock(),
+            _cancel_hover_heart=Mock(),
+            _sleep_label=sleep_label,
+            _context_menu=menu,
+            _developer_menu=developer_menu,
+            _context_menu_open=False,
+            _sound=sound,
+            _context_menu_content=Mock(),
+            _context_menu_animated_rows=(),
+            _animate_menu_open=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._show_context_menu(buddy, None, 1, 12.0, 18.0)
+
+        sound.play.assert_called_once_with(SoundEvent.MENU_OPEN)
+        menu.popup.assert_called_once()
+        buddy._cancel_hover_heart.assert_called_once_with()
+        buddy._mark_interaction.assert_not_called()
+        buddy._cancel_active_emote.assert_not_called()
+        buddy._cancel_walk.assert_not_called()
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
 
     def test_menu_action_waits_for_closed_and_one_idle_turn(self) -> None:
         action = Mock()
@@ -195,26 +300,33 @@ class BuddyContextMenuTests(unittest.TestCase):
 
 
 class BuddyEmoteTests(unittest.TestCase):
-    def test_hover_heart_fires_once_until_pointer_leaves(self) -> None:
+    def test_hover_heart_is_delayed_and_rescheduled_after_leave(self) -> None:
         buddy = SimpleNamespace(
             _hovered=False,
             _press=None,
             _drag_started=False,
+            _hover_heart_source_id=None,
+            HOVER_HEART_DELAY_MS=280,
             state=SimpleNamespace(current=MochiState.IDLE),
             _window=SimpleNamespace(set_cursor_from_name=Mock()),
             set_cursor_from_name=Mock(),
             _mark_interaction=Mock(),
             _start_heart_emote=Mock(),
+            _cancel_hover_heart=Mock(),
+            _fire_hover_heart=Mock(return_value=False),
         )
         buddy._update_pointer_cursor = Buddy._update_pointer_cursor.__get__(buddy)
 
-        Buddy._on_enter(buddy, None, 0.0, 0.0)
-        Buddy._on_enter(buddy, None, 0.0, 0.0)
+        with patch("mochi.buddy.GLib.timeout_add", return_value=41) as timeout_add:
+            Buddy._on_enter(buddy, None, 0.0, 0.0)
+            Buddy._on_enter(buddy, None, 0.0, 0.0)
+            timeout_add.assert_called_once_with(280, buddy._fire_hover_heart)
+            buddy._start_heart_emote.assert_not_called()
 
-        buddy._start_heart_emote.assert_called_once()
-        Buddy._on_leave(buddy, None)
-        Buddy._on_enter(buddy, None, 0.0, 0.0)
-        self.assertEqual(buddy._start_heart_emote.call_count, 2)
+            Buddy._on_leave(buddy, None)
+            buddy._hovered = False
+            Buddy._on_enter(buddy, None, 0.0, 0.0)
+            self.assertEqual(timeout_add.call_count, 2)
 
     def test_heart_respects_cooldown_and_idle_priority(self) -> None:
         buddy = SimpleNamespace(
@@ -289,15 +401,20 @@ class BuddyCursorTests(unittest.TestCase):
             _hovered=False,
             _press=None,
             _drag_started=False,
+            _hover_heart_source_id=None,
+            HOVER_HEART_DELAY_MS=280,
             state=SimpleNamespace(current=MochiState.IDLE),
             _window=window,
             set_cursor_from_name=Mock(),
             _mark_interaction=Mock(),
             _start_heart_emote=Mock(),
+            _cancel_hover_heart=Mock(),
+            _fire_hover_heart=Mock(return_value=False),
         )
         buddy._update_pointer_cursor = Buddy._update_pointer_cursor.__get__(buddy)
 
-        Buddy._on_enter(buddy, None, 0.0, 0.0)
+        with patch("mochi.buddy.GLib.timeout_add", return_value=41):
+            Buddy._on_enter(buddy, None, 0.0, 0.0)
         buddy.set_cursor_from_name.assert_called_with("pointer")
         window.set_cursor_from_name.assert_called_with("pointer")
 
@@ -654,6 +771,22 @@ class BuddyPresenceTests(unittest.TestCase):
         Buddy._on_user_active(buddy)
 
         buddy._wake_up.assert_not_called()
+
+    def test_context_press_cancels_pending_hover_without_changing_state(self) -> None:
+        buddy = SimpleNamespace(
+            _cancel_hover_heart=Mock(),
+            _transition_to=Mock(),
+            _play_animation=Mock(),
+            _cancel_active_emote=Mock(),
+        )
+
+        Buddy._on_context_pressed(buddy, Mock(), 1, 20.0, 20.0)
+
+        buddy._cancel_hover_heart.assert_called_once_with()
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
+        buddy._cancel_active_emote.assert_not_called()
+
 
 
 if __name__ == "__main__":

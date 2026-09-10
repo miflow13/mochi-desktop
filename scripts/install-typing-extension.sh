@@ -12,19 +12,28 @@ if ! command -v gnome-extensions >/dev/null 2>&1; then
     exit 1
 fi
 
-(
-    cd "$SOURCE_DIR"
-    python3 - "$TMP_DIR/$UUID.shell-extension.zip" <<'PY'
+STAGE_DIR="$TMP_DIR/$UUID"
+mkdir -p "$STAGE_DIR/schemas"
+cp "$SOURCE_DIR/metadata.json" "$SOURCE_DIR/extension.js" "$SOURCE_DIR/README.md" "$STAGE_DIR/"
+cp "$SOURCE_DIR"/schemas/*.xml "$STAGE_DIR/schemas/"
+
+if ! command -v glib-compile-schemas >/dev/null 2>&1; then
+    echo "glib-compile-schemas was not found." >&2
+    exit 1
+fi
+glib-compile-schemas "$STAGE_DIR/schemas"
+
+python3 - "$STAGE_DIR" "$TMP_DIR/$UUID.shell-extension.zip" <<'PY'
 from pathlib import Path
 import sys
 import zipfile
 
-output = Path(sys.argv[1])
+source = Path(sys.argv[1])
+output = Path(sys.argv[2])
 with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-    for name in ("metadata.json", "extension.js", "README.md"):
-        archive.write(name, name)
+    for path in sorted(p for p in source.rglob("*") if p.is_file()):
+        archive.write(path, path.relative_to(source))
 PY
-)
 
 gnome-extensions install --force "$TMP_DIR/$UUID.shell-extension.zip"
 

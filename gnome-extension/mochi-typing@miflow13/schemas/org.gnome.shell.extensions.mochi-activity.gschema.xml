@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema
+      id="org.gnome.shell.extensions.mochi-activity"
+      path="/org/gnome/shell/extensions/mochi-activity/">
+    <key name="developer-menu-shortcut" type="as">
+      <default>['&lt;Ctrl&gt;&lt;Alt&gt;&lt;Shift&gt;m']</default>
+      <summary>Open Mochi developer menu</summary>
+      <description>
+        Private global shortcut used by the Mochi GNOME Shell companion
+        extension to request the developer-tuning popover.
+      </description>
+    </key>
+  </schema>
+</schemalist>

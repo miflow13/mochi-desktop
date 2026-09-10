@@ -27,9 +27,11 @@ from mochi.behavior import (
     choose_walk_animation,
 )
 from mochi.config import ConfigStore
+from mochi.developer_shortcut import DeveloperShortcutMonitor
 from mochi.drag_motion import DragMotionModel, DragPoseSelector
 from mochi.file_activity import FileActivityMonitor
 from mochi.media_activity import MediaActivityMonitor
+from mochi.menu_window import MenuWindow
 from mochi.interaction_tuning import (
     COMPUTER_IDLE_DELAY_SECONDS,
     DRAG_BODY_SWAY_PX,
@@ -55,6 +57,7 @@ class Buddy(Gtk.DrawingArea):
     BLINK_INTERVAL_SECONDS = (4.0, 12.0)
     DOUBLE_BLINK_CHANCE = 0.075
     DOUBLE_BLINK_PAUSE_MS = (120, 250)
+    HOVER_HEART_DELAY_MS = 280
     PREVIEW_ANIMATIONS = (
         "default",
         "idle",
@@ -125,6 +128,7 @@ class Buddy(Gtk.DrawingArea):
         self._drag_sample_time: float | None = None
         self._hovered = False
         self._last_heart_started = float("-inf")
+        self._hover_heart_source_id: int | None = None
         self._idle_action_source_id: int | None = None
         self._blink_source_id: int | None = None
         self._computer_idle_source_id: int | None = None
@@ -132,9 +136,12 @@ class Buddy(Gtk.DrawingArea):
         self._presence_monitor: PresenceActivityMonitor | None = None
         self._media_monitor: MediaActivityMonitor | None = None
         self._file_activity_monitor: FileActivityMonitor | None = None
+        self._developer_shortcut_monitor: DeveloperShortcutMonitor | None = None
         self._context_menu_open = False
+        self._menu_animation_serial = 0
         self._user_idle = False
         self._pending_context_action: Callable[[], None] | None = None
+        self._pending_developer_action: Callable[[], None] | None = None
         self._size = self._config.load_size()
 
         self.set_content_width(self._size)
@@ -149,10 +156,11 @@ class Buddy(Gtk.DrawingArea):
 
         context_click = Gtk.GestureClick.new()
         context_click.set_button(Gdk.BUTTON_SECONDARY)
-        # Open after the button is released. Under XWayland, opening on
-        # ``pressed`` lets the matching release immediately dismiss the new
-        # popover before the user can interact with it.
-        context_click.connect("released", self._show_context_menu)
+        context_click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        context_click.connect("pressed", self._on_context_pressed)
+        # A transient menu window has no popup grab for release to dismiss,
+        # so secondary-click can open immediately on the first press.
+        context_click.connect("pressed", self._show_context_menu)
         self.add_controller(context_click)
 
         motion = Gtk.EventControllerMotion.new()
@@ -170,6 +178,8 @@ class Buddy(Gtk.DrawingArea):
 
         self._context_menu = self._build_context_menu()
         self._context_menu.connect("closed", self._on_context_menu_closed)
+        self._developer_menu = self._build_developer_menu()
+        self._developer_menu.connect("closed", self._on_developer_menu_closed)
 
         GLib.timeout_add(self.TICK_MS, self._tick)
         if not self._preview_mode:
@@ -197,141 +207,268 @@ class Buddy(Gtk.DrawingArea):
                 logger=self._logger,
             )
             self._file_activity_monitor.start()
+            self._developer_shortcut_monitor = DeveloperShortcutMonitor(
+                on_requested=self._show_developer_menu,
+                logger=self._logger,
+            )
+            self._developer_shortcut_monitor.start()
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
 
-    def _build_context_menu(self) -> Gtk.Popover:
-        popover = Gtk.Popover()
-        popover.set_parent(self)
-        popover.add_css_class("menu")
+    def _build_context_menu(self) -> MenuWindow:
+        """Build Mochi's intentionally tiny user-facing right-click menu."""
+        popover = MenuWindow(
+            owner=self._window,
+            anchor_widget=self,
+            preferred_width=244,
+            preferred_height=176,
+            follow_owner=True,
+            dismiss_on_focus_loss=True,
+            logger=self._logger,
+        )
+        popover.add_css_class("mochi-user-menu")
 
-        menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        menu_box.set_margin_top(6)
-        menu_box.set_margin_bottom(6)
-        menu_box.set_margin_start(6)
-        menu_box.set_margin_end(6)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card.add_css_class("mochi-menu-card")
+        card.set_margin_top(12)
+        card.set_margin_bottom(12)
+        card.set_margin_start(12)
+        card.set_margin_end(12)
+        card.set_size_request(220, -1)
 
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        sprout = Gtk.Label(label="🌱")
+        sprout.add_css_class("mochi-menu-sprout")
+        header.append(sprout)
+
+        header_text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         title = Gtk.Label(label="Mochi")
-        title.add_css_class("heading")
-        menu_box.append(title)
+        title.set_xalign(0)
+        title.add_css_class("mochi-menu-title")
+        subtitle = Gtk.Label(label="your tiny desktop buddy")
+        subtitle.set_xalign(0)
+        subtitle.add_css_class("mochi-menu-subtitle")
+        header_text.append(title)
+        header_text.append(subtitle)
+        header.append(header_text)
+        card.append(header)
 
-        self._sleep_button = Gtk.Button(label="Sleep")
-        self._sleep_button.add_css_class("flat")
-        self._sleep_button.connect("clicked", self._toggle_sleep)
-        menu_box.append(self._sleep_button)
+        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        walk_button = Gtk.Button(label="Test Walk")
-        walk_button.add_css_class("flat")
-        walk_button.connect("clicked", self._test_walk)
-        menu_box.append(walk_button)
+        animated_rows: list[Gtk.Widget] = []
 
-        heart_button = Gtk.Button(label="Test Heart Emote")
-        heart_button.add_css_class("flat")
-        heart_button.connect("clicked", self._test_heart_emote)
-        menu_box.append(heart_button)
+        self._sleep_button, self._sleep_label = self._make_menu_button(
+            "Sleep",
+            "weather-clear-night-symbolic",
+            self._toggle_sleep,
+        )
+        card.append(self._sleep_button)
+        animated_rows.append(self._sleep_button)
 
-        computer_button = Gtk.Button(label="Test Computer Emote")
-        computer_button.add_css_class("flat")
-        computer_button.connect("clicked", self._test_computer_emote)
-        menu_box.append(computer_button)
+        close_button, _ = self._make_menu_button(
+            "Close",
+            "window-close-symbolic",
+            self._quit_from_context_menu,
+        )
+        close_button.add_css_class("mochi-menu-secondary")
+        card.append(close_button)
+        animated_rows.append(close_button)
 
-        options_label = Gtk.Label(label="Options")
-        options_label.set_xalign(0)
-        options_label.add_css_class("heading")
-        options_label.set_margin_top(4)
-        menu_box.append(options_label)
+        self._context_menu_content = card
+        self._context_menu_animated_rows = tuple(animated_rows)
+        popover.set_child(card)
+        return popover
 
-        size_label = Gtk.Label(label="Mochi size")
+    def _build_developer_menu(self) -> MenuWindow:
+        """Developer-only controls opened by Mochi's private global shortcut."""
+        popover = MenuWindow(
+            owner=self._window,
+            anchor_widget=self,
+            preferred_width=332,
+            preferred_height=680,
+            follow_owner=False,
+            logger=self._logger,
+        )
+        popover.add_css_class("mochi-dev-menu")
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card.add_css_class("mochi-menu-card")
+        card.set_margin_top(12)
+        card.set_margin_bottom(12)
+        card.set_margin_start(12)
+        card.set_margin_end(12)
+        card.set_size_request(308, -1)
+
+        drag_header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        drag_header.add_css_class("mochi-dev-drag-handle")
+
+        title = Gtk.Label(label="Mochi Lab  ✦")
+        title.set_xalign(0)
+        title.add_css_class("mochi-menu-title")
+        drag_header.append(title)
+
+        subtitle = Gtk.Label(label="Developer controls  ·  drag here to move")
+        subtitle.set_xalign(0)
+        subtitle.add_css_class("mochi-menu-subtitle")
+        drag_header.append(subtitle)
+        card.append(drag_header)
+        popover.set_drag_handle(drag_header)
+
+        animated_rows: list[Gtk.Widget] = []
+        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        actions_label = Gtk.Label(label="Actions")
+        actions_label.set_xalign(0)
+        actions_label.add_css_class("mochi-menu-section")
+        card.append(actions_label)
+
+        walk_button, _ = self._make_menu_button("Take a stroll", "go-next-symbolic", self._test_walk)
+        card.append(walk_button)
+        animated_rows.append(walk_button)
+
+        heart_button, _ = self._make_menu_button("Say hi", "emblem-favorite-symbolic", self._test_heart_emote)
+        card.append(heart_button)
+        animated_rows.append(heart_button)
+
+        computer_button, _ = self._make_menu_button("Laptop time", "computer-symbolic", self._test_computer_emote)
+        card.append(computer_button)
+        animated_rows.append(computer_button)
+
+        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        appearance_label = Gtk.Label(label="Appearance")
+        appearance_label.set_xalign(0)
+        appearance_label.add_css_class("mochi-menu-section")
+        card.append(appearance_label)
+
+        size_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        size_row.add_css_class("mochi-setting-row")
+        size_label = Gtk.Label(label="Size")
         size_label.set_xalign(0)
-        menu_box.append(size_label)
+        size_label.set_hexpand(True)
+        size_row.append(size_label)
+        size_value = Gtk.Label(label=f"{self._size}px")
+        size_value.add_css_class("mochi-menu-value")
+        size_row.append(size_value)
+        card.append(size_row)
+        animated_rows.append(size_row)
 
-        adjustment = Gtk.Adjustment(
-            value=self._size,
-            lower=ConfigStore.MIN_SIZE,
-            upper=ConfigStore.MAX_SIZE,
-            step_increment=64,
-            page_increment=64,
-        )
-        size_scale = Gtk.Scale(
-            orientation=Gtk.Orientation.HORIZONTAL, adjustment=adjustment
-        )
-        size_scale.set_digits(0)
-        size_scale.set_draw_value(True)
-        size_scale.set_value_pos(Gtk.PositionType.RIGHT)
-        size_scale.set_size_request(180, -1)
+        size_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, ConfigStore.MIN_SIZE, ConfigStore.MAX_SIZE, 64)
+        size_scale.set_value(self._size)
+        size_scale.set_draw_value(False)
+        size_scale.set_hexpand(True)
+        size_scale.add_css_class("mochi-menu-scale")
         size_scale.connect("value-changed", self._change_size)
-        menu_box.append(size_scale)
+        size_scale.connect("value-changed", lambda scale: size_value.set_text(f"{round(scale.get_value() / 64) * 64}px"))
+        card.append(size_scale)
+        animated_rows.append(size_scale)
 
-        mute_toggle = Gtk.CheckButton(label="Mute sounds")
-        mute_toggle.set_active(self._sound.muted)
-        mute_toggle.connect("toggled", self._change_muted)
-        menu_box.append(mute_toggle)
+        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        volume_label = Gtk.Label(label="Sound volume")
-        volume_label.set_xalign(0)
-        menu_box.append(volume_label)
+        audio_label = Gtk.Label(label="Audio")
+        audio_label.set_xalign(0)
+        audio_label.add_css_class("mochi-menu-section")
+        card.append(audio_label)
+
+        sound_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        sound_row.add_css_class("mochi-setting-row")
+        sound_icon = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")
+        sound_row.append(sound_icon)
+        sound_label = Gtk.Label(label="Sound")
+        sound_label.set_xalign(0)
+        sound_label.set_hexpand(True)
+        sound_row.append(sound_label)
+        sound_switch = Gtk.Switch()
+        sound_switch.set_valign(Gtk.Align.CENTER)
+        sound_switch.set_active(not self._sound.muted)
+        sound_switch.connect("notify::active", self._change_sound_enabled)
+        sound_row.append(sound_switch)
+        card.append(sound_row)
+        animated_rows.append(sound_row)
 
         volume_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
         volume_scale.set_value(self._sound.volume * 100)
-        volume_scale.set_draw_value(True)
-        volume_scale.set_value_pos(Gtk.PositionType.RIGHT)
+        volume_scale.set_draw_value(False)
+        volume_scale.add_css_class("mochi-menu-scale")
         volume_scale.connect("value-changed", self._change_volume)
-        menu_box.append(volume_scale)
+        card.append(volume_scale)
+        animated_rows.append(volume_scale)
 
-        tuning_expander = Gtk.Expander(label="Developer tuning")
-        tuning_grid = Gtk.Grid(column_spacing=8, row_spacing=4)
-        tuning_grid.set_margin_top(4)
+        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        tuning_label = Gtk.Label(label="Interaction tuning")
+        tuning_label.set_xalign(0)
+        tuning_label.add_css_class("mochi-menu-section")
+        card.append(tuning_label)
+
+        tuning_grid = Gtk.Grid(column_spacing=12, row_spacing=6)
+        tuning_grid.add_css_class("mochi-tuning-grid")
         tuning_values = (
             ("Start drag px", "drag_start_distance_px", 1.0, 12.0, 0.5, 1),
             ("Soft threshold", "drag_soft_enter_threshold", 0.0, 1.0, 0.01, 2),
             ("Medium enter", "drag_medium_enter_threshold", 0.0, 1.0, 0.01, 2),
             ("Medium exit", "drag_medium_exit_threshold", 0.0, 1.0, 0.01, 2),
-            (
-                "Full-sway px/s",
-                "drag_heavy_velocity_px_per_second",
-                100.0,
-                2_000.0,
-                25.0,
-                0,
-            ),
+            ("Full-sway px/s", "drag_heavy_velocity_px_per_second", 100.0, 2_000.0, 25.0, 0),
             ("Drag dwell ms", "drag_state_dwell_ms", 0.0, 250.0, 10.0, 0),
-            (
-                "Heart cooldown s",
-                "hover_heart_cooldown_seconds",
-                0.0,
-                10.0,
-                0.25,
-                2,
-            ),
-            (
-                "Pickup frame ms",
-                "pickup_frame_duration_ms",
-                10.0,
-                100.0,
-                5.0,
-                0,
-            ),
+            ("Heart cooldown s", "hover_heart_cooldown_seconds", 0.0, 10.0, 0.25, 2),
+            ("Pickup frame ms", "pickup_frame_duration_ms", 10.0, 100.0, 5.0, 0),
         )
         for row, values in enumerate(tuning_values):
             label, attribute, lower, upper, step, digits = values
-            self._append_tuning_control(
-                tuning_grid, row, label, attribute, lower, upper, step, digits
-            )
-        tuning_expander.set_child(tuning_grid)
-        menu_box.append(tuning_expander)
+            self._append_tuning_control(tuning_grid, row, label, attribute, lower, upper, step, digits)
+        card.append(tuning_grid)
+        animated_rows.append(tuning_grid)
 
-        reset_button = Gtk.Button(label="Reset Position")
-        reset_button.add_css_class("flat")
-        reset_button.connect("clicked", self._reset_position)
-        menu_box.append(reset_button)
+        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        quit_button = Gtk.Button(label="Quit Mochi")
-        quit_button.add_css_class("flat")
-        quit_button.connect("clicked", self._quit)
-        menu_box.append(quit_button)
-        popover.set_child(menu_box)
+        system_label = Gtk.Label(label="System")
+        system_label.set_xalign(0)
+        system_label.add_css_class("mochi-menu-section")
+        card.append(system_label)
+
+        reset_button, _ = self._make_menu_button("Reset position", "view-refresh-symbolic", self._reset_position)
+        card.append(reset_button)
+        animated_rows.append(reset_button)
+
+        quit_button, _ = self._make_menu_button("Quit Mochi", "application-exit-symbolic", self._quit, destructive=True)
+        card.append(quit_button)
+        animated_rows.append(quit_button)
+
+        hint = Gtk.Label(label="Ctrl + Alt + Shift + M")
+        hint.set_xalign(0)
+        hint.add_css_class("mochi-menu-hint")
+        card.append(hint)
+        animated_rows.append(hint)
+
+        self._developer_menu_content = card
+        self._developer_menu_animated_rows = tuple(animated_rows)
+        popover.set_child(card)
         return popover
+
+    def _make_menu_button(
+        self,
+        label: str,
+        icon_name: str,
+        callback,
+        *,
+        destructive: bool = False,
+    ) -> tuple[Gtk.Button, Gtk.Label]:
+        button = Gtk.Button()
+        button.add_css_class("mochi-menu-row")
+        if destructive:
+            button.add_css_class("mochi-menu-danger")
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        icon = Gtk.Image.new_from_icon_name(icon_name)
+        icon.add_css_class("mochi-menu-icon")
+        row.append(icon)
+        text = Gtk.Label(label=label)
+        text.set_xalign(0)
+        text.set_hexpand(True)
+        row.append(text)
+        button.set_child(row)
+        button.connect("clicked", callback)
+        return button, text
 
     def _append_tuning_control(
         self,
@@ -404,17 +541,27 @@ class Buddy(Gtk.DrawingArea):
         self._sound.set_muted(muted)
         self._config.save_muted(muted)
 
+    def _change_sound_enabled(self, switch: Gtk.Switch, _pspec=None) -> None:
+        muted = not switch.get_active()
+        self._sound.set_muted(muted)
+        self._config.save_muted(muted)
+
     def _show_context_menu(
         self, _gesture: Gtk.GestureClick, _presses: int, x: float, y: float
     ) -> None:
-        self._mark_interaction()
-        self._cancel_active_emote()
-        if self.state.current is MochiState.WALKING:
-            self._cancel_walk()
-            self._transition_to(MochiState.IDLE)
-            self._play_animation("idle")
-        self._sleep_button.set_label(
-            "Wake Up" if self.state.current is MochiState.SLEEPING else "Sleep"
+        # Right-click is a true toggle: a second right-click on Mochi closes
+        # the already-open user menu instead of re-presenting/repositioning it.
+        if self._context_menu.get_visible():
+            self._context_menu.popdown()
+            return
+        if self._developer_menu.get_visible():
+            self._developer_menu.popdown()
+        # Secondary-click is UI-only. It must never trigger/cancel a Mochi
+        # emote, stop walking, force idle, or feed the primary-click reaction
+        # pipeline. The popover may animate; Mochi himself does not.
+        self._cancel_hover_heart()
+        self._sleep_label.set_text(
+            "Wake up" if self.state.current is MochiState.SLEEPING else "Sleep"
         )
         rectangle = Gdk.Rectangle()
         rectangle.x = round(x)
@@ -424,7 +571,79 @@ class Buddy(Gtk.DrawingArea):
         self._context_menu.set_pointing_to(rectangle)
         self._context_menu_open = True
         self._context_menu.popup()
+        self._sound.play(SoundEvent.MENU_OPEN)
+        self._animate_menu_open(
+            self._context_menu_content, self._context_menu_animated_rows
+        )
         self._logger.debug("Context menu opened at (%d, %d)", rectangle.x, rectangle.y)
+
+    def _show_developer_menu(self) -> None:
+        if self._preview_mode:
+            return
+        if self._developer_menu.get_visible():
+            self._developer_menu.popdown()
+            return
+        if self._context_menu.get_visible():
+            self._context_menu.popdown()
+        self._mark_interaction()
+        self._cancel_active_emote()
+        if self.state.current is MochiState.WALKING:
+            self._cancel_walk()
+            self._transition_to(MochiState.IDLE)
+            self._play_animation("idle")
+
+        rectangle = Gdk.Rectangle()
+        rectangle.x = max(1, self.get_width() // 2)
+        rectangle.y = max(1, self.get_height() // 2)
+        rectangle.width = 1
+        rectangle.height = 1
+        self._developer_menu.set_pointing_to(rectangle)
+        self._context_menu_open = True
+        self._developer_menu.popup()
+        self._animate_menu_open(
+            self._developer_menu_content, self._developer_menu_animated_rows
+        )
+        self._logger.debug("Developer menu opened from secret shortcut")
+
+    def _animate_menu_open(
+        self, content: Gtk.Widget, rows: tuple[Gtk.Widget, ...]
+    ) -> None:
+        """Quick ease-out lift + staggered fade without resizing the popover."""
+        self._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
+        serial = self._menu_animation_serial
+        started = time.monotonic()
+        duration = 0.18
+        start_margin = 20
+        end_margin = 12
+        content.set_opacity(0.0)
+        content.set_margin_top(start_margin)
+        for row in rows:
+            row.set_opacity(0.0)
+
+        def animate() -> bool:
+            if serial != self._menu_animation_serial:
+                return GLib.SOURCE_REMOVE
+            progress = min(1.0, (time.monotonic() - started) / duration)
+            eased = 1.0 - (1.0 - progress) ** 3
+            content.set_opacity(eased)
+            content.set_margin_top(round(start_margin + (end_margin - start_margin) * eased))
+            for index, row in enumerate(rows):
+                delay = min(0.45, index * 0.045)
+                row_progress = max(0.0, min(1.0, (progress - delay) / max(0.01, 1.0 - delay)))
+                row.set_opacity(1.0 - (1.0 - row_progress) ** 2)
+            if progress >= 1.0:
+                content.set_opacity(1.0)
+                content.set_margin_top(end_margin)
+                for row in rows:
+                    row.set_opacity(1.0)
+                return GLib.SOURCE_REMOVE
+            return GLib.SOURCE_CONTINUE
+
+        GLib.timeout_add(16, animate)
+
+    def _quit_from_context_menu(self, _button: Gtk.Button) -> None:
+        """Close the user menu first, then quit Mochi on the next idle turn."""
+        self._close_context_menu_then(self._quit_application)
 
     def _toggle_sleep(self, _button: Gtk.Button) -> None:
         def toggle() -> None:
@@ -441,15 +660,15 @@ class Buddy(Gtk.DrawingArea):
             if self.state.current is MochiState.IDLE:
                 self._start_walk()
 
-        self._close_context_menu_then(start_walk)
+        self._close_developer_menu_then(start_walk)
 
     def _test_heart_emote(self, _button: Gtk.Button) -> None:
-        self._close_context_menu_then(
+        self._close_developer_menu_then(
             lambda: self._start_heart_emote(ignore_cooldown=True)
         )
 
     def _test_computer_emote(self, _button: Gtk.Button) -> None:
-        self._close_context_menu_then(self._start_computer_emote)
+        self._close_developer_menu_then(self._start_computer_emote)
 
     def _reset_position(self, _button: Gtk.Button) -> None:
         def reset_position() -> None:
@@ -457,13 +676,18 @@ class Buddy(Gtk.DrawingArea):
             default = WindowPlacement.DEFAULT_POSITION
             self._placement.move_to(default.x, default.y)
 
-        self._close_context_menu_then(reset_position)
+        self._close_developer_menu_then(reset_position)
 
     def _close_context_menu_then(self, action: Callable[[], None]) -> None:
         self._pending_context_action = action
         self._context_menu.popdown()
 
-    def _on_context_menu_closed(self, _popover: Gtk.Popover) -> None:
+    def _close_developer_menu_then(self, action: Callable[[], None]) -> None:
+        self._pending_developer_action = action
+        self._developer_menu.popdown()
+
+    def _on_context_menu_closed(self, _popover: MenuWindow) -> None:
+        self._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
         self._context_menu_open = False
         self._logger.debug("Context menu closed")
         action = self._pending_context_action
@@ -471,14 +695,26 @@ class Buddy(Gtk.DrawingArea):
         if action is not None:
             GLib.idle_add(self._dispatch_context_action, action)
 
+    def _on_developer_menu_closed(self, _popover: MenuWindow) -> None:
+        self._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
+        self._context_menu_open = False
+        self._logger.debug("Developer menu closed")
+        action = self._pending_developer_action
+        self._pending_developer_action = None
+        if action is not None:
+            GLib.idle_add(self._dispatch_context_action, action)
+
     def _dispatch_context_action(self, action: Callable[[], None]) -> bool:
         action()
         return GLib.SOURCE_REMOVE
 
-    def _quit(self, _button: Gtk.Button) -> None:
+    def _quit_application(self) -> None:
         application = self._window.get_application()
         if application is not None:
             application.quit()
+
+    def _quit(self, _button: Gtk.Button) -> None:
+        self._close_developer_menu_then(self._quit_application)
 
     def _update_pointer_cursor(self) -> None:
         # Keep a visible hand cursor through hover, press, pickup, and drag.
@@ -503,11 +739,35 @@ class Buddy(Gtk.DrawingArea):
         self._hovered = True
         self._update_pointer_cursor()
         self._mark_interaction()
-        self._start_heart_emote()
+        self._cancel_hover_heart()
+        self._hover_heart_source_id = GLib.timeout_add(
+            self.HOVER_HEART_DELAY_MS,
+            self._fire_hover_heart,
+        )
 
     def _on_leave(self, _controller: Gtk.EventControllerMotion) -> None:
         self._hovered = False
+        self._cancel_hover_heart()
         self._update_pointer_cursor()
+
+    def _fire_hover_heart(self) -> bool:
+        self._hover_heart_source_id = None
+        if self._hovered and not self._context_menu_open:
+            self._start_heart_emote()
+        return GLib.SOURCE_REMOVE
+
+    def _cancel_hover_heart(self) -> None:
+        source_id = self._hover_heart_source_id
+        self._hover_heart_source_id = None
+        if source_id is not None:
+            GLib.source_remove(source_id)
+
+    def _on_context_pressed(
+        self, _gesture: Gtk.GestureClick, _presses: int, _x: float, _y: float
+    ) -> None:
+        # Secondary-click declares menu intent only. Cancel a not-yet-fired
+        # hover reaction, but do not alter Mochi's current state/animation.
+        self._cancel_hover_heart()
 
     def _start_heart_emote(self, ignore_cooldown: bool = False) -> bool:
         now = time.monotonic()
