@@ -15,12 +15,16 @@ class Clock:
         return self.value
 
 
-def test_default_presence_is_slightly_livelier_but_still_quiet():
+def test_default_presence_uses_lively_mochi_sense_profile():
     tuning = PresenceTuning()
-    assert tuning.ambient_min_seconds == 7 * 60
-    assert tuning.ambient_max_seconds == 16 * 60
-    assert tuning.ambient_silence_probability == 0.65
-    assert tuning.max_phrases_per_hour == 4
+    assert tuning.ambient_min_seconds == 20
+    assert tuning.ambient_max_seconds == 60
+    assert tuning.ambient_silence_probability == 0.10
+    assert tuning.global_cooldown_seconds == 25
+    assert tuning.max_phrases_per_hour == 30
+    assert tuning.typing_medium_sustain_seconds == 12
+    assert tuning.typing_high_sustain_seconds == 8
+    assert tuning.typing_comment_probability == 1.0
 
 
 def test_startup_phrase_bank_exists():
