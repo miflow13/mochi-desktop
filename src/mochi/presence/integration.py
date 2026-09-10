@@ -27,6 +27,7 @@ class PresenceBuddyMixin:
         # Temporary feature-branch default: make presence easy to observe while
         # the behavior is being tuned. Disable this before merging to main.
         self._presence_chatty_test_mode = True
+        self._presence_chatty_switch: Gtk.Switch | None = None
         self._apply_presence_chatty_test_mode(True, clear_cooldowns=False)
         self._presence_started_at = time.monotonic()
         self._presence_active_session_started_at = self._presence_started_at
@@ -123,11 +124,10 @@ class PresenceBuddyMixin:
         card.append(quiet_row)
         animated_rows.append(quiet_row)
 
-        chatty_row = self._make_presence_switch_row(
-            "Chatty test mode",
-            self._presence_chatty_test_mode,
-            self._change_presence_chatty_test_mode,
-        )
+        # Chatty mode intentionally uses a button-backed switch. The visual
+        # control stays switch-like, while the entire row gets the same reliable
+        # click path as Mochi Lab's action buttons on XWayland.
+        chatty_row, self._presence_chatty_switch = self._make_presence_chatty_row()
         card.append(chatty_row)
         animated_rows.append(chatty_row)
 
@@ -177,6 +177,32 @@ class PresenceBuddyMixin:
         row.append(switch)
         return row
 
+    def _make_presence_chatty_row(self) -> tuple[Gtk.Button, Gtk.Switch]:
+        button = Gtk.Button()
+        button.add_css_class("mochi-menu-row")
+        button.set_tooltip_text(
+            "Temporarily increases ambient speech frequency for testing"
+        )
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        text = Gtk.Label(label="Chatty test mode")
+        text.set_xalign(0)
+        text.set_hexpand(True)
+        row.append(text)
+
+        switch = Gtk.Switch()
+        switch.set_valign(Gtk.Align.CENTER)
+        switch.set_active(self._presence_chatty_test_mode)
+        # The parent button owns pointer interaction so the whole row is one
+        # predictable hit target instead of two competing GTK controls.
+        switch.set_can_target(False)
+        switch.set_focusable(False)
+        row.append(switch)
+
+        button.set_child(row)
+        button.connect("clicked", self._toggle_presence_chatty_test_mode)
+        return button, switch
+
     def _close_developer_menu_then(self, action) -> None:
         """Run developer actions without closing Mochi Lab.
 
@@ -211,10 +237,15 @@ class PresenceBuddyMixin:
     def _change_presence_quiet_mode(self, switch: Gtk.Switch, _pspec=None) -> None:
         self.set_presence_quiet_mode(switch.get_active())
 
-    def _change_presence_chatty_test_mode(
-        self, switch: Gtk.Switch, _pspec=None
-    ) -> None:
-        self._apply_presence_chatty_test_mode(switch.get_active())
+    def _toggle_presence_chatty_test_mode(self, _button: Gtk.Button) -> None:
+        enabled = not self._presence_chatty_test_mode
+        self._apply_presence_chatty_test_mode(enabled)
+        if self._presence_chatty_switch is not None:
+            self._presence_chatty_switch.set_active(enabled)
+        self._logger.info(
+            "Mochi Lab chatty test mode toggled to %s",
+            "ON" if enabled else "OFF",
+        )
 
     def _apply_presence_chatty_test_mode(
         self, enabled: bool, *, clear_cooldowns: bool = True
