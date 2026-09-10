@@ -12,7 +12,7 @@ from mochi.x11_buddy import X11Buddy
 
 from .bubble import SpeechBubble
 from .context import AmbientContext
-from .engine import PresenceEngine
+from .engine import PresenceEngine, speech_display_seconds
 from .signals import AppCategorySignalAdapter, SystemSignalMonitor
 
 
@@ -68,14 +68,15 @@ class PresenceBuddyMixin:
 
     @property
     def presence_engine(self) -> PresenceEngine:
-        """Developer/test access without adding fragile menu controls."""
+        """Developer/test access to the ambient presence engine."""
         return self._ambient_presence_engine
 
     def _build_developer_menu(self):
         """Extend Mochi Lab with isolated presence controls.
 
-        Buddy still owns all menu behavior. Presence only appends widgets to the
-        finished developer card, avoiding changes to the context-menu path.
+        Buddy still owns the menu surface and lifecycle. Presence appends its
+        widgets to the finished developer card without touching the user
+        context-menu implementation.
         """
         popover = super()._build_developer_menu()
         card = self._developer_menu_content
@@ -150,6 +151,15 @@ class PresenceBuddyMixin:
         row.append(switch)
         return row
 
+    def _close_developer_menu_then(self, action) -> None:
+        """Run developer actions without closing Mochi Lab.
+
+        The lab is a persistent tuning/debug surface. Buttons, switches, and
+        test actions should be repeatable in place; the explicit Quit action
+        still exits the application because its callback itself quits Mochi.
+        """
+        GLib.idle_add(self._dispatch_context_action, action)
+
     def _change_presence_speech_enabled(self, switch: Gtk.Switch, _pspec=None) -> None:
         enabled = switch.get_active()
         self._ambient_presence_engine.set_speech_enabled(enabled)
@@ -168,16 +178,9 @@ class PresenceBuddyMixin:
         self.set_presence_quiet_mode(switch.get_active())
 
     def _test_presence_ambient(self, _button: Gtk.Button) -> None:
-        self._close_developer_menu_then(self._force_presence_ambient_now)
-
-    def _force_presence_ambient_now(self) -> None:
-        self._ambient_presence_engine.force_ambient()
-        self._evaluate_ambient_presence()
+        self._preview_presence_category("ambient")
 
     def _test_presence_contextual(self, _button: Gtk.Button) -> None:
-        self._close_developer_menu_then(self._force_presence_contextual_now)
-
-    def _force_presence_contextual_now(self) -> None:
         category = {
             "editor": "developer",
             "terminal": "developer",
@@ -185,8 +188,43 @@ class PresenceBuddyMixin:
             "media": "media",
             "browser": "focus",
         }.get(self._presence_app_category, "ambient")
-        self._ambient_presence_engine.force_contextual(category)
-        self._evaluate_ambient_presence()
+        self._preview_presence_category(category)
+
+    def _preview_presence_category(self, category: str) -> None:
+        """Deterministically preview one phrase while Mochi Lab stays open.
+
+        Developer previews intentionally bypass ambient cooldowns, silence
+        probability, menu suppression, and recent-dismiss suppression. They do
+        not count against production rate limits. If a preview bubble is still
+        visible, replace it so every button press gives immediate feedback.
+        """
+        bubble = self._presence_bubble
+        if bubble is None:
+            self._logger.debug("[presence] developer preview unavailable: no bubble")
+            return
+
+        self._dismiss_presence_bubble(user_initiated=False)
+        try:
+            text = self._ambient_presence_engine.phrases.choose(
+                category,
+                exclude_recent=True,
+            )
+        except KeyError:
+            category = "ambient"
+            text = self._ambient_presence_engine.phrases.choose(
+                category,
+                exclude_recent=True,
+            )
+
+        if bubble.show(text, duration_seconds=speech_display_seconds(text)):
+            # Remember only the text for variety. A developer preview must not
+            # consume global/category cooldown budget used by ambient speech.
+            self._ambient_presence_engine.phrases.remember(text)
+            self._logger.debug(
+                "[presence] developer preview category=%s text=%r",
+                category,
+                text,
+            )
 
     def set_presence_quiet_mode(self, enabled: bool) -> None:
         self._ambient_presence_engine.set_quiet_mode(enabled)
