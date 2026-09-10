@@ -17,7 +17,12 @@ except (ImportError, ValueError):
     GdkWayland = None
 
 from mochi.config import Position
-from mochi.x11 import get_window_position, move_window, primary_button_pressed
+from mochi.x11 import (
+    get_window_position,
+    move_window,
+    nudge_pointer,
+    primary_button_pressed,
+)
 
 try:
     gi.require_version("Gtk4LayerShell", "1.0")
@@ -136,15 +141,19 @@ class WindowPlacement:
             return self.position
 
         if primary_button_pressed(self.window):
-            # Mutter/XWayland owns the native drag. Keep vertical movement fully
-            # compositor-controlled, but enforce the left/right screen bounds
-            # live so Mochi can never cross either side of the monitor.
+            # Mutter owns Gdk.Toplevel.begin_move() until release. XMoveWindow
+            # alone cannot make a hard wall because Mutter immediately follows
+            # the still-outside pointer. Clamp X, then nudge the pointer by the
+            # exact overshoot so Mutter's own interactive move stays bounded.
             clamped = self.clamp_position(*coordinates)
-            constrained_x = clamped.x
+            current_x = round(coordinates[0])
             current_y = round(coordinates[1])
+            constrained_x = clamped.x
             self.position = Position(constrained_x, current_y)
 
-            if round(coordinates[0]) != constrained_x:
+            overshoot_x = constrained_x - current_x
+            if overshoot_x:
+                nudge_pointer(self.window, overshoot_x, 0)
                 move_window(self.window, constrained_x, current_y)
 
             return self.position
