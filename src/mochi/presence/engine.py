@@ -53,6 +53,15 @@ class PresenceTuning:
     })
 
 
+class SpeechText(str):
+    """A normal string carrying a tiny presentation hint for the bubble layer."""
+
+    def __new__(cls, value: str, *, typing_preview: bool):
+        obj = super().__new__(cls, value)
+        obj.typing_preview = bool(typing_preview)
+        return obj
+
+
 @dataclass(frozen=True, slots=True)
 class PresenceAction:
     type: str
@@ -61,6 +70,18 @@ class PresenceAction:
     priority: int
     event: str | None = None
     display_seconds: float = 3.5
+
+    def __post_init__(self) -> None:
+        # Normal ambient/contextual Mochi Sense speech gets the small fake
+        # typing beat. Critical system reactions stay immediate. Startup,
+        # direct click reactions, drag dialogue, and developer previews do not
+        # use PresenceAction and therefore remain immediate automatically.
+        typing_preview = self.type == "speech" and self.priority < 40
+        object.__setattr__(
+            self,
+            "text",
+            SpeechText(str(self.text), typing_preview=typing_preview),
+        )
 
 
 @dataclass(frozen=True, slots=True)
