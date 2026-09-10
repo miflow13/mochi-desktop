@@ -28,6 +28,7 @@ from mochi.behavior import (
 )
 from mochi.config import ConfigStore
 from mochi.drag_motion import DragMotionModel, DragPoseSelector, drag_settle_sprite
+from mochi.file_activity import FileActivityMonitor
 from mochi.media_activity import MediaActivityMonitor
 from mochi.interaction_tuning import (
     COMPUTER_IDLE_DELAY_SECONDS,
@@ -127,6 +128,7 @@ class Buddy(Gtk.DrawingArea):
         self._typing_monitor: TypingActivityMonitor | None = None
         self._presence_monitor: PresenceActivityMonitor | None = None
         self._media_monitor: MediaActivityMonitor | None = None
+        self._file_activity_monitor: FileActivityMonitor | None = None
         self._context_menu_open = False
         self._user_idle = False
         self._pending_context_action: Callable[[], None] | None = None
@@ -186,6 +188,12 @@ class Buddy(Gtk.DrawingArea):
                 logger=self._logger,
             )
             self._media_monitor.start()
+            self._file_activity_monitor = FileActivityMonitor(
+                on_file_activity_started=self._on_file_activity_started,
+                on_file_activity_stopped=self._on_file_activity_stopped,
+                logger=self._logger,
+            )
+            self._file_activity_monitor.start()
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
@@ -525,7 +533,11 @@ class Buddy(Gtk.DrawingArea):
 
     def _start_typing_emote(self) -> bool:
         if (
-            self.state.current not in (MochiState.IDLE, MochiState.WATCHING)
+            self.state.current not in (
+                MochiState.IDLE,
+                MochiState.WATCHING,
+                MochiState.SEARCHING,
+            )
             or self._context_menu_open
             or (
                 self.state.current is MochiState.IDLE
@@ -564,14 +576,17 @@ class Buddy(Gtk.DrawingArea):
         self._logger.debug("YouTube watch-along stopped")
         if self._user_idle:
             self._begin_sleep()
-        else:
+        elif not self._maybe_resume_searching():
             self._schedule_computer_idle_emote()
 
     def _start_watching_emote(self) -> bool:
         if (
-            self.state.current is not MochiState.IDLE
+            self.state.current not in (MochiState.IDLE, MochiState.SEARCHING)
             or self._context_menu_open
-            or self.player.animation is not ANIMATIONS["idle"]
+            or (
+                self.state.current is MochiState.IDLE
+                and self.player.animation is not ANIMATIONS["idle"]
+            )
         ):
             return False
         if not self._transition_to(MochiState.WATCHING):
@@ -593,6 +608,51 @@ class Buddy(Gtk.DrawingArea):
         ):
             return False
         return self._start_watching_emote()
+
+    def _on_file_activity_started(self) -> None:
+        """Start Mochi's low-priority magnifying-glass file activity emote."""
+        self._start_searching_emote()
+
+    def _on_file_activity_stopped(self) -> None:
+        if self.state.current is not MochiState.SEARCHING:
+            return
+        self._transition_to(MochiState.IDLE)
+        self._play_animation("idle")
+        self._logger.debug("File activity emote stopped")
+        if not self._maybe_resume_watching():
+            self._schedule_computer_idle_emote()
+
+    def _start_searching_emote(self) -> bool:
+        if (
+            self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        if not self._transition_to(MochiState.SEARCHING):
+            return False
+        if self._computer_idle_source_id is not None:
+            GLib.source_remove(self._computer_idle_source_id)
+            self._computer_idle_source_id = None
+        self._play_animation("searching", after=None)
+        self._logger.debug("File activity emote started")
+        return True
+
+    def _maybe_resume_searching(self) -> bool:
+        if (
+            self._file_activity_monitor is None
+            or not self._file_activity_monitor.file_activity_active
+            or self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        return self._start_searching_emote()
+
+    def _maybe_resume_ambient_activity(self) -> bool:
+        # Ambient priority: watching > searching > idle. Typing and direct
+        # interaction sit above both and call this only after they finish.
+        return self._maybe_resume_watching() or self._maybe_resume_searching()
 
     def _on_user_idle(self) -> None:
         """Put Mochi to sleep when truly idle, except during active playback."""
@@ -621,6 +681,7 @@ class Buddy(Gtk.DrawingArea):
             MochiState.COMPUTER,
             MochiState.TYPING,
             MochiState.WATCHING,
+            MochiState.SEARCHING,
         ):
             return False
         if self.state.current is MochiState.TYPING and self._typing_monitor is not None:
@@ -882,7 +943,7 @@ class Buddy(Gtk.DrawingArea):
         else:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
-            if not self._maybe_resume_watching() and finished_animation.name in (
+            if not self._maybe_resume_ambient_activity() and finished_animation.name in (
                 "computer",
                 "typing_outro",
             ):
@@ -930,7 +991,7 @@ class Buddy(Gtk.DrawingArea):
         )
         self._logger.debug("Animation: %s -> idle (resumed)", previous)
         self.queue_draw()
-        self._maybe_resume_watching()
+        self._maybe_resume_ambient_activity()
 
     def _begin_sleep(self) -> None:
         self._cancel_active_emote()
@@ -1090,7 +1151,7 @@ class Buddy(Gtk.DrawingArea):
             self._config.save_position(self._placement.position)
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
-            self._maybe_resume_watching()
+            self._maybe_resume_ambient_activity()
 
     def _tick(self) -> bool:
         walking = self.state.current is MochiState.WALKING and not self._preview_mode

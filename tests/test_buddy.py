@@ -341,7 +341,7 @@ class BuddyTypingTests(unittest.TestCase):
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),
             _schedule_computer_idle_emote=Mock(),
-            _maybe_resume_watching=Mock(return_value=False),
+            _maybe_resume_ambient_activity=Mock(return_value=False),
             _logger=Mock(),
         )
 
@@ -422,6 +422,7 @@ class BuddyWatchingTests(unittest.TestCase):
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),
             _begin_sleep=Mock(),
+            _maybe_resume_searching=Mock(return_value=False),
             _schedule_computer_idle_emote=Mock(),
             _logger=Mock(),
         )
@@ -440,6 +441,7 @@ class BuddyWatchingTests(unittest.TestCase):
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),
             _begin_sleep=Mock(),
+            _maybe_resume_searching=Mock(return_value=False),
             _schedule_computer_idle_emote=Mock(),
             _logger=Mock(),
         )
@@ -448,6 +450,95 @@ class BuddyWatchingTests(unittest.TestCase):
 
         buddy._begin_sleep.assert_called_once_with()
         buddy._schedule_computer_idle_emote.assert_not_called()
+
+
+class BuddySearchingTests(unittest.TestCase):
+    def test_file_activity_starts_searching_from_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_searching_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.SEARCHING)
+        buddy._play_animation.assert_called_once_with("searching", after=None)
+
+    def test_searching_does_not_override_watching(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["watch"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertFalse(Buddy._start_searching_emote(buddy))
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
+
+    def test_watching_can_interrupt_searching(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.SEARCHING),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["searching"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_watching_emote(buddy))
+        buddy._transition_to.assert_called_once_with(MochiState.WATCHING)
+        buddy._play_animation.assert_called_once_with("watch", after=None)
+
+    def test_typing_can_interrupt_searching(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.SEARCHING),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["searching"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_typing_emote(buddy))
+        buddy._transition_to.assert_called_once_with(MochiState.TYPING)
+        buddy._play_animation.assert_called_once_with("typing_intro", after="typing_loop")
+
+    def test_file_activity_stop_returns_searching_to_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.SEARCHING),
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _maybe_resume_watching=Mock(return_value=False),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_file_activity_stopped(buddy)
+
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+        buddy._schedule_computer_idle_emote.assert_called_once_with()
+
+    def test_ambient_resume_prefers_watching_over_searching(self) -> None:
+        buddy = SimpleNamespace(
+            _maybe_resume_watching=Mock(return_value=True),
+            _maybe_resume_searching=Mock(return_value=True),
+        )
+
+        self.assertTrue(Buddy._maybe_resume_ambient_activity(buddy))
+        buddy._maybe_resume_watching.assert_called_once_with()
+        buddy._maybe_resume_searching.assert_not_called()
 
 
 class BuddyPresenceTests(unittest.TestCase):

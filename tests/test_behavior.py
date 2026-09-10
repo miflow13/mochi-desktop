@@ -46,9 +46,14 @@ class ClickReactionTests(unittest.TestCase):
         self.assertTrue(can_transition(MochiState.IDLE, MochiState.HEART))
         self.assertTrue(can_transition(MochiState.IDLE, MochiState.COMPUTER))
         self.assertTrue(can_transition(MochiState.IDLE, MochiState.WATCHING))
+        self.assertTrue(can_transition(MochiState.IDLE, MochiState.SEARCHING))
+        self.assertTrue(can_transition(MochiState.SEARCHING, MochiState.WATCHING))
+        self.assertTrue(can_transition(MochiState.SEARCHING, MochiState.TYPING))
+        self.assertFalse(can_transition(MochiState.WATCHING, MochiState.SEARCHING))
         self.assertTrue(can_transition(MochiState.WATCHING, MochiState.TYPING))
         self.assertFalse(can_transition(MochiState.WATCHING, MochiState.HEART))
         self.assertTrue(can_transition(MochiState.WATCHING, MochiState.SLEEPING))
+        self.assertTrue(can_transition(MochiState.SEARCHING, MochiState.SLEEPING))
         self.assertFalse(can_transition(MochiState.HEART, MochiState.COMPUTER))
 
     def test_rapid_clicks_queue_at_most_one_follow_up(self) -> None:

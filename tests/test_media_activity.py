@@ -5,6 +5,8 @@ from unittest.mock import Mock
 from mochi.media_activity import (
     MediaActivityMonitor,
     MprisMediaBackend,
+    _metadata_indicates_video_file,
+    _metadata_indicates_watchable_video,
     _metadata_indicates_youtube,
 )
 
@@ -96,28 +98,26 @@ class MprisMediaBackendTests(unittest.TestCase):
         )
         self.assertTrue(backend.sample_youtube_playing())
 
-    def test_chromium_playback_is_watchable_when_site_url_is_unavailable(self) -> None:
+    def test_generic_chromium_audio_is_not_watchable(self) -> None:
         backend = self._backend(
             {
                 "org.mpris.MediaPlayer2.chromium.instance123": {
                     "PlaybackStatus": "Playing",
-                    "Metadata": {"xesam:title": "A video"},
+                    "Metadata": {"xesam:title": "A song"},
                 }
             }
         )
-        self.assertTrue(backend.sample_youtube_playing())
-
-    def test_chrome_playback_is_watchable_when_site_url_is_unavailable(self) -> None:
+        self.assertFalse(backend.sample_youtube_playing())
+    def test_generic_chrome_audio_is_not_watchable(self) -> None:
         backend = self._backend(
             {
                 "org.mpris.MediaPlayer2.chrome.instance123": {
                     "PlaybackStatus": "Playing",
-                    "Metadata": {"xesam:title": "A video"},
+                    "Metadata": {"xesam:title": "A song"},
                 }
             }
         )
-        self.assertTrue(backend.sample_youtube_playing())
-
+        self.assertFalse(backend.sample_youtube_playing())
     def test_paused_youtube_is_not_playing(self) -> None:
         backend = self._backend(
             {
@@ -135,6 +135,40 @@ class MprisMediaBackendTests(unittest.TestCase):
         )
         self.assertFalse(_metadata_indicates_youtube({"xesam:title": "A video"}))
 
+    def test_youtube_music_is_not_watchable(self) -> None:
+        self.assertFalse(
+            _metadata_indicates_youtube(
+                {
+                    "xesam:url": "https://music.youtube.com/watch?v=abc",
+                    "xesam:title": "A song - YouTube Music",
+                }
+            )
+        )
+
+    def test_local_video_file_is_watchable(self) -> None:
+        metadata = {"xesam:url": "file:///home/user/Videos/movie.mkv"}
+        self.assertTrue(_metadata_indicates_video_file(metadata))
+        self.assertTrue(_metadata_indicates_watchable_video(metadata))
+
+    def test_direct_video_file_url_is_watchable(self) -> None:
+        self.assertTrue(
+            _metadata_indicates_video_file(
+                {"xesam:url": "https://example.test/video/demo.mp4"}
+            )
+        )
+
+    def test_audio_file_is_not_watchable(self) -> None:
+        self.assertFalse(
+            _metadata_indicates_watchable_video(
+                {
+                    "xesam:url": "file:///home/user/Music/song.mp3",
+                    "xesam:title": "song.mp3",
+                }
+            )
+        )
+
+    def test_video_filename_title_is_a_fallback(self) -> None:
+        self.assertTrue(_metadata_indicates_video_file({"xesam:title": "holiday.webm"}))
     def test_metadata_is_reduced_without_being_retained(self) -> None:
         secret_title = "private viewing title - YouTube"
         metadata = {"xesam:title": secret_title}

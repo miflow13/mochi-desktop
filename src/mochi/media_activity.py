@@ -11,6 +11,15 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 import logging
 import time
+from urllib.parse import unquote, urlparse
+
+VIDEO_FILE_EXTENSIONS = frozenset(
+    (
+        ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v",
+        ".ogv", ".flv", ".wmv", ".mpeg", ".mpg", ".ts",
+        ".m2ts", ".3gp",
+    )
+)
 
 
 class MprisMediaBackend:
@@ -105,7 +114,7 @@ class MprisMediaBackend:
             return False
 
         metadata = self._get_property(bus_name, "Metadata", Gio, GLib)
-        if _metadata_indicates_youtube(metadata):
+        if _metadata_indicates_watchable_video(metadata):
             return True
 
         # Chromium's Linux MPRIS implementation exposes playback/title/artist
@@ -113,7 +122,7 @@ class MprisMediaBackend:
         # For Chrome/Chromium we deliberately fall back to "browser media is
         # playing" so the watch-along works there. This can also react to
         # non-YouTube media playing in a Chromium-based browser.
-        return any(marker in bus_name.lower() for marker in (".chromium.", ".chrome."))
+        return False
 
     def _get_property(self, bus_name: str, property_name: str, Gio, GLib):
         reply = self._connection.call_sync(
@@ -218,7 +227,7 @@ class MediaActivityMonitor:
             self._last_playing_at = now
             if not self.youtube_playing:
                 self.youtube_playing = True
-                self._logger.debug("YouTube playback active")
+                self._logger.debug("Watchable video playback active")
                 self._on_youtube_started()
             return keep_running
 
@@ -234,7 +243,7 @@ class MediaActivityMonitor:
 
         self.youtube_playing = False
         self._last_playing_at = None
-        self._logger.debug("YouTube playback inactive")
+        self._logger.debug("Watchable video playback inactive")
         self._on_youtube_stopped()
         return keep_running
 
@@ -263,28 +272,77 @@ def _string_values(value) -> Iterable[str]:
             yield from _string_values(item)
 
 
+def _url_is_youtube_video(value: str) -> bool:
+    # Accept YouTube video URLs while deliberately excluding YouTube Music.
+    try:
+        parsed = urlparse(value)
+    except Exception:
+        return False
+
+    host = (parsed.hostname or "").lower().rstrip(".")
+    path = parsed.path.lower()
+
+    if host == "music.youtube.com":
+        return False
+    if host == "youtu.be" or host.endswith(".youtu.be"):
+        return bool(path.strip("/"))
+    if host == "youtube.com" or host.endswith(".youtube.com"):
+        return (
+            path == "/watch"
+            or path.startswith("/shorts/")
+            or path.startswith("/live/")
+            or path.startswith("/embed/")
+        )
+    return False
+
+
+def _looks_like_video_file(value: str) -> bool:
+    # Classify a local/direct file by extension without retaining its path.
+    try:
+        parsed = urlparse(value)
+        path = unquote(parsed.path if parsed.scheme else value)
+    except Exception:
+        path = value
+
+    lowered = path.lower().split("?", 1)[0].split("#", 1)[0]
+    return any(lowered.endswith(extension) for extension in VIDEO_FILE_EXTENSIONS)
+
+
 def _metadata_indicates_youtube(metadata) -> bool:
-    """Reduce transient MPRIS metadata to a boolean and discard the rest."""
+    # Reduce transient MPRIS metadata to a YouTube-video boolean.
     metadata = _deep_unpack(metadata)
     if not isinstance(metadata, dict):
         return False
 
-    for field in ("xesam:url", "mpris:artUrl"):
-        for value in _string_values(metadata.get(field)):
-            lowered = value.lower()
-            if (
-                "youtube.com/" in lowered
-                or "youtu.be/" in lowered
-                or "ytimg.com/" in lowered
-            ):
-                return True
+    for value in _string_values(metadata.get("xesam:url")):
+        if _url_is_youtube_video(value):
+            return True
 
-    # Some browser MPRIS implementations omit xesam:url but suffix the media
-    # title with the site name. Inspect the title only in this stack frame;
-    # never log it, return it, or store it.
     for title in _string_values(metadata.get("xesam:title")):
         lowered = title.strip().lower()
-        if lowered == "youtube" or lowered.endswith(" - youtube"):
+        if "youtube music" not in lowered and (lowered == "youtube" or lowered.endswith(" - youtube")):
             return True
 
     return False
+
+
+def _metadata_indicates_video_file(metadata) -> bool:
+    # Recognize direct/local video files while rejecting audio files.
+    metadata = _deep_unpack(metadata)
+    if not isinstance(metadata, dict):
+        return False
+
+    for value in _string_values(metadata.get("xesam:url")):
+        if _looks_like_video_file(value):
+            return True
+
+    for title in _string_values(metadata.get("xesam:title")):
+        if _looks_like_video_file(title):
+            return True
+
+    return False
+
+
+def _metadata_indicates_watchable_video(metadata) -> bool:
+    # Expose only the semantic boolean used by Mochi.
+    return _metadata_indicates_youtube(metadata) or _metadata_indicates_video_file(metadata)

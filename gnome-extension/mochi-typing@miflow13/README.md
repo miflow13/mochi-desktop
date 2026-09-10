@@ -7,8 +7,9 @@ It currently provides:
 - `Pulse` — anonymous keyboard activity used by the typing-reactive emote.
 - `UserIdle` — emitted after 120 seconds of real server-global inactivity.
 - `UserActive` — emitted on the first real input after `UserIdle`.
+- `FileBrowsingStarted` / `FileBrowsingStopped` — semantic focus state for supported file managers such as GNOME Files/Nautilus.
 
-Presence uses Mutter's server-global idle monitor. Typing inspects only the broad input-device type needed to distinguish keyboard activity. The extension never reads, stores, logs, or transmits key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, text, pointer coordinates, application content, or window titles.
+Presence uses Mutter's server-global idle monitor. Typing inspects only the broad input-device type needed to distinguish keyboard activity. File browsing is classified inside GNOME Shell from application identifiers and reduced to a yes/no state before it reaches Mochi. The extension never reads, stores, logs, or transmits key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, text, pointer coordinates, window titles, file names, folder names, paths, or application content.
 
 ## Local development install
 

@@ -21,6 +21,7 @@ REACTION_STATES = CLICK_REACTION_STATES | frozenset(
         MochiState.COMPUTER,
         MochiState.TYPING,
         MochiState.WATCHING,
+        MochiState.SEARCHING,
     )
 )
 
@@ -71,8 +72,16 @@ def can_transition(current: MochiState, requested: MochiState) -> bool:
     if requested is MochiState.WALKING:
         return current is MochiState.IDLE
     if requested is MochiState.TYPING:
-        return current in (MochiState.IDLE, MochiState.WATCHING)
-    if requested in (MochiState.HEART, MochiState.COMPUTER, MochiState.WATCHING):
+        return current in (
+            MochiState.IDLE,
+            MochiState.WATCHING,
+            MochiState.SEARCHING,
+        )
+    if requested is MochiState.WATCHING:
+        return current in (MochiState.IDLE, MochiState.SEARCHING)
+    if requested is MochiState.SEARCHING:
+        return current is MochiState.IDLE
+    if requested in (MochiState.HEART, MochiState.COMPUTER):
         return current is MochiState.IDLE
     if requested in REACTION_STATES:
         return current in (MochiState.IDLE, MochiState.WALKING)

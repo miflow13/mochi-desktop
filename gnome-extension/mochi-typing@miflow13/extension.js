@@ -10,6 +10,22 @@ const INTERFACE_NAME = 'io.github.mochi_desktop.Mochi.TypingMonitor';
 const TYPING_SIGNAL_NAME = 'Pulse';
 const USER_IDLE_SIGNAL_NAME = 'UserIdle';
 const USER_ACTIVE_SIGNAL_NAME = 'UserActive';
+const FILE_BROWSING_STARTED_SIGNAL_NAME = 'FileBrowsingStarted';
+const FILE_BROWSING_STOPPED_SIGNAL_NAME = 'FileBrowsingStopped';
+
+// These are application identifiers only. Window titles, folder names, file
+// names, and paths are never inspected or transmitted to Mochi.
+const FILE_MANAGER_MARKERS = [
+    'org.gnome.nautilus',
+    'nautilus',
+    'org.kde.dolphin',
+    'dolphin',
+    'thunar',
+    'nemo',
+    'pcmanfm',
+    'pcmanfm-qt',
+    'caja',
+];
 
 // Keep the existing two-minute sleep behavior, but drive it from Mutter's
 // server-global idle monitor instead of Mochi-local interaction timestamps.
@@ -22,9 +38,9 @@ const USER_IDLE_AFTER_MS = 120_000;
 // idle monitor to notice each new input event.
 //
 // Privacy boundary: we never inspect key symbols, keycodes, Unicode values,
-// modifiers, text, shortcuts, or application content. Typing is represented by
-// a zero-argument Pulse. Presence is represented only by zero-argument UserIdle
-// and UserActive signals.
+// modifiers, text, shortcuts, window titles, file names, folder names, or
+// application content. Typing and file browsing are reduced to zero-argument
+// semantic signals before they leave GNOME Shell.
 const POLL_INTERVAL_MS = 50;
 const EVENT_TIME_EPSILON_MS = 12;
 
@@ -38,6 +54,8 @@ export default class MochiTypingActivityExtension extends Extension {
         this._presenceIdleWatchId = 0;
         this._presenceActiveWatchId = 0;
         this._presenceIsIdle = false;
+        this._fileBrowsingActive = false;
+        this._focusChangedId = 0;
 
         this._lastDeviceChangedId = global.backend.connect(
             'last-device-changed',
@@ -51,16 +69,24 @@ export default class MochiTypingActivityExtension extends Extension {
 
         this._idleMonitor = global.backend.get_core_idle_monitor();
 
+        this._focusChangedId = global.display.connect(
+            'notify::focus-window',
+            () => this._updateFileBrowsingState(),
+        );
+        this._updateFileBrowsingState();
+
         this._nameOwnerId = Gio.bus_own_name_on_connection(
             this._connection,
             BUS_NAME,
             Gio.BusNameOwnerFlags.NONE,
             () => {
                 this._nameReady = true;
-                // If the idle watch fired before D-Bus ownership completed,
-                // publish the current semantic state once ownership is ready.
+                // If semantic state changed before D-Bus ownership completed,
+                // publish the current state once ownership is ready.
                 if (this._presenceIsIdle)
                     this._emitSignal(USER_IDLE_SIGNAL_NAME);
+                if (this._fileBrowsingActive)
+                    this._emitSignal(FILE_BROWSING_STARTED_SIGNAL_NAME);
             },
             () => {
                 this._nameReady = false;
@@ -96,8 +122,53 @@ export default class MochiTypingActivityExtension extends Extension {
                 null,
             );
         } catch (_error) {
-            // Never log input-event data. Dropping a semantic signal is safe.
+            // Never log input-, window-, or file-related data. Dropping a
+            // semantic signal is safe.
         }
+    }
+
+    _updateFileBrowsingState() {
+        const window = global.display.get_focus_window();
+        const active = this._isFileManagerWindow(window);
+        if (active === this._fileBrowsingActive)
+            return;
+
+        this._fileBrowsingActive = active;
+        this._emitSignal(
+            active
+                ? FILE_BROWSING_STARTED_SIGNAL_NAME
+                : FILE_BROWSING_STOPPED_SIGNAL_NAME,
+        );
+    }
+
+    _isFileManagerWindow(window) {
+        if (window === null)
+            return false;
+
+        const identities = [];
+        for (const methodName of [
+            'get_gtk_application_id',
+            'get_wm_class',
+            'get_wm_class_instance',
+        ]) {
+            try {
+                const method = window[methodName];
+                if (typeof method !== 'function')
+                    continue;
+                const value = method.call(window);
+                if (typeof value === 'string' && value.length > 0)
+                    identities.push(value.toLowerCase());
+            } catch (_error) {
+                // A missing identifier simply means this window cannot be
+                // classified by that field. Never inspect its title instead.
+            }
+        }
+
+        return identities.some(identity =>
+            FILE_MANAGER_MARKERS.some(marker =>
+                identity === marker || identity.includes(marker)
+            )
+        );
     }
 
     _armPresenceIdleWatch() {
@@ -192,10 +263,16 @@ export default class MochiTypingActivityExtension extends Extension {
             this._lastDeviceChangedId = 0;
         }
 
+        if (this._focusChangedId) {
+            global.display.disconnect(this._focusChangedId);
+            this._focusChangedId = 0;
+        }
+
         this._idleMonitor = null;
         this._lastInputEventAtMs = null;
         this._lastInputWasKeyboard = false;
         this._presenceIsIdle = false;
+        this._fileBrowsingActive = false;
         this._nameReady = false;
 
         if (this._nameOwnerId) {

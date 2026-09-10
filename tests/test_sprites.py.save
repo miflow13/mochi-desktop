@@ -1,4 +1,6 @@
-import unittest
+surfaces = SpriteAtlas().frames
+drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
+self.assertEqual(len(set(drag_pixels)), 8)import unittest
 
 import cairo
 
