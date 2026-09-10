@@ -17,6 +17,7 @@ class AudioBackend(Protocol):
 
 
 class SoundEvent(StrEnum):
+    CLICK = "click"
     PET = "pet"
     PICKUP = "pickup"
     DROP = "drop"
@@ -54,6 +55,7 @@ class SoundManager:
 
     DEFAULT_VOLUME = 0.6
     EVENT_FILES = {
+        SoundEvent.CLICK: "mochi_chirp_01.ogg",
         SoundEvent.PET: "pet.ogg",
         SoundEvent.PICKUP: "pickup.ogg",
         SoundEvent.DROP: "drop.ogg",
