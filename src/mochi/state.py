@@ -19,6 +19,7 @@ class MochiState(Enum):
     COMPUTER = auto()
     TYPING = auto()
     WATCHING = auto()
+    DANCING = auto()
     SEARCHING = auto()
     PICKUP = auto()
     DRAGGED = auto()
