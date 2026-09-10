@@ -1,9 +1,10 @@
 {
   "uuid": "mochi-typing@miflow13",
   "name": "Mochi Desktop Activity",
-  "description": "Sends privacy-safe typing, presence, and file-browsing activity signals to Mochi. No key identity, text, window title, file name, or path is transmitted.",
+  "description": "Sends privacy-safe activity signals to Mochi and owns Mochi's private developer shortcut. No typed content, key identity, file name, or path is transmitted.",
   "shell-version": [
     "50"
   ],
-  "version": 3
+  "version": 5,
+  "settings-schema": "org.gnome.shell.extensions.mochi-activity"
 }

@@ -1,6 +1,10 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
+
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
@@ -14,6 +18,8 @@ const FILE_BROWSING_STARTED_SIGNAL_NAME = 'FileBrowsingStarted';
 const FILE_BROWSING_STOPPED_SIGNAL_NAME = 'FileBrowsingStopped';
 const YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME = 'YouTubeFocusedStarted';
 const YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME = 'YouTubeFocusedStopped';
+const DEVELOPER_MENU_SIGNAL_NAME = 'DeveloperMenuRequested';
+const DEVELOPER_MENU_KEYBINDING = 'developer-menu-shortcut';
 
 // These are application identifiers only. Window titles, folder names, file
 // names, and paths are never inspected or transmitted to Mochi.
@@ -62,6 +68,19 @@ export default class MochiTypingActivityExtension extends Extension {
         this._youtubeFocusedActive = false;
         this._videoFocusHeartbeatId = 0;
         this._focusChangedId = 0;
+        this._settings = this.getSettings();
+
+        Main.wm.addKeybinding(
+            DEVELOPER_MENU_KEYBINDING,
+            this._settings,
+            Meta.KeyBindingFlags.NONE,
+            Shell.ActionMode.ALL,
+            () => {
+                // Diagnostic only: no key identity, typed data, or window data.
+                console.debug('[Mochi] Developer menu shortcut requested');
+                this._emitSignal(DEVELOPER_MENU_SIGNAL_NAME);
+            },
+        );
 
         this._lastDeviceChangedId = global.backend.connect(
             'last-device-changed',
@@ -331,6 +350,9 @@ export default class MochiTypingActivityExtension extends Extension {
     }
 
     disable() {
+        Main.wm.removeKeybinding(DEVELOPER_MENU_KEYBINDING);
+        this._settings = null;
+
         if (this._pollSourceId) {
             GLib.Source.remove(this._pollSourceId);
             this._pollSourceId = 0;

@@ -67,6 +67,88 @@ class MochiApplication(Gtk.Application):
             window.background {
                 background: unset;
             }
+
+            window.mochi-menu-window {
+                background: alpha(@window_bg_color, 0.97);
+                color: @window_fg_color;
+                border: 1px solid alpha(@window_fg_color, 0.10);
+                border-radius: 18px;
+                box-shadow: 0 12px 34px alpha(black, 0.28);
+            }
+
+            .mochi-menu-card {
+                background: transparent;
+            }
+
+            .mochi-menu-title {
+                font-size: 16px;
+                font-weight: 700;
+            }
+
+            .mochi-menu-subtitle,
+            .mochi-menu-hint,
+            .mochi-menu-value,
+            .mochi-menu-section {
+                color: alpha(@window_fg_color, 0.58);
+            }
+
+            .mochi-menu-subtitle,
+            .mochi-menu-hint {
+                font-size: 11px;
+            }
+
+            .mochi-menu-section {
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+            }
+
+            .mochi-menu-value {
+                font-size: 11px;
+            }
+
+            .mochi-menu-sprout {
+                font-size: 20px;
+            }
+
+            button.mochi-menu-row {
+                min-height: 36px;
+                padding: 4px 9px;
+                border-radius: 10px;
+                border: none;
+                box-shadow: none;
+                background: transparent;
+            }
+
+            button.mochi-menu-row:hover {
+                background: alpha(@window_fg_color, 0.07);
+            }
+
+            button.mochi-menu-row:active {
+                background: alpha(@window_fg_color, 0.12);
+            }
+
+            button.mochi-menu-danger {
+                color: @destructive_color;
+            }
+
+            .mochi-setting-row {
+                min-height: 30px;
+                padding: 0 8px;
+            }
+
+            scale.mochi-menu-scale {
+                margin: 0 6px 2px 6px;
+            }
+
+            .mochi-tuning-grid spinbutton {
+                min-width: 92px;
+            }
+
+            separator {
+                background: alpha(@window_fg_color, 0.09);
+                min-height: 1px;
+            }
             """
         )
         Gtk.StyleContext.add_provider_for_display(

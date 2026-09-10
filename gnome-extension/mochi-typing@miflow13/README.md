@@ -27,3 +27,7 @@ gnome-extensions info mochi-typing@miflow13
 ```
 
 The expected state is `ACTIVE`.
+
+## Developer shortcut
+
+`Ctrl + Alt + Shift + M` opens Mochi's private developer-tuning popover. The shortcut is handled inside GNOME Shell and emits only a zero-payload `DeveloperMenuRequested` signal; no key identity is sent to Mochi.

@@ -11,38 +11,50 @@ from mochi.typing_activity import (
 
 
 class TypingBurstDetectorTests(unittest.TestCase):
-    def test_one_event_does_not_start_typing(self) -> None:
+    def test_shortcut_sized_burst_does_not_start_typing(self) -> None:
         detector = TypingBurstDetector()
-        self.assertFalse(detector.record_activity(1.0))
+        for timestamp in (1.00, 1.03, 1.06, 1.09):
+            self.assertFalse(detector.record_activity(timestamp))
         self.assertFalse(detector.active)
 
-    def test_two_events_inside_window_start_typing(self) -> None:
+    def test_ultrafast_chord_does_not_start_typing(self) -> None:
         detector = TypingBurstDetector()
-        self.assertFalse(detector.record_activity(1.0))
-        self.assertTrue(detector.record_activity(1.2))
+        for timestamp in (1.00, 1.02, 1.04, 1.06, 1.08):
+            self.assertFalse(detector.record_activity(timestamp))
+        self.assertFalse(detector.active)
+
+    def test_sustained_five_event_burst_starts_typing(self) -> None:
+        detector = TypingBurstDetector()
+        for timestamp in (1.00, 1.10, 1.20, 1.30):
+            self.assertFalse(detector.record_activity(timestamp))
+        self.assertTrue(detector.record_activity(1.40))
         self.assertTrue(detector.active)
 
-    def test_old_event_rolls_out_of_burst_window(self) -> None:
+    def test_old_events_roll_out_of_burst_window(self) -> None:
         detector = TypingBurstDetector()
-        self.assertFalse(detector.record_activity(1.0))
-        self.assertFalse(detector.record_activity(2.0))
-        self.assertTrue(detector.record_activity(2.2))
+        for timestamp in (1.0, 1.1, 1.2, 2.5, 2.6, 2.7, 2.8):
+            self.assertFalse(detector.record_activity(timestamp))
+        self.assertTrue(detector.record_activity(2.9))
 
     def test_end_session_allows_fresh_burst(self) -> None:
         detector = TypingBurstDetector()
-        detector.record_activity(1.0)
-        self.assertTrue(detector.record_activity(1.2))
+        for timestamp in (1.0, 1.1, 1.2, 1.3):
+            self.assertFalse(detector.record_activity(timestamp))
+        self.assertTrue(detector.record_activity(1.4))
         self.assertTrue(detector.end_session())
         self.assertFalse(detector.end_session())
-        self.assertFalse(detector.record_activity(2.0))
-        self.assertTrue(detector.record_activity(2.2))
+        for timestamp in (2.0, 2.1, 2.2, 2.3):
+            self.assertFalse(detector.record_activity(timestamp))
+        self.assertTrue(detector.record_activity(2.4))
 
     def test_reset_discards_stale_activity(self) -> None:
         detector = TypingBurstDetector()
-        detector.record_activity(1.0)
+        for timestamp in (1.0, 1.1, 1.2, 1.3):
+            self.assertFalse(detector.record_activity(timestamp))
         detector.reset()
-        self.assertFalse(detector.record_activity(1.1))
-        self.assertTrue(detector.record_activity(1.2))
+        for timestamp in (1.4, 1.5, 1.6, 1.7):
+            self.assertFalse(detector.record_activity(timestamp))
+        self.assertTrue(detector.record_activity(1.8))
 
 
 class _FakeGLib:
@@ -52,8 +64,10 @@ class _FakeGLib:
         self._callbacks: dict[int, object] = {}
         self._next_source_id = 1
         self.removed: list[int] = []
+        self.last_timeout_ms: int | None = None
 
-    def timeout_add(self, _milliseconds: int, callback: object) -> int:
+    def timeout_add(self, milliseconds: int, callback: object) -> int:
+        self.last_timeout_ms = milliseconds
         source_id = self._next_source_id
         self._next_source_id += 1
         self._callbacks[source_id] = callback
@@ -131,39 +145,42 @@ class TypingActivityMonitorTests(unittest.TestCase):
     def _record_stop(self) -> None:
         self.stop_calls += 1
 
-    def test_one_event_does_not_trigger_typing(self) -> None:
-        self.backend.emit(1.0)
+    def _emit_sustained_typing_burst(self, start: float = 1.0) -> None:
+        for offset in (0.0, 0.1, 0.2, 0.3, 0.4):
+            self.backend.emit(start + offset)
+
+    def test_shortcut_sized_burst_does_not_trigger_typing(self) -> None:
+        for timestamp in (1.00, 1.03, 1.06, 1.09):
+            self.backend.emit(timestamp)
         self.assertFalse(self.monitor.active)
         self.assertEqual(self.activity_calls, 0)
 
-    def test_two_event_burst_triggers_typing(self) -> None:
-        self.backend.emit(1.0)
-        self.backend.emit(1.2)
+    def test_sustained_burst_triggers_typing(self) -> None:
+        self._emit_sustained_typing_burst()
         self.assertTrue(self.monitor.active)
         self.assertEqual(self.activity_calls, 1)
         self.assertEqual(self.glib.timer_count, 1)
+        self.assertEqual(self.glib.last_timeout_ms, 2250)
 
     def test_continued_activity_refreshes_same_session(self) -> None:
-        self.backend.emit(1.0)
-        self.backend.emit(1.2)
-        self.backend.emit(1.3)
+        self._emit_sustained_typing_burst()
+        self.backend.emit(1.5)
         self.assertEqual(self.activity_calls, 2)
         self.assertEqual(self.glib.timer_count, 1)
 
     def test_inactivity_stops_typing_once(self) -> None:
-        self.backend.emit(1.0)
-        self.backend.emit(1.2)
+        self._emit_sustained_typing_burst()
         self.glib.fire_latest_timer()
         self.assertFalse(self.monitor.active)
         self.assertEqual(self.stop_calls, 1)
 
-    def test_reset_requires_fresh_two_event_burst(self) -> None:
-        self.backend.emit(1.0)
-        self.backend.emit(1.2)
+    def test_reset_requires_fresh_sustained_burst(self) -> None:
+        self._emit_sustained_typing_burst()
         self.monitor.reset()
-        self.backend.emit(1.3)
+        for timestamp in (2.0, 2.1, 2.2, 2.3):
+            self.backend.emit(timestamp)
         self.assertFalse(self.monitor.active)
-        self.backend.emit(1.4)
+        self.backend.emit(2.4)
         self.assertTrue(self.monitor.active)
 
     def test_preferred_backend_prevents_fallback(self) -> None:

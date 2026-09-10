@@ -23,6 +23,7 @@ class SoundEvent(StrEnum):
     LEVEL_UP = "level_up"
     SPAWN = "spawn"
     EXIT = "exit"
+    MENU_OPEN = "menu_open"
 
 
 @dataclass(frozen=True)
@@ -59,12 +60,14 @@ class SoundManager:
         SoundEvent.LEVEL_UP: "level_up.ogg",
         SoundEvent.SPAWN: "spawn.ogg",
         SoundEvent.EXIT: "exit.ogg",
+        SoundEvent.MENU_OPEN: "menu_open.ogg",
     }
 
     # Keep lifecycle cues quieter than direct interaction sounds.
     EVENT_GAINS = {
         SoundEvent.SPAWN: 0.35,
         SoundEvent.EXIT: 0.28,
+        SoundEvent.MENU_OPEN: 0.22,
     }
 
     def __init__(
