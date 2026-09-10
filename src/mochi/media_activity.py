@@ -33,14 +33,33 @@ class MprisMediaBackend:
     PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player"
     PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
     PLAYER_PREFIX = "org.mpris.MediaPlayer2."
+    ACTIVITY_BUS_NAME = "io.github.mochi_desktop.Mochi.TypingMonitor"
+    ACTIVITY_OBJECT_PATH = "/io/github/mochi_desktop/Mochi/TypingMonitor"
+    ACTIVITY_INTERFACE_NAME = "io.github.mochi_desktop.Mochi.TypingMonitor"
+    YOUTUBE_FOCUSED_STARTED_SIGNAL = "YouTubeFocusedStarted"
+    YOUTUBE_FOCUSED_STOPPED_SIGNAL = "YouTubeFocusedStopped"
 
     def __init__(self) -> None:
         self._connection = None
+        self._youtube_focused = False
+        self._watching_via_youtube_focus = False
+        self._on_youtube_focus_changed: Callable[[bool], None] | None = None
+        self._youtube_focus_started_subscription_id: int | None = None
+        self._youtube_focus_stopped_subscription_id: int | None = None
         self.last_error: str | None = None
 
     @property
     def active(self) -> bool:
         return self._connection is not None
+
+    @property
+    def watching_via_youtube_focus(self) -> bool:
+        return self._watching_via_youtube_focus
+
+    def set_youtube_focus_changed_callback(
+        self, callback: Callable[[bool], None] | None
+    ) -> None:
+        self._on_youtube_focus_changed = callback
 
     @staticmethod
     def _load_gio():
@@ -61,13 +80,74 @@ class MprisMediaBackend:
             if self._connection is None:
                 self.last_error = "session D-Bus connection is unavailable"
                 return False
+            self._subscribe_youtube_focus()
         except Exception as exc:
             self.last_error = f"{type(exc).__name__}: {exc}"
             self._connection = None
             return False
         return True
 
+    def _subscribe_youtube_focus(self) -> None:
+        connection = self._connection
+        if connection is None or not hasattr(connection, 'signal_subscribe'):
+            return
+        try:
+            Gio, _GLib = self._load_gio()
+            flags = Gio.DBusSignalFlags.NONE
+            self._youtube_focus_started_subscription_id = int(
+                connection.signal_subscribe(
+                    self.ACTIVITY_BUS_NAME,
+                    self.ACTIVITY_INTERFACE_NAME,
+                    self.YOUTUBE_FOCUSED_STARTED_SIGNAL,
+                    self.ACTIVITY_OBJECT_PATH,
+                    None,
+                    flags,
+                    self._on_youtube_focused_started,
+                )
+            )
+            self._youtube_focus_stopped_subscription_id = int(
+                connection.signal_subscribe(
+                    self.ACTIVITY_BUS_NAME,
+                    self.ACTIVITY_INTERFACE_NAME,
+                    self.YOUTUBE_FOCUSED_STOPPED_SIGNAL,
+                    self.ACTIVITY_OBJECT_PATH,
+                    None,
+                    flags,
+                    self._on_youtube_focused_stopped,
+                )
+            )
+        except Exception:
+            # Metadata-based detection still works if the Shell helper is absent.
+            self._youtube_focus_started_subscription_id = None
+            self._youtube_focus_stopped_subscription_id = None
+
+    def _on_youtube_focused_started(self, *_ignored) -> None:
+        changed = not self._youtube_focused
+        self._youtube_focused = True
+        if changed and self._on_youtube_focus_changed is not None:
+            self._on_youtube_focus_changed(True)
+
+    def _on_youtube_focused_stopped(self, *_ignored) -> None:
+        changed = self._youtube_focused
+        self._youtube_focused = False
+        if changed and self._on_youtube_focus_changed is not None:
+            self._on_youtube_focus_changed(False)
+
     def stop(self) -> None:
+        if self._connection is not None and hasattr(self._connection, 'signal_unsubscribe'):
+            for subscription_id in (
+                self._youtube_focus_started_subscription_id,
+                self._youtube_focus_stopped_subscription_id,
+            ):
+                if subscription_id is not None:
+                    try:
+                        self._connection.signal_unsubscribe(subscription_id)
+                    except Exception:
+                        pass
+        self._youtube_focus_started_subscription_id = None
+        self._youtube_focus_stopped_subscription_id = None
+        self._youtube_focused = False
+        self._watching_via_youtube_focus = False
         self._connection = None
 
     def sample_youtube_playing(self) -> bool | None:
@@ -114,14 +194,36 @@ class MprisMediaBackend:
             return False
 
         metadata = self._get_property(bus_name, "Metadata", Gio, GLib)
-        if _metadata_indicates_watchable_video(metadata):
+        lowered_bus_name = bus_name.lower()
+        is_browser = any(
+            marker in lowered_bus_name
+            for marker in (".chromium.", ".chrome.", ".firefox.")
+        )
+
+        # Local/direct video files are playback-driven, not focus-driven.
+        if _metadata_indicates_video_file(metadata):
+            self._watching_via_youtube_focus = False
             return True
 
-        # Chromium's Linux MPRIS implementation exposes playback/title/artist
-        # but not the page URL, so it cannot identify the originating website.
-        # For Chrome/Chromium we deliberately fall back to "browser media is
-        # playing" so the watch-along works there. This can also react to
-        # non-YouTube media playing in a Chromium-based browser.
+        # Browser YouTube represents the user actively watching something.
+        # Require the privacy-reduced YouTube focus signal so tabbing away
+        # exits WATCHING even if the video continues playing in the background.
+        if _metadata_indicates_youtube(metadata) and is_browser:
+            self._watching_via_youtube_focus = True
+            return self._youtube_focused
+
+        # Non-browser players that clearly identify YouTube can still use
+        # metadata alone.
+        if _metadata_indicates_youtube(metadata):
+            self._watching_via_youtube_focus = False
+            return True
+
+        # Chromium on this machine exposes no identifying URL/art metadata.
+        # MPRIS Playing + focused YouTube is the precise fallback.
+        if self._youtube_focused and is_browser:
+            self._watching_via_youtube_focus = True
+            return True
+
         return False
 
     def _get_property(self, bus_name: str, property_name: str, Gio, GLib):
@@ -161,6 +263,10 @@ class MediaActivityMonitor:
         self._on_youtube_stopped = on_youtube_stopped
         self._logger = logger or logging.getLogger(__name__)
         self._backend = backend or MprisMediaBackend()
+        if hasattr(self._backend, "set_youtube_focus_changed_callback"):
+            self._backend.set_youtube_focus_changed_callback(
+                self._on_youtube_focus_changed
+            )
         self._clock = clock
         self._source_id: int | None = None
         self._last_playing_at: float | None = None
@@ -213,6 +319,33 @@ class MediaActivityMonitor:
         self.youtube_playing = False
         self._last_playing_at = None
 
+    def _on_youtube_focus_changed(self, active: bool) -> None:
+        if not self.available:
+            return
+
+        if active:
+            # Starting/re-entering YouTube should feel immediate rather than
+            # waiting for the next 1-second MPRIS poll.
+            self._poll()
+            return
+
+        if (
+            self.youtube_playing
+            and bool(getattr(self._backend, "watching_via_youtube_focus", False))
+        ):
+            # Focus loss is intentional context loss, not a playback hiccup.
+            # Stop immediately; keep STOP_GRACE_SECONDS only for pause/seek
+            # flicker while the user remains in the video context.
+            self._stop_watching_now("YouTube focus lost")
+
+    def _stop_watching_now(self, reason: str) -> None:
+        if not self.youtube_playing:
+            return
+        self.youtube_playing = False
+        self._last_playing_at = None
+        self._logger.debug("Watchable video playback inactive: %s", reason)
+        self._on_youtube_stopped()
+
     def _poll(self) -> bool:
         # GLib timeout callbacks continue while they return a truthy value.
         # Keeping this method GI-free also makes the debounce logic easy to test.
@@ -241,10 +374,7 @@ class MediaActivityMonitor:
         if now - last_playing_at < self.STOP_GRACE_SECONDS:
             return keep_running
 
-        self.youtube_playing = False
-        self._last_playing_at = None
-        self._logger.debug("Watchable video playback inactive")
-        self._on_youtube_stopped()
+        self._stop_watching_now("playback grace expired")
         return keep_running
 
 

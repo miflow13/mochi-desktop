@@ -597,6 +597,10 @@ class Buddy(Gtk.DrawingArea):
             self._begin_sleep()
         elif not self._maybe_resume_searching():
             self._schedule_computer_idle_emote()
+        if self._user_idle:
+            self._begin_sleep()
+        elif not self._maybe_resume_searching():
+            self._schedule_computer_idle_emote()
 
     def _start_watching_emote(self) -> bool:
         if (

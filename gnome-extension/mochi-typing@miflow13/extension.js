@@ -12,6 +12,8 @@ const USER_IDLE_SIGNAL_NAME = 'UserIdle';
 const USER_ACTIVE_SIGNAL_NAME = 'UserActive';
 const FILE_BROWSING_STARTED_SIGNAL_NAME = 'FileBrowsingStarted';
 const FILE_BROWSING_STOPPED_SIGNAL_NAME = 'FileBrowsingStopped';
+const YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME = 'YouTubeFocusedStarted';
+const YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME = 'YouTubeFocusedStopped';
 
 // These are application identifiers only. Window titles, folder names, file
 // names, and paths are never inspected or transmitted to Mochi.
@@ -43,6 +45,8 @@ const USER_IDLE_AFTER_MS = 120_000;
 // semantic signals before they leave GNOME Shell.
 const POLL_INTERVAL_MS = 50;
 const EVENT_TIME_EPSILON_MS = 12;
+const VIDEO_FOCUS_HEARTBEAT_MS = 1_000;
+const BROWSER_MARKERS = ['google-chrome', 'chromium', 'chrome', 'firefox'];
 
 export default class MochiTypingActivityExtension extends Extension {
     enable() {
@@ -55,6 +59,8 @@ export default class MochiTypingActivityExtension extends Extension {
         this._presenceActiveWatchId = 0;
         this._presenceIsIdle = false;
         this._fileBrowsingActive = false;
+        this._youtubeFocusedActive = false;
+        this._videoFocusHeartbeatId = 0;
         this._focusChangedId = 0;
 
         this._lastDeviceChangedId = global.backend.connect(
@@ -71,9 +77,21 @@ export default class MochiTypingActivityExtension extends Extension {
 
         this._focusChangedId = global.display.connect(
             'notify::focus-window',
-            () => this._updateFileBrowsingState(),
+            () => {
+                this._updateFileBrowsingState();
+                this._updateYouTubeFocusedState(false);
+            },
         );
         this._updateFileBrowsingState();
+        this._updateYouTubeFocusedState(false);
+        this._videoFocusHeartbeatId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            VIDEO_FOCUS_HEARTBEAT_MS,
+            () => {
+                this._updateYouTubeFocusedState(true);
+                return GLib.SOURCE_CONTINUE;
+            },
+        );
 
         this._nameOwnerId = Gio.bus_own_name_on_connection(
             this._connection,
@@ -87,6 +105,11 @@ export default class MochiTypingActivityExtension extends Extension {
                     this._emitSignal(USER_IDLE_SIGNAL_NAME);
                 if (this._fileBrowsingActive)
                     this._emitSignal(FILE_BROWSING_STARTED_SIGNAL_NAME);
+                this._emitSignal(
+                    this._youtubeFocusedActive
+                        ? YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME
+                        : YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME,
+                );
             },
             () => {
                 this._nameReady = false;
@@ -171,6 +194,65 @@ export default class MochiTypingActivityExtension extends Extension {
         );
     }
 
+    _updateYouTubeFocusedState(emitHeartbeat) {
+        const window = global.display.get_focus_window();
+        const active = this._isFocusedYouTubeWindow(window);
+        const changed = active !== this._youtubeFocusedActive;
+
+        this._youtubeFocusedActive = active;
+        if (!changed && !emitHeartbeat)
+            return;
+
+        // Privacy boundary: only this boolean leaves GNOME Shell. The title
+        // itself is never logged, stored, or sent over D-Bus.
+        this._emitSignal(
+            active
+                ? YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME
+                : YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME,
+        );
+    }
+
+    _isFocusedYouTubeWindow(window) {
+        if (window === null)
+            return false;
+
+        const identities = [];
+        for (const methodName of [
+            'get_gtk_application_id',
+            'get_wm_class',
+            'get_wm_class_instance',
+        ]) {
+            try {
+                const method = window[methodName];
+                if (typeof method !== 'function')
+                    continue;
+                const value = method.call(window);
+                if (typeof value === 'string' && value.length > 0)
+                    identities.push(value.toLowerCase());
+            } catch (_error) {
+                // Missing identifiers simply make this window unclassifiable.
+            }
+        }
+
+        const isBrowser = identities.some(identity =>
+            BROWSER_MARKERS.some(marker => identity.includes(marker))
+        );
+        if (!isBrowser)
+            return false;
+
+        // Chrome's MPRIS session does not expose the page URL on this system.
+        // Inspect the focused window title only long enough to reduce it to a
+        // boolean. Never retain or transmit the title.
+        let title = '';
+        try {
+            title = String(window.get_title() ?? '').toLowerCase();
+        } catch (_error) {
+            return false;
+        }
+
+        return title.includes('youtube') && !title.includes('youtube music');
+    }
+
     _armPresenceIdleWatch() {
         if (this._idleMonitor === null || this._presenceIdleWatchId)
             return;
@@ -246,6 +328,10 @@ export default class MochiTypingActivityExtension extends Extension {
             GLib.Source.remove(this._pollSourceId);
             this._pollSourceId = 0;
         }
+        if (this._videoFocusHeartbeatId) {
+            GLib.Source.remove(this._videoFocusHeartbeatId);
+            this._videoFocusHeartbeatId = 0;
+        }
 
         if (this._idleMonitor !== null) {
             if (this._presenceIdleWatchId) {
@@ -273,6 +359,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._lastInputWasKeyboard = false;
         this._presenceIsIdle = false;
         this._fileBrowsingActive = false;
+        this._youtubeFocusedActive = false;
         this._nameReady = false;
 
         if (this._nameOwnerId) {

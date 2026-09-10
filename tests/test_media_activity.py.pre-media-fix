@@ -97,7 +97,6 @@ class MprisMediaBackendTests(unittest.TestCase):
                 }
             }
         )
-        backend._youtube_focused = True
         self.assertTrue(backend.sample_youtube_playing())
 
     def test_generic_chromium_audio_is_not_watchable(self) -> None:
@@ -226,7 +225,6 @@ class MprisMediaBackendTests(unittest.TestCase):
                 }
             }
         )
-        backend._youtube_focused = True
         self.assertTrue(backend.sample_youtube_playing())
         self.assertNotIn(secret_title, repr(vars(backend)))
 

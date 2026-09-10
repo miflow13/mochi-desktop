@@ -125,6 +125,7 @@ class BuddyHeldSwayTests(unittest.TestCase):
         buddy = SimpleNamespace(
             state=SimpleNamespace(current=MochiState.DRAGGED),
             _preview_mode=False,
+            TICK_MS=Buddy.TICK_MS,
             _placement=SimpleNamespace(layer_shell_enabled=True),
             _last_drag_update_time=10.0,
             _current_animation="sway_idle",
