@@ -135,11 +135,18 @@ class WindowPlacement:
         if coordinates is None:
             return self.position
 
-        # Never fight Mutter/XWayland while the user is actively holding Mochi.
-        # Track the compositor-owned position freely, even if it crosses the
-        # safety margin. The next sync after button release clamps once.
         if primary_button_pressed(self.window):
-            self.position = Position(round(coordinates[0]), round(coordinates[1]))
+            # Mutter/XWayland owns the native drag. Keep vertical movement fully
+            # compositor-controlled, but enforce the left/right screen bounds
+            # live so Mochi can never cross either side of the monitor.
+            clamped = self.clamp_position(*coordinates)
+            constrained_x = clamped.x
+            current_y = round(coordinates[1])
+            self.position = Position(constrained_x, current_y)
+
+            if round(coordinates[0]) != constrained_x:
+                move_window(self.window, constrained_x, current_y)
+
             return self.position
 
         clamped = self.clamp_position(*coordinates)
