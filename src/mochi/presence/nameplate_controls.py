@@ -10,6 +10,12 @@ already calls every frame or on every meaningful change:
 
 This keeps the nameplate's position update on Mochi's proven cadence instead
 of an independent movement/polling system.
+
+The nameplate and the Mochi Sense speech bubble share the same anchor point
+above Mochi's sprite, so they are mutually exclusive: whenever the speech
+bubble has something to say, it replaces the nameplate; once the bubble
+finishes (or is dismissed), the nameplate reappears. This is synced from the
+same `_tick()` pass rather than a dedicated timer/signal.
 """
 
 from __future__ import annotations
@@ -43,18 +49,40 @@ class NameplateMixin:
                 # `window.present()` in app.py). Showing any child surface
                 # earlier crashes GTK with "widget isn't inside a toplevel".
                 self._nameplate_shown = True
-                self._nameplate.show()
-            self._nameplate.update_position()
+            if self._nameplate_shown:
+                self._sync_nameplate_with_speech()
         return result
+
+    def _sync_nameplate_with_speech(self) -> None:
+        """Keep the nameplate and speech bubble mutually exclusive.
+
+        They occupy the same anchor point above Mochi, so only one is ever
+        shown at a time: the speech bubble takes priority while it has
+        something to say, and the nameplate returns as soon as the bubble
+        hides. Checked every tick instead of via a dedicated timer/callback.
+        """
+        nameplate = self._nameplate
+        if nameplate is None:
+            return
+        bubble = getattr(self, "_presence_bubble", None)
+        bubble_visible = bool(bubble is not None and bubble.visible)
+        if bubble_visible:
+            if nameplate.visible:
+                nameplate.hide()
+            return
+        if not nameplate.visible:
+            nameplate.show()
+        else:
+            nameplate.update_position()
 
     def _on_drag_update(self, gesture, offset_x: float, offset_y: float) -> None:
         super()._on_drag_update(gesture, offset_x, offset_y)
-        if self._nameplate is not None:
+        if self._nameplate is not None and self._nameplate.visible:
             self._nameplate.update_position()
 
     def _change_size(self, scale) -> None:
         super()._change_size(scale)
-        if self._nameplate is not None:
+        if self._nameplate is not None and self._nameplate.visible:
             self._nameplate.update_position()
 
     def shutdown_presence(self) -> None:
