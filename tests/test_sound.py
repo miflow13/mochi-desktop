@@ -22,11 +22,11 @@ class SoundManagerTests(unittest.TestCase):
     def test_volume_and_mute_apply_globally(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "pet.ogg").touch()
+            (root / "pet.wav").touch()
             backend = FakeBackend()
             manager = SoundManager(volume=0.4, asset_root=root, backend=backend)
             self.assertTrue(manager.play(SoundEvent.PET))
-            self.assertEqual(backend.calls, [(root / "pet.ogg", 0.4)])
+            self.assertEqual(backend.calls, [(root / "pet.wav", 0.4)])
 
             manager.set_muted(True)
             self.assertFalse(manager.play(SoundEvent.PET))
