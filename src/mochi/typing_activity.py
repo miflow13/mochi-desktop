@@ -325,19 +325,20 @@ class AtspiTextActivityBackend:
     """Safe AT-SPI text/caret activity backend.
 
     Coverage depends on applications exposing accessibility events. Event
-    contents and accessible source objects are never inspected. This is the
-    default Wayland-safe runtime backend because compositor-wide keyboard
-    monitoring is privileged for screen-reader use on GNOME.
+    contents and accessible source objects are never inspected. Runtime use can
+    disable broad text-changed events and listen only for caret movement so
+    Mochi's own changing labels cannot feed activity back into the detector.
     """
 
     name = "AT-SPI text/caret activity"
     TEXT_CHANGED_EVENT = "object:text-changed"
     CARET_MOVED_EVENT = "object:text-caret-moved"
 
-    def __init__(self) -> None:
+    def __init__(self, *, allow_text_changed: bool = True) -> None:
         self._listener = None
         self._registered_events: list[str] = []
         self._on_activity: Callable[[], None] | None = None
+        self._allow_text_changed = bool(allow_text_changed)
         self.last_error: str | None = None
 
     @property
@@ -360,7 +361,10 @@ class AtspiTextActivityBackend:
             self._listener = listener
             self._on_activity = on_activity
 
-            for event_name in (self.TEXT_CHANGED_EVENT, self.CARET_MOVED_EVENT):
+            event_names = [self.CARET_MOVED_EVENT]
+            if self._allow_text_changed:
+                event_names.insert(0, self.TEXT_CHANGED_EVENT)
+            for event_name in event_names:
                 if listener.register(event_name):
                     self._registered_events.append(event_name)
 
@@ -391,10 +395,11 @@ class AtspiTextActivityBackend:
         # Inspect only the event category. Never inspect source, inserted text,
         # key values, or any other accessibility payload.
         event_type = getattr(event, "type", "") or ""
-        if not (
-            event_type.startswith(self.TEXT_CHANGED_EVENT)
-            or event_type.startswith(self.CARET_MOVED_EVENT)
-        ):
+        caret_event = event_type.startswith(self.CARET_MOVED_EVENT)
+        text_event = self._allow_text_changed and event_type.startswith(
+            self.TEXT_CHANGED_EVENT
+        )
+        if not (caret_event or text_event):
             return
 
         callback = self._on_activity
@@ -428,11 +433,13 @@ class TypingActivityMonitor:
         self._detector = detector or TypingBurstDetector()
         # Prefer the tiny GNOME Shell companion extension for broad activity.
         # It sends a zero-argument D-Bus Pulse and never transports key data.
-        # AT-SPI text/caret activity remains a limited fallback when the
-        # extension is not installed or enabled.
+        # AT-SPI caret activity remains a limited fallback when the extension is
+        # not installed or enabled. Broad text-changed events are disabled in
+        # the runtime fallback because Mochi's own animated speech labels can
+        # otherwise generate a self-sustaining feedback loop.
         self._backends = tuple(backends) if backends is not None else (
             GnomeShellTypingPulseBackend(),
-            AtspiTextActivityBackend(),
+            AtspiTextActivityBackend(allow_text_changed=False),
         )
         self._logger = logger or logging.getLogger(__name__)
 
