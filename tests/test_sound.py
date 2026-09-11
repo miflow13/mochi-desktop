@@ -13,7 +13,7 @@ class FakeBackend:
         self.calls.append((path, volume))
 
 
-class SoundManagerTests(unittest.TestCase):
+class FakePitchBackend(FakeBackend):\n    def __init__(self) -> None:\n        super().__init__()\n        self.pitched_calls: list[tuple[Path, float, float, int]] = []\n\n    def play_pitched(\n        self, path: Path, volume: float, pitch_ratio: float, source_rate: int\n    ) -> None:\n        self.pitched_calls.append((path, volume, pitch_ratio, source_rate))\n\n\nclass SoundManagerTests(unittest.TestCase):
     def test_missing_placeholder_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             manager = SoundManager(asset_root=Path(directory), backend=FakeBackend())
