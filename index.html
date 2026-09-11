@@ -23,6 +23,7 @@
 
     <nav aria-label="Main navigation">
       <a href="#about">About</a>
+      <a href="#features">Features</a>
       <a href="#install">Install</a>
       <a href="https://github.com/miflow13/mochi-desktop" target="_blank" rel="noreferrer">GitHub</a>
     </nav>
@@ -33,8 +34,8 @@
       <p class="eyebrow">Early public alpha · Fedora + GNOME</p>
       <h1>Soft, playful, and quietly alive.</h1>
       <p class="hero-copy">
-        Meet Mochi — a handcrafted pixel companion who wanders, reacts, chats,
-        sleeps, and notices the shape of activity around your Linux desktop.
+        Meet Mochi — a handcrafted pixel companion who lives on your Linux desktop,
+        notices the rhythm of what you're doing, and responds with small bits of personality.
       </p>
 
       <div class="hero-actions">
@@ -51,28 +52,199 @@
 
     <section class="overview" id="about">
       <div class="section-intro">
-        <p class="eyebrow">Designed with care</p>
-        <h2>A little creature, not another dashboard.</h2>
+        <p class="eyebrow">What is Mochi?</p>
+        <h2>A companion, not another dashboard.</h2>
         <p>
-          Mochi is made to feel at home on your desktop: expressive enough to have
-          personality, lightweight enough to leave running, and easy to ignore when
-          you're busy.
+          Mochi is a small Linux desktop companion built to feel present without demanding
+          your attention. He idles, wanders, reacts to broad desktop activity, and settles
+          back down when the moment passes — more like a tiny coworker than a widget.
         </p>
       </div>
 
       <div class="feature-grid">
         <article class="feature-card">
+          <span class="card-kicker">Made by hand</span>
           <h3>Handcrafted</h3>
-          <p>Original pixel-art sprites and animations made frame by frame with love.</p>
+          <p>Every sprite and animation is original pixel art drawn frame by frame in Pixelorama.</p>
         </article>
         <article class="feature-card">
+          <span class="card-kicker">Ambient by design</span>
           <h3>Mochi Sense</h3>
-          <p>Privacy-first local awareness lets Mochi react to broad activity without reading what you type.</p>
+          <p>Local desktop signals help Mochi notice broad activity without needing to read the words you type.</p>
         </article>
         <article class="feature-card">
+          <span class="card-kicker">Built for Linux</span>
           <h3>Linux-native spirit</h3>
-          <p>Built around GTK4, GNOME, Wayland/XWayland, and the tiny details of a real Linux desktop.</p>
+          <p>Python, GTK4, PyGObject, Cairo, GNOME, Wayland, and XWayland are part of Mochi's natural habitat.</p>
         </article>
+      </div>
+    </section>
+
+    <section class="story-section" id="features">
+      <div class="story-copy">
+        <p class="eyebrow">Feels alive</p>
+        <h2>Small reactions that add up to a character.</h2>
+        <p>
+          Mochi is built around states and transitions instead of a pile of disconnected
+          animations. Typing, terminal work, music, video, direct interaction, sleep, and
+          idle time can each become a little moment — then Mochi finds his way back to normal.
+        </p>
+        <p>
+          The goal is simple: enough awareness to feel responsive, but never so much motion
+          or chatter that Mochi competes with the work on your screen.
+        </p>
+      </div>
+
+      <div class="motion-showcase" aria-label="Mochi animation examples">
+        <figure class="motion-card motion-card-large">
+          <div class="motion-visual">
+            <img src="animation-gifs/idle.gif" alt="Mochi idling" />
+          </div>
+          <figcaption>
+            <span>Idle</span>
+            <p>Quiet breathing, blinking, wandering, and occasional thoughts.</p>
+          </figcaption>
+        </figure>
+        <figure class="motion-card">
+          <div class="motion-visual">
+            <img src="animation-gifs/dragged.gif" alt="Mochi being dragged" />
+          </div>
+          <figcaption>
+            <span>Interactive</span>
+            <p>Pick him up, drag him around, click, hover, and see how he responds.</p>
+          </figcaption>
+        </figure>
+        <figure class="motion-card">
+          <div class="motion-visual">
+            <img src="animation-gifs/sleeping.gif" alt="Mochi sleeping" />
+          </div>
+          <figcaption>
+            <span>Rest</span>
+            <p>Put Mochi to sleep when you want an even quieter desktop.</p>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="behavior-section">
+      <div class="section-intro compact-intro">
+        <p class="eyebrow">Ambient reactions</p>
+        <h2>Mochi notices the shape of your day.</h2>
+        <p>
+          The public alpha already includes a growing set of contextual and direct reactions.
+          They are designed to be subtle, interruptible, and easy to leave alone.
+        </p>
+      </div>
+
+      <div class="behavior-grid">
+        <article class="behavior-card">
+          <span class="behavior-icon">⌨</span>
+          <h3>Typing</h3>
+          <p>Mochi can notice typing activity and occasionally react without reading the text itself.</p>
+        </article>
+        <article class="behavior-card">
+          <span class="behavior-icon">›_</span>
+          <h3>Terminal</h3>
+          <p>When terminal work becomes the focus, Mochi can settle into his own little computer moment.</p>
+        </article>
+        <article class="behavior-card">
+          <span class="behavior-icon">♪</span>
+          <h3>Music</h3>
+          <p>Playing music can trigger a dance state instead of another generic idle loop.</p>
+        </article>
+        <article class="behavior-card">
+          <span class="behavior-icon">▶</span>
+          <h3>Video</h3>
+          <p>Supported media context lets Mochi hang out while you watch without treating every browser as video.</p>
+        </article>
+        <article class="behavior-card">
+          <span class="behavior-icon">↔</span>
+          <h3>Edge roam</h3>
+          <p>Send Mochi to the nearest screen edge and let him wander around the perimeter.</p>
+        </article>
+        <article class="behavior-card">
+          <span class="behavior-icon">♡</span>
+          <h3>Direct play</h3>
+          <p>Clicks, double-clicks, hovering, pickup, dragging, dropping, sleep, and wake all have their own responses.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="sense-section">
+      <div class="sense-panel">
+        <div class="sense-copy">
+          <p class="eyebrow">Mochi Sense</p>
+          <h2>Awareness without becoming surveillance.</h2>
+          <p>
+            Mochi's ambient system is intentionally built around broad local signals: things like
+            typing activity, app categories, media state, and direct interaction. The point is to
+            understand enough context to choose a fitting reaction — not to inspect the content of your work.
+          </p>
+        </div>
+
+        <div class="sense-points">
+          <div class="sense-point">
+            <span>01</span>
+            <div>
+              <h3>Detect</h3>
+              <p>A meaningful local activity starts.</p>
+            </div>
+          </div>
+          <div class="sense-point">
+            <span>02</span>
+            <div>
+              <h3>React</h3>
+              <p>Mochi enters the matching state without restarting it over and over.</p>
+            </div>
+          </div>
+          <div class="sense-point">
+            <span>03</span>
+            <div>
+              <h3>Recover</h3>
+              <p>When the context ends, Mochi returns to the right idle behavior.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="linux-section">
+      <div class="linux-copy">
+        <p class="eyebrow">Linux first</p>
+        <h2>Built on the desktop it actually lives on.</h2>
+        <p>
+          Mochi isn't a web widget floating in a browser tab. The current alpha is a Python + GTK4
+          desktop application focused on Fedora, GNOME, and Wayland, using XWayland where GNOME's
+          native Wayland restrictions require it.
+        </p>
+      </div>
+
+      <div class="tech-stack" aria-label="Mochi technology stack">
+        <span>Python</span>
+        <span>GTK4</span>
+        <span>PyGObject</span>
+        <span>Cairo</span>
+        <span>GNOME</span>
+        <span>Wayland</span>
+        <span>XWayland</span>
+      </div>
+    </section>
+
+    <section class="alpha-section">
+      <div class="alpha-card">
+        <div>
+          <p class="eyebrow">Public alpha</p>
+          <h2>Useful today. Still growing.</h2>
+        </div>
+        <p>
+          Mochi is ready for people to play with, but this is still an early release. Different
+          monitor layouts, scaling setups, desktop environments, and application combinations may
+          uncover rough edges. Bug reports and thoughtful feature ideas are genuinely useful right now.
+        </p>
+        <div class="alpha-actions">
+          <a class="button button-secondary" href="https://github.com/miflow13/mochi-desktop/issues" target="_blank" rel="noreferrer">Report an issue</a>
+          <a class="text-link" href="https://github.com/miflow13/mochi-desktop" target="_blank" rel="noreferrer">Star or watch the project</a>
+        </div>
       </div>
     </section>
 
@@ -108,7 +280,7 @@
           <span class="step-number">03</span>
           <div>
             <h3>Open Mochi</h3>
-            <p>Launch <strong>Mochi</strong> from the GNOME app grid. Right-click him and choose <strong>Quit Mochi</strong> whenever you want him to go away.</p>
+            <p>Launch <strong>Mochi</strong> from the GNOME app grid. Right-click him for Sleep/Wake, Edge roam, Stay put, Quick Start, and Close.</p>
           </div>
         </div>
 
@@ -121,6 +293,7 @@
 
     <section class="closing">
       <p>A few pixels. A little personality. 🌱</p>
+      <span>Hand-drawn, Linux-native, and happiest hanging out nearby.</span>
     </section>
   </main>
 
