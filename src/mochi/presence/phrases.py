@@ -17,6 +17,12 @@ PHRASES: dict[str, tuple[str, ...]] = {
         'all systems leafy',
         'hello from down here',
         "today's forecast: mochi",
+        'hello, rectangle owner',
+        'one mochi, successfully loaded',
+        'good morning, probably',
+        'beginning blob operations',
+        'my developer loves you'
+        
     ),
     "ambient": (
         'just hanging out 🌱',
@@ -153,6 +159,8 @@ PHRASES: dict[str, tuple[str, ...]] = {
         'sometimes the answer arrives sideways',
     ),
     "developer": (
+        'interesting stack trace',
+        'the bug has documentation somewhere',
         'save your work maybe 🌱',
         'tiny commit?',
         'commit early, regret less',
