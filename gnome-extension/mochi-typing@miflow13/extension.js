@@ -445,7 +445,8 @@ export default class MochiTypingActivityExtension extends Extension {
         this._presenceIdleWatchId = this._idleMonitor.add_idle_watch(
             USER_IDLE_AFTER_MS,
             () => {
-                this._presenceIdleWatchId = 0;
+                // Idle watches persist across activity cycles. Keep the ID so
+                // rearming does not leak another watch and disable removes it.
                 if (!this._presenceIsIdle) {
                     this._presenceIsIdle = true;
                     this._emitSignal(USER_IDLE_SIGNAL_NAME);

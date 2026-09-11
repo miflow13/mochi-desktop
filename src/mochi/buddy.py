@@ -807,6 +807,8 @@ class Buddy(Gtk.DrawingArea):
     def _on_typing_activity(self) -> None:
         """Mirror a recognized typing burst without inspecting typed content."""
         self._last_interaction = time.monotonic()
+        if self._user_idle or self.state.current is MochiState.SLEEPING:
+            self._on_user_active()
         if self.state.current is MochiState.TYPING:
             return
         self._start_typing_emote()
@@ -846,6 +848,7 @@ class Buddy(Gtk.DrawingArea):
 
     def _on_youtube_started(self) -> None:
         """Start Mochi's low-priority watch-along when YouTube is playing."""
+        self._on_user_active()
         self._start_watching_emote()
 
     def _on_youtube_stopped(self) -> None:
@@ -896,6 +899,7 @@ class Buddy(Gtk.DrawingArea):
 
     def _on_file_activity_started(self) -> None:
         """Start Mochi's low-priority magnifying-glass file activity emote."""
+        self._on_user_active()
         self._start_searching_emote()
 
     def _on_file_activity_stopped(self) -> None:
@@ -942,7 +946,9 @@ class Buddy(Gtk.DrawingArea):
     def _on_user_idle(self) -> None:
         """Put Mochi to sleep when truly idle, except during active playback."""
         self._user_idle = True
-        if self._preview_mode or self.state.current is MochiState.SLEEPING:
+        if self._preview_mode or self.state.current not in (
+            MochiState.IDLE, MochiState.BLINKING, MochiState.WALKING,
+        ):
             return
         if self._context_menu_open:
             self._logger.debug("Presence idle deferred while context menu is open")
@@ -1233,6 +1239,14 @@ class Buddy(Gtk.DrawingArea):
         else:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
+            # A typing burst may have begun during the wake transition. Resolve
+            # the live signal, so a burst that already ended is not replayed.
+            if (
+                finished_animation.name == "wake"
+                and getattr(getattr(self, "_typing_monitor", None), "active", False)
+                and self._start_typing_emote()
+            ):
+                return
             if not self._maybe_resume_ambient_activity() and finished_animation.name in (
                 "computer",
                 "typing_outro",
@@ -1299,13 +1313,16 @@ class Buddy(Gtk.DrawingArea):
     def _wake_up(self) -> None:
         if not can_begin_wake(self.state.current):
             return
-        self._mark_interaction()
         self._transition_to(MochiState.WAKING)
+        self._user_idle = False
+        self._mark_interaction()
         self._play_animation("wake", after="idle")
         self._logger.debug("Mochi awakened")
 
     def _mark_interaction(self) -> None:
         self._last_interaction = time.monotonic()
+        if getattr(self, "_user_idle", False) or self.state.current is MochiState.SLEEPING:
+            self._on_user_active()
         if not self._preview_mode:
             self._reschedule_computer_idle_emote()
 
@@ -1386,6 +1403,11 @@ class Buddy(Gtk.DrawingArea):
         self._idle_action_source_id = None
         try:
             if self.state.current is not MochiState.IDLE or self._context_menu_open:
+                return GLib.SOURCE_REMOVE
+            # The global idle signal is edge-triggered. Retry deferred sleep
+            # through the existing ambient timer once the owning state ends.
+            if self._user_idle:
+                self._on_user_idle()
                 return GLib.SOURCE_REMOVE
             # Automatic sleep is driven by the GNOME Shell presence monitor.
             # Local Mochi interaction timestamps are not a proxy for whether the
