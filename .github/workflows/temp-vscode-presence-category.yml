@@ -1,0 +1,100 @@
+name: Temporary VS Code presence category patch
+
+on:
+  push:
+    branches:
+      - feat/vscode-presence-category
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vscode-presence-category
+          fetch-depth: 0
+
+      - name: Apply focused VS Code presence changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected snippet not found in {path}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "gnome-extension/mochi-typing@miflow13/extension.js",
+              "const EDITOR_MARKERS = [\n    'code',\n    'code-oss',\n    'vscodium',",
+              "const VSCODE_MARKERS = [\n    'code',\n    'code-oss',\n    'com.visualstudio.code',\n    'com.visualstudio.code.oss',\n    'visual-studio-code',\n];\nconst EDITOR_MARKERS = [\n    'vscodium',",
+          )
+          replace_once(
+              "gnome-extension/mochi-typing@miflow13/extension.js",
+              "        if (matches(PIXEL_ART_MARKERS))\n            return 'pixel_art';\n        if (matches(EDITOR_MARKERS))",
+              "        if (matches(PIXEL_ART_MARKERS))\n            return 'pixel_art';\n        if (matches(VSCODE_MARKERS))\n            return 'vscode';\n        if (matches(EDITOR_MARKERS))",
+          )
+
+          replace_once(
+              "src/mochi/presence/signals.py",
+              '    ALLOWED = frozenset(("editor", "terminal", "browser", "media", "pixel_art", "unknown"))',
+              '    ALLOWED = frozenset(("vscode", "editor", "terminal", "browser", "media", "pixel_art", "unknown"))',
+          )
+
+          replace_once(
+              "src/mochi/presence/engine.py",
+              '        if context.current_app_category not in ("editor", "terminal"):\n            weights.pop("developer", None)',
+              '        if context.current_app_category == "vscode":\n            # VS Code is Mochi\'s strongest coding context. Keep the normal\n            # speech cadence, but make developer-flavored lines about 3x more\n            # likely than in a generic editor. A configured zero stays zero.\n            weights["developer"] = weights.get("developer", 0.0) * 3.0\n        elif context.current_app_category not in ("editor", "terminal"):\n            weights.pop("developer", None)',
+          )
+
+          replace_once(
+              "src/mochi/presence/integration.py",
+              '        category = {\n            "editor": "developer",',
+              '        category = {\n            "vscode": "developer",\n            "editor": "developer",',
+          )
+
+          replace_once(
+              "gnome-extension/mochi-typing@miflow13/README.md",
+              '`editor`, `terminal`, `browser`, `media`, `pixel_art`, or `unknown`',
+              '`vscode`, `editor`, `terminal`, `browser`, `media`, `pixel_art`, or `unknown`',
+          )
+
+          test_path = Path("tests/test_presence_engine.py")
+          tests = test_path.read_text()
+          anchor = '''def test_event_priority_prefers_system_reaction():\n'''
+          new_test = '''def test_vscode_makes_developer_phrases_more_likely_than_generic_editor():\n    tuning = generous_tuning()\n    editor_engine = PresenceEngine(tuning=tuning, rng=random.Random(17), clock=Clock())\n    vscode_engine = PresenceEngine(tuning=generous_tuning(), rng=random.Random(17), clock=Clock())\n    editor = AmbientContext(current_app_category="editor", session_duration=10)\n    vscode = AmbientContext(current_app_category="vscode", session_duration=10)\n\n    editor_developer = sum(\n        editor_engine._select_unsolicited_category(editor) == "developer"\n        for _ in range(1000)\n    )\n    vscode_developer = sum(\n        vscode_engine._select_unsolicited_category(vscode) == "developer"\n        for _ in range(1000)\n    )\n\n    assert vscode_developer > editor_developer * 2\n\n\n'''
+          if anchor not in tests:
+              raise SystemExit("presence engine test insertion anchor not found")
+          tests = tests.replace(anchor, new_test + anchor, 1)
+          tests = tests.replace(
+              '    adapter._on_category_signal(None, None, None, None, None, Params("editor"))\n    adapter._on_category_signal(None, None, None, None, None, Params("secret-app-id"))',
+              '    adapter._on_category_signal(None, None, None, None, None, Params("editor"))\n    adapter._on_category_signal(None, None, None, None, None, Params("vscode"))\n    adapter._on_category_signal(None, None, None, None, None, Params("secret-app-id"))',
+              1,
+          )
+          tests = tests.replace(
+              '    assert seen == ["editor", "pixel_art"]',
+              '    assert seen == ["editor", "vscode", "pixel_art"]',
+              1,
+          )
+          test_path.write_text(tests)
+          PY
+
+      - name: Run focused tests
+        run: python -m pytest -q tests/test_presence_engine.py
+
+      - name: Remove temporary workflow and commit feature
+        shell: bash
+        run: |
+          rm .github/workflows/temp-vscode-presence-category.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add VS Code presence category"
+          git push origin HEAD:feat/vscode-presence-category
