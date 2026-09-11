@@ -54,7 +54,6 @@ Mochi pays attention to what’s happening around your desktop and occasionally 
     width="820"
     alt="Mochi reacting to what is on screen"
     src="https://github.com/user-attachments/assets/d830ab6f-be30-47ba-86ae-63d46bd0c23c"
-
   />
 </p>
 
@@ -62,14 +61,10 @@ Mochi pays attention to what’s happening around your desktop and occasionally 
   <sub>Little observations, quiet company. 🌱</sub>
 </p>
 
-
-
-
 ---
 
 ## Install Mochi
 <img width="1280" height="803" alt="hellofrommochi" src="https://github.com/user-attachments/assets/d7cb090d-5fae-4315-8b10-d809eda3da39" />
-
 
 ### Recommended: Fedora + GNOME
 
@@ -106,7 +101,7 @@ If `~/.local/bin` is not on your shell PATH, use:
 
 ### Close Mochi
 
-Right-click Mochi and choose **Quit Mochi**.
+Right-click Mochi and choose **Close**.
 
 ### Update Mochi
 
@@ -143,13 +138,14 @@ Mochi's saved settings are preserved by default. To remove those too:
 | Working now | Still growing |
 | --- | --- |
 | ✅ Idle / breathing + natural blink | 🌱 More ambient idle emotes |
-| ✅ Walking + persistent Stay put | 🌱 Animation-library polish |
+| ✅ Walking + persistent Stay put / Edge roam | 🌱 Animation-library polish |
 | ✅ Pickup, velocity-aware drag + drop | 🌱 Broader Linux compatibility |
 | ✅ Bounce / squish / heart reactions | 🌱 Installation testing outside the dev machines |
 | ✅ Click chirps + playful triple-click dialogue | 🌱 More Mochi Sense contexts |
 | ✅ Sleep / wake behavior | |
-| ✅ Typing + media companion states | |
+| ✅ Typing + terminal + media companion states | |
 | ✅ Mochi Sense ambient dialogue | |
+| ✅ Quick Start guide from the user menu | |
 | ✅ Multi-monitor/XWayland reliability work | |
 
 <p align="center">
@@ -216,8 +212,11 @@ Mochi currently supports a small set of direct and ambient interactions:
 - **Three quick left-clicks** — Mochi may object with a tiny speech bubble
 - **Double-click** — heart emote
 - **Drag** — pick Mochi up and move him around; he may say `wheee!`
-- **Right-click** — user controls including size, audio, sleep/wake, **Stay put**, and Quit
+- **Hover** — Mochi may answer with a little heart
+- **Right-click** — Sleep/Wake, **Edge roam**, **Stay put**, **What can Mochi do?**, and Close
 - **Stay put** — disables autonomous wandering without freezing Mochi's other behavior
+- **Edge roam** — keeps autonomous wandering along the current screen edge
+- **What can Mochi do?** — opens the built-in Quick Start guide
 - **Mochi Lab** — developer/testing controls for animation and Mochi Sense tuning
 
 Nothing requires a response. You can ignore Mochi completely and let him do his little thing.
@@ -287,7 +286,7 @@ git clone https://github.com/miflow13/mochi-desktop.git
 cd mochi-desktop
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install -e ".[dev]"
 python -m pytest
 mochi --debug
 ```
