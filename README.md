@@ -3,6 +3,12 @@
 
 # Mochi 🌱
 
+> Mochi is developed with the assistance of coding agents for implementation, debugging, code review, and investigation. I direct the architecture, product decisions, testing, releases, and overall development process.
+
+All Mochi pixel art, animations, and audio are created by me.
+
+
+
 ### A tiny Deskling companion for Linux
 
 <img width="2370" height="1782" alt="mochi-article-banner-upscaled" src="https://github.com/user-attachments/assets/5fe458e3-22fe-4575-92ee-6b2fdc53f39e" />
@@ -19,8 +25,6 @@ Mochi is currently available as an **early public alpha**. Fedora + GNOME on Way
 <tr>
 <td>
 
-> [!WARNING]
-> Alpha software can be weird. Expect rough edges, especially across different Linux desktop configurations. Bug reports and compatibility notes are very welcome.
 
 </td>
 <td width="80" align="center">
