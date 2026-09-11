@@ -1,4 +1,4 @@
-"""Wire the Nameplate into Buddy's existing update lifecycle.
+"""Wire Mochi's reusable nameplate/status UI into the existing Buddy lifecycle.
 
 No new timers are introduced. Position updates and temporary-feedback expiry
 piggyback on hooks Mochi already calls every frame or on every meaningful
@@ -9,19 +9,17 @@ change:
 - `_change_size()` (already runs when Mochi's size changes)
 - `shutdown_presence()` (already runs on application shutdown)
 
-This keeps the nameplate on Mochi's proven cadence instead of giving it an
-independent movement or polling system.
+The always-visible surface stays intentionally quiet:
 
-The reusable surface has deterministic content priority:
+    speech bubble > temporary feedback > name only
 
-    speech bubble > temporary feedback > persistent mood > name only
+Mood is still derived from successful Mochi state transitions through
+`MoodModel`, but persistent state/mood cues are shown only inside the existing
+right-click menu. The status block is non-interactive and reuses the same menu
+window; it creates no second popover/window, focus grab, gesture, controller, or
+polling loop.
 
-Mood is derived from successful Mochi state transitions through `MoodModel`;
-the UI layer does not invent its own random mood cadence.
-
-The speech bubble and nameplate remain mutually exclusive at the same anchor.
-Temporary feedback lives on the nameplate itself, overrides the mood line for
-a bounded amount of *visible* time, then restores the mood automatically. If
+Temporary care feedback may still briefly use the nameplate's second line. If
 the speech bubble takes over, the feedback lifetime pauses so care feedback is
 not silently consumed while hidden.
 """
@@ -29,6 +27,8 @@ not silently consumed while hidden.
 from __future__ import annotations
 
 import time
+
+from gi.repository import Gtk
 
 from mochi.mood import MoodModel
 from mochi.state import MochiState
@@ -50,6 +50,8 @@ class NameplateMixin:
         self._nameplate_feedback: str | None = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since: float | None = None
+        self._context_state_value: Gtk.Label | None = None
+        self._context_mood_value: Gtk.Label | None = None
         super().__init__(*args, **kwargs)
 
         if self._preview_mode:
@@ -68,6 +70,7 @@ class NameplateMixin:
             logger=self._logger,
         )
         self._refresh_nameplate_content()
+        self._refresh_context_status()
 
     @staticmethod
     def _normalize_nameplate_text(value: str | None) -> str | None:
@@ -76,21 +79,96 @@ class NameplateMixin:
         normalized = value.strip()
         return normalized or None
 
+    def _build_context_menu(self):
+        """Extend Buddy's existing user menu with a passive status snapshot.
+
+        This intentionally does not create another popup surface. Reusing the
+        existing MenuWindow avoids the historical focus/grab contention that
+        made earlier status/nameplate experiments interfere with right-click.
+        """
+        popover = super()._build_context_menu()
+        card = self._context_menu_content
+
+        status_block = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        status_block.set_can_target(False)
+
+        title = Gtk.Label(label="Mochi status")
+        title.set_xalign(0)
+        title.set_can_target(False)
+        title.add_css_class("mochi-menu-section")
+        status_block.append(title)
+
+        state_row, self._context_state_value = self._make_context_status_row(
+            "MochiState"
+        )
+        status_block.append(state_row)
+        mood_row, self._context_mood_value = self._make_context_status_row("Mood")
+        status_block.append(mood_row)
+
+        # Base Buddy's user menu is header -> separator -> actions. Insert the
+        # passive status block after that existing separator so no action row,
+        # focus behavior, or close callback needs to change.
+        header = card.get_first_child()
+        separator = header.get_next_sibling() if header is not None else None
+        if separator is None:
+            card.prepend(status_block)
+        else:
+            card.insert_child_after(status_block, separator)
+
+        self._refresh_context_status()
+        return popover
+
+    @staticmethod
+    def _make_context_status_row(label: str) -> tuple[Gtk.Box, Gtk.Label]:
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        row.add_css_class("mochi-setting-row")
+        row.set_can_target(False)
+
+        key = Gtk.Label(label=label)
+        key.set_xalign(0)
+        key.set_hexpand(True)
+        key.set_can_target(False)
+        row.append(key)
+
+        value = Gtk.Label(label="—")
+        value.set_xalign(1)
+        value.set_can_target(False)
+        value.add_css_class("mochi-menu-value")
+        row.append(value)
+        return row, value
+
+    def _refresh_context_status(self) -> None:
+        """Refresh the read-only state/mood snapshot displayed by right-click."""
+        state = getattr(getattr(self, "state", None), "current", None)
+        state_text = state.name if isinstance(state, MochiState) else "UNKNOWN"
+        mood_text = self._nameplate_mood or "—"
+
+        if self._context_state_value is not None:
+            self._context_state_value.set_text(state_text)
+        if self._context_mood_value is not None:
+            self._context_mood_value.set_text(mood_text)
+
+    def _show_context_menu(self, *args) -> None:
+        """Refresh status once per open, then preserve Buddy's proven menu path."""
+        context_menu = getattr(self, "_context_menu", None)
+        if context_menu is None or not context_menu.get_visible():
+            self._refresh_context_status()
+        super()._show_context_menu(*args)
+
     def set_nameplate_name(self, name: str) -> None:
         """Set the persistent first line shown by the reusable surface."""
         self._nameplate_name = self._normalize_nameplate_text(name) or "Mochi"
         self._refresh_nameplate_content()
 
     def set_nameplate_mood(self, mood: str | None) -> None:
-        """Set the mood line directly.
+        """Update Mochi's tracked mood without making it always-visible.
 
-        Normal runtime mood is owned by `MoodModel` and will synchronize again
-        on the next successful mapped MochiState transition. Keeping this small
-        presentation setter preserves the reusable surface API for previews and
-        future tooling without making UI code the mood source of truth.
+        Normal runtime mood is owned by `MoodModel` and synchronizes on accepted
+        MochiState transitions. The current value is surfaced when the user
+        opens the right-click menu rather than living permanently below Mochi's
+        name tag.
         """
         self._nameplate_mood = self._normalize_nameplate_text(mood)
-        self._refresh_nameplate_content()
 
     def clear_nameplate_mood(self) -> None:
         self.set_nameplate_mood(None)
@@ -101,7 +179,7 @@ class NameplateMixin:
         *,
         duration_seconds: float | None = None,
     ) -> None:
-        """Temporarily override the mood line with short care feedback.
+        """Temporarily show short care feedback below Mochi's name.
 
         The lifetime is counted only while the nameplate is allowed to own the
         shared surface. A speech bubble pauses the countdown and the feedback
@@ -128,7 +206,7 @@ class NameplateMixin:
         self._refresh_nameplate_content()
 
     def clear_nameplate_feedback(self) -> None:
-        """Clear temporary feedback immediately and restore persistent mood."""
+        """Clear temporary feedback and return the nameplate to name-only."""
         self._nameplate_feedback = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since = None
@@ -139,7 +217,9 @@ class NameplateMixin:
         if nameplate is None:
             return
         nameplate.set_name(self._nameplate_name)
-        nameplate.set_status(self._nameplate_feedback or self._nameplate_mood)
+        # Persistent state/mood belongs in the right-click menu. The second
+        # line is reserved for short-lived care/interaction feedback only.
+        nameplate.set_status(self._nameplate_feedback)
 
     def _advance_nameplate_feedback_lifetime(self) -> None:
         """Advance temporary feedback using the existing tick, never a timer."""
@@ -175,9 +255,9 @@ class NameplateMixin:
 
         mood = self._mood_model.observe_state(next_state)
         if mood is not None:
-            # The behavior state remains the source of truth. Reapplying the
-            # mapped label also repairs any temporary/manual mood preview on
-            # the next meaningful transition.
+            # The behavior state remains the source of truth. The menu samples
+            # this tracked mood the next time it opens; no live menu polling is
+            # necessary while the popup is on screen.
             self.set_nameplate_mood(mood.value)
         return True
 

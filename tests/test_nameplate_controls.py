@@ -124,16 +124,18 @@ class NameplateSpeechExclusivityTests(unittest.TestCase):
 
 
 class NameplateContentPriorityTests(unittest.TestCase):
-    def test_name_and_persistent_mood_use_same_surface(self) -> None:
+    def test_persistent_mood_is_tracked_but_not_rendered_below_name(self) -> None:
         mixin, nameplate = _make_mixin(
             nameplate_visible=True, bubble=_FakeBubble(visible=False)
         )
 
         mixin.set_nameplate_name("Mochi")
         mixin.set_nameplate_mood("cozy")
+        mixin._refresh_nameplate_content()
 
         self.assertEqual(nameplate.name, "Mochi")
-        self.assertEqual(nameplate.status, "cozy")
+        self.assertEqual(mixin._nameplate_mood, "cozy")
+        self.assertIsNone(nameplate.status)
 
     def test_blank_name_falls_back_to_mochi(self) -> None:
         mixin, nameplate = _make_mixin(
@@ -144,7 +146,7 @@ class NameplateContentPriorityTests(unittest.TestCase):
 
         self.assertEqual(nameplate.name, "Mochi")
 
-    def test_feedback_temporarily_overrides_mood_then_restores_it(self) -> None:
+    def test_feedback_temporarily_uses_second_line_then_returns_to_name_only(self) -> None:
         mixin, nameplate = _make_mixin(
             nameplate_visible=True, bubble=_FakeBubble(visible=False)
         )
@@ -154,7 +156,8 @@ class NameplateContentPriorityTests(unittest.TestCase):
         self.assertEqual(nameplate.status, "♥ thank you")
 
         mixin.clear_nameplate_feedback()
-        self.assertEqual(nameplate.status, "cozy")
+        self.assertIsNone(nameplate.status)
+        self.assertEqual(mixin._nameplate_mood, "cozy")
 
     def test_clearing_mood_leaves_name_only_when_no_feedback_exists(self) -> None:
         mixin, nameplate = _make_mixin(
@@ -163,6 +166,7 @@ class NameplateContentPriorityTests(unittest.TestCase):
         mixin.set_nameplate_mood("curious")
 
         mixin.clear_nameplate_mood()
+        mixin._refresh_nameplate_content()
 
         self.assertIsNone(nameplate.status)
 
@@ -180,7 +184,7 @@ class NameplateContentPriorityTests(unittest.TestCase):
         self.assertEqual(mixin._nameplate_feedback_remaining_seconds, 3.0)
         self.assertIsNone(mixin._nameplate_feedback_active_since)
 
-    def test_non_positive_feedback_duration_clears_override(self) -> None:
+    def test_non_positive_feedback_duration_clears_override_to_name_only(self) -> None:
         mixin, nameplate = _make_mixin(
             nameplate_visible=True, bubble=_FakeBubble(visible=False)
         )
@@ -190,9 +194,10 @@ class NameplateContentPriorityTests(unittest.TestCase):
         mixin.show_nameplate_feedback("ignored", duration_seconds=0)
 
         self.assertIsNone(mixin._nameplate_feedback)
-        self.assertEqual(nameplate.status, "cozy")
+        self.assertIsNone(nameplate.status)
+        self.assertEqual(mixin._nameplate_mood, "cozy")
 
-    def test_feedback_expires_after_visible_time_and_restores_mood(self) -> None:
+    def test_feedback_expires_after_visible_time_and_returns_to_name_only(self) -> None:
         mixin, nameplate = _make_mixin(
             nameplate_visible=True, bubble=_FakeBubble(visible=False)
         )
@@ -209,7 +214,8 @@ class NameplateContentPriorityTests(unittest.TestCase):
             mixin._advance_nameplate_feedback_lifetime()
 
         self.assertIsNone(mixin._nameplate_feedback)
-        self.assertEqual(nameplate.status, "cozy")
+        self.assertIsNone(nameplate.status)
+        self.assertEqual(mixin._nameplate_mood, "cozy")
 
     def test_feedback_clock_pauses_while_speech_bubble_owns_surface(self) -> None:
         bubble = _FakeBubble(visible=False)
@@ -237,13 +243,14 @@ class NameplateContentPriorityTests(unittest.TestCase):
             )
 
             # Bubble yields; first tick restarts the visible clock, second tick
-            # consumes the remaining second and restores the mood.
+            # consumes the remaining second and returns the plate to name-only.
             bubble.visible = False
             mixin._advance_nameplate_feedback_lifetime()
             mixin._advance_nameplate_feedback_lifetime()
 
         self.assertIsNone(mixin._nameplate_feedback)
-        self.assertEqual(nameplate.status, "cozy")
+        self.assertIsNone(nameplate.status)
+        self.assertEqual(mixin._nameplate_mood, "cozy")
 
 
 if __name__ == "__main__":
