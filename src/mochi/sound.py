@@ -17,10 +17,14 @@ class AudioBackend(Protocol):
 
 
 class SoundEvent(StrEnum):
+    CLICK = "click"
     PET = "pet"
     PICKUP = "pickup"
     DROP = "drop"
     LEVEL_UP = "level_up"
+    SPAWN = "spawn"
+    EXIT = "exit"
+    MENU_OPEN = "menu_open"
 
 
 @dataclass(frozen=True)
@@ -51,10 +55,21 @@ class SoundManager:
 
     DEFAULT_VOLUME = 0.6
     EVENT_FILES = {
-        SoundEvent.PET: "pet.ogg",
+        SoundEvent.CLICK: "mochi_chirp_01.ogg",
+        SoundEvent.PET: "pet.wav",
         SoundEvent.PICKUP: "pickup.ogg",
         SoundEvent.DROP: "drop.ogg",
         SoundEvent.LEVEL_UP: "level_up.ogg",
+        SoundEvent.SPAWN: "spawn.ogg",
+        SoundEvent.EXIT: "exit.ogg",
+        SoundEvent.MENU_OPEN: "menu_open.ogg",
+    }
+
+    # Keep lifecycle cues quieter than direct interaction sounds.
+    EVENT_GAINS = {
+        SoundEvent.SPAWN: 0.35,
+        SoundEvent.EXIT: 0.28,
+        SoundEvent.MENU_OPEN: 0.22,
     }
 
     def __init__(
@@ -89,8 +104,9 @@ class SoundManager:
             self._logger.debug("No supported audio player found; skipping %s", event)
             return False
 
+        effective_volume = self.volume * self.EVENT_GAINS.get(event, 1.0)
         try:
-            self.backend.play(path, self.volume)
+            self.backend.play(path, effective_volume)
         except OSError as error:
             self._logger.warning("Could not play sound %s: %s", path, error)
             return False

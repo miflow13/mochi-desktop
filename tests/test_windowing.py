@@ -1,0 +1,252 @@
+import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+
+from mochi.windowing import WindowPlacement
+
+
+class MonitorList:
+    def __init__(self, *monitors) -> None:
+        self._monitors = monitors
+
+    def get_n_items(self) -> int:
+        return len(self._monitors)
+
+    def get_item(self, index: int):
+        return self._monitors[index]
+
+
+def monitor(x: int, y: int, width: int, height: int):
+    geometry = SimpleNamespace(x=x, y=y, width=width, height=height)
+    return SimpleNamespace(get_geometry=lambda: geometry)
+
+
+def window(monitors, width=100, height=100, scale=None):
+    surface = None if scale is None else SimpleNamespace(get_scale=lambda: scale)
+    return SimpleNamespace(
+        get_default_size=lambda: (width, height),
+        get_display=lambda: SimpleNamespace(get_monitors=lambda: monitors),
+        get_surface=lambda: surface,
+    )
+
+
+class WindowPlacementMonitorTests(unittest.TestCase):
+    def test_position_is_clamped_to_the_monitor_containing_the_window(self) -> None:
+        monitors = MonitorList(
+            monitor(0, 0, 1920, 1080),
+            monitor(1920, 0, 2560, 1440),
+        )
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors, 128, 128)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.clamp_position(placement, 2200, 300)
+
+        self.assertEqual((position.x, position.y), (2200, 300))
+
+    def test_layer_shell_secondary_monitor_uses_output_local_margins(self) -> None:
+        """Layer-shell margins must not include a monitor's global origin."""
+        secondary = monitor(-1920, 0, 1280, 1024)
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(MonitorList(secondary), 128, 128)
+        placement.layer_shell_enabled = True
+        placement._monitor_for_position = lambda _x, _y: secondary
+
+        position = WindowPlacement.clamp_position(placement, 5000, -5000)
+
+        self.assertEqual((position.x, position.y), (1144, 12))
+
+    @patch("mochi.windowing.primary_button_pressed", return_value=False)
+    @patch("mochi.windowing.move_window")
+    @patch("mochi.windowing.get_window_position", return_value=(-80, 790))
+    def test_sync_from_window_pushes_far_out_of_bounds_window_back_to_safe_edge(
+        self, _get_window_position, move_window, _primary_button_pressed
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1000, 800))
+        test_window = window(monitors)
+        placement = object.__new__(WindowPlacement)
+        placement.window = test_window
+        placement.position = SimpleNamespace(x=100, y=100)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.sync_from_window(placement)
+
+        self.assertEqual((position.x, position.y), (8, 688))
+        move_window.assert_called_once_with(test_window, 8, 688)
+
+    @patch("mochi.windowing.primary_button_pressed", return_value=True)
+    @patch("mochi.windowing.move_window")
+    @patch("mochi.windowing.get_window_position", return_value=(-80, 790))
+    def test_active_x11_drag_clamps_horizontal_edge_but_preserves_vertical_motion(
+        self, _get_window_position, move_window, _primary_button_pressed
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1000, 800))
+        test_window = window(monitors)
+        placement = object.__new__(WindowPlacement)
+        placement.window = test_window
+        placement.position = SimpleNamespace(x=100, y=100)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.sync_from_window(placement)
+
+        self.assertEqual((position.x, position.y), (8, 790))
+        move_window.assert_called_once_with(test_window, 8, 790)
+
+    @patch("mochi.windowing.primary_button_pressed", return_value=True)
+    @patch("mochi.windowing.move_window")
+    @patch("mochi.windowing.get_window_position", return_value=(250, 790))
+    def test_active_x11_drag_does_not_touch_in_bounds_horizontal_position(
+        self, _get_window_position, move_window, _primary_button_pressed
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1000, 800))
+        test_window = window(monitors)
+        placement = object.__new__(WindowPlacement)
+        placement.window = test_window
+        placement.position = SimpleNamespace(x=100, y=100)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.sync_from_window(placement)
+
+        self.assertEqual((position.x, position.y), (250, 790))
+        move_window.assert_not_called()
+
+    @patch("mochi.windowing.primary_button_pressed", return_value=False)
+    @patch("mochi.windowing.move_window")
+    @patch("mochi.windowing.get_window_position", return_value=(250, 300))
+    def test_sync_from_window_does_not_move_an_in_bounds_window(
+        self, _get_window_position, move_window, _primary_button_pressed
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1000, 800))
+        test_window = window(monitors)
+        placement = object.__new__(WindowPlacement)
+        placement.window = test_window
+        placement.position = SimpleNamespace(x=100, y=100)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.sync_from_window(placement)
+
+        self.assertEqual((position.x, position.y), (250, 300))
+        move_window.assert_not_called()
+
+    def test_x11_clamp_keeps_full_window_visible_on_all_edges(self) -> None:
+        monitors = MonitorList(monitor(0, 0, 1000, 800))
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors)
+        placement.layer_shell_enabled = False
+
+        top_left = WindowPlacement.clamp_position(placement, -50, -50)
+        bottom_right = WindowPlacement.clamp_position(placement, 990, 790)
+
+        self.assertEqual((top_left.x, top_left.y), (8, 8))
+        self.assertEqual((bottom_right.x, bottom_right.y), (892, 688))
+
+    def test_scaled_xwayland_position_uses_device_pixel_bounds(self) -> None:
+        monitors = MonitorList(monitor(0, 0, 1536, 864))
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors, 128, 128, scale=2.0)
+        placement.layer_shell_enabled = False
+
+        in_bounds = WindowPlacement.clamp_position(placement, 2750, 274)
+        too_far = WindowPlacement.clamp_position(placement, 2954, 274)
+
+        self.assertEqual((in_bounds.x, in_bounds.y), (2750, 274))
+        self.assertEqual((too_far.x, too_far.y), (2800, 274))
+
+    @patch("mochi.windowing.primary_button_pressed", return_value=True)
+    @patch("mochi.windowing.move_window")
+    @patch("mochi.windowing.get_window_position", return_value=(2954, 1032))
+    def test_scaled_xwayland_active_drag_cannot_cross_right_edge(
+        self, _get_window_position, move_window, _primary_button_pressed
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1536, 864))
+        test_window = window(monitors, 128, 128, scale=2.0)
+        placement = object.__new__(WindowPlacement)
+        placement.window = test_window
+        placement.position = SimpleNamespace(x=1400, y=1032)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.sync_from_window(placement)
+
+        self.assertEqual((position.x, position.y), (2800, 1032))
+        move_window.assert_called_once_with(test_window, 2800, 1032)
+
+    @patch("mochi.windowing.get_pointer_position", return_value=(3070, 1800))
+    @patch("mochi.windowing.move_window")
+    def test_manual_xwayland_drag_clamps_before_moving_actual_window(
+        self, move_window, _get_pointer_position
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1536, 864))
+        test_window = window(monitors, 128, 128, scale=2.0)
+        placement = object.__new__(WindowPlacement)
+        placement.window = test_window
+        placement.position = SimpleNamespace(x=1400, y=500)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.drag_to_pointer(placement, 64.0, 64.0)
+
+        # Requested X would be 2942, but the physical right wall is 2800.
+        # Y intentionally remains free while the button is held.
+        self.assertEqual((position.x, position.y), (2800, 1672))
+        move_window.assert_called_once_with(test_window, 2800, 1672)
+
+    @patch("mochi.windowing.get_pointer_position", return_value=(0, 500))
+    @patch("mochi.windowing.move_window")
+    def test_manual_xwayland_drag_cannot_move_actual_window_past_left_edge(
+        self, move_window, _get_pointer_position
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1536, 864))
+        test_window = window(monitors, 128, 128, scale=2.0)
+        placement = object.__new__(WindowPlacement)
+        placement.window = test_window
+        placement.position = SimpleNamespace(x=500, y=500)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.drag_to_pointer(placement, 64.0, 64.0)
+
+        self.assertEqual((position.x, position.y), (16, 372))
+        move_window.assert_called_once_with(test_window, 16, 372)
+
+    def test_scaled_xwayland_bottom_edge_keeps_full_window_visible(self) -> None:
+        monitors = MonitorList(monitor(0, 0, 1536, 864))
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors, 128, 128, scale=2.0)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.clamp_position(placement, 800, 1608)
+
+        self.assertEqual((position.x, position.y), (800, 1448))
+
+    @patch("mochi.windowing.primary_button_pressed", return_value=False)
+    @patch("mochi.windowing.move_window")
+    @patch("mochi.windowing.get_window_position", return_value=(2954, 274))
+    def test_scaled_xwayland_release_clamps_to_physical_right_edge(
+        self, _get_window_position, move_window, _primary_button_pressed
+    ) -> None:
+        monitors = MonitorList(monitor(0, 0, 1536, 864))
+        test_window = window(monitors, 128, 128, scale=2.0)
+        placement = object.__new__(WindowPlacement)
+        placement.window = test_window
+        placement.position = SimpleNamespace(x=1400, y=274)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.sync_from_window(placement)
+
+        self.assertEqual((position.x, position.y), (2800, 274))
+        move_window.assert_called_once_with(test_window, 2800, 274)
+
+    def test_gap_position_uses_the_nearest_monitor(self) -> None:
+        monitors = MonitorList(
+            monitor(0, 0, 1000, 800),
+            monitor(1200, 0, 1000, 800),
+        )
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors)
+        placement.layer_shell_enabled = False
+
+        position = WindowPlacement.clamp_position(placement, 1150, 200)
+
+        self.assertEqual((position.x, position.y), (1208, 200))
+
+
+if __name__ == "__main__":
+    unittest.main()

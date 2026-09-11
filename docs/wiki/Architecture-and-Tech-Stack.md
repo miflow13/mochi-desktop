@@ -123,7 +123,8 @@ Mochi is pixel art. The rendering rules are intentional architecture, not just a
 
 ### Fixed logical canvas
 
-The runtime uses a **128×128 logical frame**.
+Runtime artwork uses a **256×256 asset frame** and scales to the configured
+window size (128 px by default).
 
 Fixed frame dimensions prevent visual jitter when Mochi changes silhouette between breathing, squishing, dragging, or other reactions.
 

@@ -12,7 +12,7 @@ IDLE
 ├── double click → HEART → IDLE
 ├── ambient idle → TYPING → IDLE
 ├── context menu → WALK / SLEEP / EMOTE / COMPUTER
-└── PICKUP → HELD / DRAG → PUT_DOWN → IDLE
+└── PICKUP → DRAG → existing release-settle → IDLE
 ```
 
 The guiding requirement is:
@@ -81,7 +81,7 @@ Ambient rules:
 
 The explicit context-menu action should use the same animation/state path rather than introducing a special duplicate implementation.
 
-## Pickup → held/drag → put-down
+## Pickup → drag → release-settle
 
 This is the most important continuous physical interaction.
 
@@ -90,25 +90,25 @@ Desired flow:
 ```text
 IDLE
 → PICKUP
-→ HELD / DRAG
-→ PUT_DOWN
+→ DRAG
+→ existing release-settle
 → IDLE
 ```
 
 ### Pickup
 
-Pickup is a non-looping transition from the exact idle pose to the exact held pose.
+Pickup is a non-looping transition from the exact idle pose to the existing drag pose.
 
 Requirements:
 
 - begins at the current/canonical idle endpoint
-- ends at the held/drag endpoint
+- ends by entering the existing drag visual/state
 - no visual pop at the boundary
 - interruption by a quick release must have a safe recovery path
 
-### Held / drag
+### Drag
 
-While held:
+While dragging:
 
 - drag animation may play once and hold a final frame, or use a clean loop depending on the authored asset
 - dragging remains responsive
@@ -116,15 +116,15 @@ While held:
 - actual window/drop coordinates remain accurate
 - eye highlights, transparency, and canonical silhouette remain consistent
 
-### Put-down
+### Release-settle
 
-Put-down is a non-looping transition from held pose back to idle.
+Release uses the established drag-settle behavior to recover to idle; it is not a
+separate new animation pipeline.
 
 Requirements:
 
-- starts exactly from the held endpoint
-- ends exactly at the idle endpoint
 - release triggers it once
+- a release during pickup cancels the pickup and uses this same recovery path
 - re-grabbing during or immediately after the transition must not leave Mochi stuck
 
 ### Required interruption cases
@@ -135,13 +135,23 @@ Test all of these:
 idle → pickup → immediate release
 idle → pickup → long drag → release
 idle → pickup → fast drag → release
-put_down → immediate re-grab
+release-settle → immediate re-grab
 heart → idle → drag
 computer → idle → drag
 context menu → close → drag
 ```
 
 Every path must resolve to a valid state.
+
+## Hover
+
+Hover currently has no visible behavior. The retired nametag/status overlay must
+not be recreated as an incidental side effect of pointer handling.
+
+If a future hover feature is added, attach its `enter`/`leave` signals to a
+separate `Gtk.EventControllerMotion` in `Buddy`. Keep it independent of the
+primary-click, primary-drag, and secondary-click context-menu controllers, so
+hover UI cannot consume or alter drag and right-click input.
 
 ## Context menu
 

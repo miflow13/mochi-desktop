@@ -1,0 +1,793 @@
+import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+from mochi.animation import Animation
+from mochi.buddy import Buddy
+from mochi.sprites import ANIMATIONS
+from mochi.sound import SoundEvent
+from mochi.state import MochiState
+
+
+class BuddyDragReleaseTests(unittest.TestCase):
+    def test_drag_release_plays_authored_drop_animation(self) -> None:
+        buddy = SimpleNamespace(
+            _play_animation=Mock(),
+        )
+
+        Buddy._play_drag_settle(buddy)
+
+        buddy._play_animation.assert_called_once_with("drop", after="idle")
+
+    def test_pickup_completion_enters_the_existing_drag_visual(self) -> None:
+        pickup = Animation("pickup", (), 120)
+        buddy = SimpleNamespace(
+            _active_animation=pickup,
+            _current_animation="pickup",
+            _drag_started=True,
+            state=SimpleNamespace(current=MochiState.PICKUP),
+            _transition_to=Mock(),
+            _drag_motion=SimpleNamespace(reset=Mock()),
+            _drag_frame_index=4,
+            _play_drag_pose=Mock(),
+        )
+
+        Buddy._finish_reaction(buddy, pickup)
+
+        buddy._transition_to.assert_called_once_with(MochiState.DRAGGED)
+        buddy._drag_motion.reset.assert_not_called()
+        self.assertEqual(buddy._drag_frame_index, 4)
+        buddy._play_drag_pose.assert_called_once()
+
+    def test_rejected_pickup_does_not_replace_the_active_animation(self) -> None:
+        buddy = SimpleNamespace(
+            _cancel_active_emote=Mock(),
+            _transition_to=Mock(return_value=False),
+            _play_animation=Mock(),
+        )
+
+        self.assertFalse(Buddy._begin_pickup(buddy))
+
+        buddy._play_animation.assert_not_called()
+
+    def test_drag_visual_setup_does_not_replace_active_pickup(self) -> None:
+        buddy = SimpleNamespace(
+            _last_drag_update_time=0.0,
+            _drag_motion=SimpleNamespace(begin=Mock()),
+            _drag_frame_index=4,
+            _play_drag_pose=Mock(),
+        )
+
+        Buddy._begin_drag_visual(buddy, 10.0, 20.0)
+
+        buddy._drag_motion.begin.assert_called_once()
+        self.assertEqual(buddy._drag_frame_index, 0)
+        self.assertIsNone(buddy._drag_visual_key)
+        buddy._play_drag_pose.assert_not_called()
+
+    def test_pickup_motion_is_sampled_without_replacing_pickup_art(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.PICKUP),
+            _last_drag_update_time=0.0,
+            _drag_motion=SimpleNamespace(update=Mock()),
+            _play_drag_pose=Mock(),
+        )
+
+        with patch("mochi.buddy.time.monotonic", return_value=5.0):
+            Buddy._update_drag_visual(buddy, 10.0, 20.0)
+
+        buddy._drag_motion.update.assert_called_once_with(10.0, 20.0, 5.0)
+        buddy._play_drag_pose.assert_not_called()
+
+    def test_repeated_same_drag_pose_does_not_restart_player(self) -> None:
+        buddy = SimpleNamespace(
+            _drag_motion=SimpleNamespace(
+                pose_sprite=Mock(return_value="drag/drag_left_soft.png"),
+                horizontal_intensity=0.20,
+                body_sway=-0.09,
+            ),
+            _drag_frame_index=0,
+            _drag_visual_key=None,
+            _drag_neutral_since=None,
+            player=Mock(),
+            _current_animation="pickup",
+            _active_animation=None,
+            _pending_animation=None,
+            queue_draw=Mock(),
+        )
+
+        Buddy._play_drag_pose(buddy)
+        Buddy._play_drag_pose(buddy)
+
+        buddy.player.play.assert_called_once()
+        buddy.queue_draw.assert_called_once()
+
+    def test_release_cancels_pickup_and_uses_the_normal_settle_path(self) -> None:
+        buddy = SimpleNamespace(
+            _press=(1, 1),
+            _drag_started=True,
+            _drag_move_started=True,
+            _drag_release_handled=False,
+            _drag_sample_position=(1, 1),
+            _drag_sample_time=1.0,
+            _drag_visual_key=("drag/drag_left_soft.png", 2),
+            state=SimpleNamespace(current=MochiState.PICKUP),
+            _drag_motion=SimpleNamespace(reset=Mock()),
+            _transition_to=Mock(),
+            _play_drag_settle=Mock(),
+            _update_pointer_cursor=Mock(),
+            react_to_click=Mock(),
+        )
+        buddy._finish_drag_interaction = lambda: Buddy._finish_drag_interaction(buddy)
+
+        Buddy._on_released(buddy, None, 1, 0.0, 0.0)
+
+        buddy._transition_to.assert_called_once_with(MochiState.DROPPING)
+        buddy._play_drag_settle.assert_called_once()
+        buddy._drag_motion.reset.assert_called_once()
+        self.assertTrue(buddy._drag_release_handled)
+        self.assertIsNone(buddy._drag_visual_key)
+        buddy.react_to_click.assert_not_called()
+
+    def test_drag_end_recovers_state_when_click_release_is_not_delivered(self) -> None:
+        buddy = SimpleNamespace(
+            _drag_started=True,
+            _drag_release_handled=False,
+            _drag_end_handled=False,
+            _drag_move_started=True,
+            _drag_sample_position=(1, 1),
+            _drag_sample_time=1.0,
+            _drag_visual_key=("drag/drag_right_soft.png", -2),
+            state=SimpleNamespace(current=MochiState.DRAGGED),
+            _drag_motion=SimpleNamespace(reset=Mock()),
+            _transition_to=Mock(),
+            _play_drag_settle=Mock(),
+            _update_pointer_cursor=Mock(),
+            _placement=SimpleNamespace(layer_shell_enabled=True, position=(10, 20)),
+            _config=SimpleNamespace(save_position=Mock()),
+            _sound=SimpleNamespace(play=Mock()),
+        )
+        buddy._finish_drag_interaction = lambda: Buddy._finish_drag_interaction(buddy)
+
+        Buddy._on_drag_end(buddy, None, 5.0, 0.0)
+
+        self.assertFalse(buddy._drag_started)
+        self.assertTrue(buddy._drag_release_handled)
+        buddy._transition_to.assert_called_once_with(MochiState.DROPPING)
+        buddy._play_drag_settle.assert_called_once()
+        buddy._config.save_position.assert_called_once_with((10, 20))
+
+
+class BuddyContextMenuTests(unittest.TestCase):
+    def test_context_menu_opens_immediately_on_secondary_button_press(self) -> None:
+        import inspect
+
+        source = inspect.getsource(Buddy.__init__)
+
+        self.assertIn(
+            'context_click.connect("pressed", self._show_context_menu)', source
+        )
+        self.assertNotIn(
+            'context_click.connect("released", self._show_context_menu)', source
+        )
+        self.assertIn("Gtk.PropagationPhase.CAPTURE", source)
+
+
+    def test_user_menu_does_not_contain_developer_tuning(self) -> None:
+        import inspect
+
+        user_source = inspect.getsource(Buddy._build_context_menu)
+        dev_source = inspect.getsource(Buddy._build_developer_menu)
+
+        self.assertIn('"Sleep"', user_source)
+        self.assertIn('"Close"', user_source)
+        self.assertNotIn("Take a stroll", user_source)
+        self.assertNotIn("Say hi", user_source)
+        self.assertNotIn("Laptop time", user_source)
+        self.assertNotIn("Reset position", user_source)
+        self.assertNotIn("Quit Mochi", user_source)
+        self.assertNotIn("Interaction tuning", user_source)
+
+        self.assertIn("Take a stroll", dev_source)
+        self.assertIn("Say hi", dev_source)
+        self.assertIn("Laptop time", dev_source)
+        self.assertIn("Reset position", dev_source)
+        self.assertIn("Quit Mochi", dev_source)
+        self.assertIn("Interaction tuning", dev_source)
+
+    def test_user_menu_follows_mochi_and_close_quits(self) -> None:
+        import inspect
+
+        source = inspect.getsource(Buddy._build_context_menu)
+
+        self.assertIn("follow_owner=True", source)
+        self.assertIn("self._quit_from_context_menu", source)
+
+    def test_developer_menu_is_independently_draggable(self) -> None:
+        import inspect
+
+        source = inspect.getsource(Buddy._build_developer_menu)
+
+        self.assertIn("follow_owner=False", source)
+        self.assertIn("popover.set_drag_handle(drag_header)", source)
+
+    def test_user_close_waits_for_menu_close_then_quits(self) -> None:
+        quit_application = Mock()
+        buddy = SimpleNamespace(
+            _close_context_menu_then=Mock(),
+            _quit_application=quit_application,
+        )
+
+        Buddy._quit_from_context_menu(buddy, None)
+
+        buddy._close_context_menu_then.assert_called_once_with(quit_application)
+
+    def test_user_context_menu_is_toggle_and_dismisses_on_focus_loss(self) -> None:
+        import inspect
+
+        build_source = inspect.getsource(Buddy._build_context_menu)
+        show_source = inspect.getsource(Buddy._show_context_menu)
+
+        self.assertIn("dismiss_on_focus_loss=True", build_source)
+        self.assertIn("self._context_menu.get_visible()", show_source)
+        self.assertIn("self._context_menu.popdown()", show_source)
+
+    def test_context_menu_open_plays_one_subtle_menu_sound(self) -> None:
+        sound = SimpleNamespace(play=Mock())
+        sleep_label = SimpleNamespace(set_text=Mock())
+        menu = SimpleNamespace(
+            get_visible=Mock(return_value=False),
+            set_pointing_to=Mock(),
+            popup=Mock(),
+            popdown=Mock(),
+        )
+        developer_menu = SimpleNamespace(
+            get_visible=Mock(return_value=False),
+            popdown=Mock(),
+        )
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _mark_interaction=Mock(),
+            _cancel_active_emote=Mock(),
+            _cancel_walk=Mock(),
+            _transition_to=Mock(),
+            _play_animation=Mock(),
+            _cancel_hover_heart=Mock(),
+            _sleep_label=sleep_label,
+            _context_menu=menu,
+            _developer_menu=developer_menu,
+            _context_menu_open=False,
+            _sound=sound,
+            _context_menu_content=Mock(),
+            _context_menu_animated_rows=(),
+            _animate_menu_open=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._show_context_menu(buddy, None, 1, 12.0, 18.0)
+
+        sound.play.assert_called_once_with(SoundEvent.MENU_OPEN)
+        menu.popup.assert_called_once()
+        buddy._cancel_hover_heart.assert_called_once_with()
+        buddy._mark_interaction.assert_not_called()
+        buddy._cancel_active_emote.assert_not_called()
+        buddy._cancel_walk.assert_not_called()
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
+
+    def test_menu_action_waits_for_closed_and_one_idle_turn(self) -> None:
+        action = Mock()
+        buddy = SimpleNamespace(
+            _pending_context_action=None,
+            _context_menu_open=True,
+            _context_menu=SimpleNamespace(popdown=Mock()),
+            _logger=Mock(),
+        )
+        buddy._dispatch_context_action = Buddy._dispatch_context_action.__get__(buddy)
+
+        Buddy._close_context_menu_then(buddy, action)
+
+        action.assert_not_called()
+        buddy._context_menu.popdown.assert_called_once()
+        with patch("mochi.buddy.GLib.idle_add") as idle_add:
+            Buddy._on_context_menu_closed(buddy, None)
+
+        self.assertFalse(buddy._context_menu_open)
+        action.assert_not_called()
+        idle_add.assert_called_once_with(buddy._dispatch_context_action, action)
+        self.assertFalse(buddy._dispatch_context_action(action))
+        action.assert_called_once()
+
+
+class BuddyEmoteTests(unittest.TestCase):
+    def test_hover_heart_is_delayed_and_rescheduled_after_leave(self) -> None:
+        buddy = SimpleNamespace(
+            _hovered=False,
+            _press=None,
+            _drag_started=False,
+            _hover_heart_source_id=None,
+            HOVER_HEART_DELAY_MS=280,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _window=SimpleNamespace(set_cursor_from_name=Mock()),
+            set_cursor_from_name=Mock(),
+            _mark_interaction=Mock(),
+            _start_heart_emote=Mock(),
+            _cancel_hover_heart=Mock(),
+            _fire_hover_heart=Mock(return_value=False),
+        )
+        buddy._update_pointer_cursor = Buddy._update_pointer_cursor.__get__(buddy)
+
+        with patch("mochi.buddy.GLib.timeout_add", return_value=41) as timeout_add:
+            Buddy._on_enter(buddy, None, 0.0, 0.0)
+            Buddy._on_enter(buddy, None, 0.0, 0.0)
+            timeout_add.assert_called_once_with(280, buddy._fire_hover_heart)
+            buddy._start_heart_emote.assert_not_called()
+
+            Buddy._on_leave(buddy, None)
+            buddy._hovered = False
+            Buddy._on_enter(buddy, None, 0.0, 0.0)
+            self.assertEqual(timeout_add.call_count, 2)
+
+    def test_heart_respects_cooldown_and_idle_priority(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _last_heart_started=9.0,
+            _tuning=SimpleNamespace(hover_heart_cooldown_seconds=2.0),
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+        )
+
+        with patch("mochi.buddy.time.monotonic", return_value=10.0):
+            self.assertFalse(Buddy._start_heart_emote(buddy))
+        buddy.state.current = MochiState.DRAGGED
+        with patch("mochi.buddy.time.monotonic", return_value=12.0):
+            self.assertFalse(Buddy._start_heart_emote(buddy))
+
+        buddy._play_animation.assert_not_called()
+
+    def test_computer_emote_plays_single_animation(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_computer_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.COMPUTER)
+        buddy._play_animation.assert_called_once_with(
+            "computer",
+            after="idle",
+        )
+
+    def test_direct_input_cancels_computer_emote_and_returns_to_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.COMPUTER),
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+        )
+
+        self.assertTrue(Buddy._cancel_active_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+
+    def test_computer_idle_timer_cannot_stack(self) -> None:
+        buddy = SimpleNamespace(
+            _computer_idle_source_id=None,
+            _try_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        with (
+            patch("mochi.buddy.random.randint", return_value=60),
+            patch("mochi.buddy.GLib.timeout_add_seconds", return_value=9) as add,
+        ):
+            Buddy._schedule_computer_idle_emote(buddy)
+            Buddy._schedule_computer_idle_emote(buddy)
+
+        add.assert_called_once_with(60, buddy._try_computer_idle_emote)
+
+
+class BuddyCursorTests(unittest.TestCase):
+    def test_hover_uses_grab_cursor_and_leave_restores_default(self) -> None:
+        window = SimpleNamespace(set_cursor_from_name=Mock())
+        buddy = SimpleNamespace(
+            _hovered=False,
+            _press=None,
+            _drag_started=False,
+            _hover_heart_source_id=None,
+            HOVER_HEART_DELAY_MS=280,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _window=window,
+            set_cursor_from_name=Mock(),
+            _mark_interaction=Mock(),
+            _start_heart_emote=Mock(),
+            _cancel_hover_heart=Mock(),
+            _fire_hover_heart=Mock(return_value=False),
+        )
+        buddy._update_pointer_cursor = Buddy._update_pointer_cursor.__get__(buddy)
+
+        with patch("mochi.buddy.GLib.timeout_add", return_value=41):
+            Buddy._on_enter(buddy, None, 0.0, 0.0)
+        buddy.set_cursor_from_name.assert_called_with("pointer")
+        window.set_cursor_from_name.assert_called_with("pointer")
+
+        Buddy._on_leave(buddy, None)
+        buddy.set_cursor_from_name.assert_called_with(None)
+        window.set_cursor_from_name.assert_called_with(None)
+
+    def test_primary_press_uses_grabbing_cursor(self) -> None:
+        window = SimpleNamespace(set_cursor_from_name=Mock())
+        buddy = SimpleNamespace(
+            _hovered=True,
+            _press=None,
+            _drag_started=False,
+            _drag_move_started=False,
+            _drag_release_handled=False,
+            _drag_end_handled=False,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _window=window,
+            set_cursor_from_name=Mock(),
+            _mark_interaction=Mock(),
+            _cancel_active_emote=Mock(),
+        )
+        buddy._update_pointer_cursor = Buddy._update_pointer_cursor.__get__(buddy)
+
+        Buddy._on_pressed(buddy, None, 1, 12.0, 18.0)
+
+        self.assertEqual(buddy._press, (12.0, 18.0))
+        buddy.set_cursor_from_name.assert_called_with("pointer")
+        window.set_cursor_from_name.assert_called_with("pointer")
+
+
+class BuddyTypingTests(unittest.TestCase):
+    def test_typing_activity_starts_intro_from_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_typing_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.TYPING)
+        buddy._play_animation.assert_called_once_with("typing_intro", after="typing_loop")
+
+    def test_typing_intro_finishes_in_loop(self) -> None:
+        intro = ANIMATIONS["typing_intro"]
+        buddy = SimpleNamespace(
+            _active_animation=intro,
+            _current_animation="typing_intro",
+            _pending_animation="typing_loop",
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._finish_reaction(buddy, intro)
+
+        buddy._play_animation.assert_called_once_with("typing_loop", after=None)
+
+    def test_typing_stop_plays_outro_before_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.TYPING),
+            _last_interaction=0.0,
+            _current_animation="typing_loop",
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        with patch("mochi.buddy.time.monotonic", return_value=10.0):
+            Buddy._on_typing_stopped(buddy)
+
+        self.assertEqual(buddy._last_interaction, 10.0)
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_called_once_with("typing_outro", after="idle")
+        buddy._schedule_computer_idle_emote.assert_not_called()
+
+    def test_typing_outro_finishes_in_idle(self) -> None:
+        outro = ANIMATIONS["typing_outro"]
+        buddy = SimpleNamespace(
+            _active_animation=outro,
+            _current_animation="typing_outro",
+            _pending_animation="idle",
+            _click_reactions=SimpleNamespace(consume=Mock(return_value=False)),
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _schedule_computer_idle_emote=Mock(),
+            _maybe_resume_ambient_activity=Mock(return_value=False),
+            _logger=Mock(),
+        )
+
+        Buddy._finish_reaction(buddy, outro)
+
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+        buddy._schedule_computer_idle_emote.assert_called_once()
+
+    def test_direct_interaction_cancels_typing_and_resets_detector(self) -> None:
+        monitor = Mock()
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.TYPING),
+            _current_animation="typing_intro",
+            _typing_monitor=monitor,
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+        )
+
+        self.assertTrue(Buddy._cancel_active_emote(buddy))
+
+        monitor.reset.assert_called_once()
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+
+
+class BuddyWatchingTests(unittest.TestCase):
+    def test_youtube_playback_starts_watch_from_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_watching_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.WATCHING)
+        buddy._play_animation.assert_called_once_with("watch", after=None)
+
+    def test_watching_does_not_override_busy_states(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.DRAGGED),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["dragged"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertFalse(Buddy._start_watching_emote(buddy))
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
+
+    def test_typing_can_interrupt_watching(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["watch"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_typing_emote(buddy))
+        buddy._transition_to.assert_called_once_with(MochiState.TYPING)
+        buddy._play_animation.assert_called_once_with("typing_intro", after="typing_loop")
+
+    def test_media_stop_returns_watch_to_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _user_idle=False,
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _begin_sleep=Mock(),
+            _maybe_resume_searching=Mock(return_value=False),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_youtube_stopped(buddy)
+
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+        buddy._begin_sleep.assert_not_called()
+        buddy._schedule_computer_idle_emote.assert_called_once_with()
+
+    def test_media_stop_sleeps_if_presence_was_already_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _user_idle=True,
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _begin_sleep=Mock(),
+            _maybe_resume_searching=Mock(return_value=False),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_youtube_stopped(buddy)
+
+        buddy._begin_sleep.assert_called_once_with()
+        buddy._schedule_computer_idle_emote.assert_not_called()
+
+
+class BuddySearchingTests(unittest.TestCase):
+    def test_file_activity_starts_searching_from_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_searching_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.SEARCHING)
+        buddy._play_animation.assert_called_once_with("searching", after=None)
+
+    def test_searching_does_not_override_watching(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["watch"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertFalse(Buddy._start_searching_emote(buddy))
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
+
+    def test_watching_can_interrupt_searching(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.SEARCHING),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["searching"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_watching_emote(buddy))
+        buddy._transition_to.assert_called_once_with(MochiState.WATCHING)
+        buddy._play_animation.assert_called_once_with("watch", after=None)
+
+    def test_typing_can_interrupt_searching(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.SEARCHING),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["searching"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_typing_emote(buddy))
+        buddy._transition_to.assert_called_once_with(MochiState.TYPING)
+        buddy._play_animation.assert_called_once_with("typing_intro", after="typing_loop")
+
+    def test_file_activity_stop_returns_searching_to_idle(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.SEARCHING),
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _maybe_resume_watching=Mock(return_value=False),
+            _schedule_computer_idle_emote=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_file_activity_stopped(buddy)
+
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+        buddy._schedule_computer_idle_emote.assert_called_once_with()
+
+    def test_ambient_resume_prefers_watching_over_searching(self) -> None:
+        buddy = SimpleNamespace(
+            _maybe_resume_watching=Mock(return_value=True),
+            _maybe_resume_searching=Mock(return_value=True),
+        )
+
+        self.assertTrue(Buddy._maybe_resume_ambient_activity(buddy))
+        buddy._maybe_resume_watching.assert_called_once_with()
+        buddy._maybe_resume_searching.assert_not_called()
+
+
+class BuddyPresenceTests(unittest.TestCase):
+    def test_real_user_idle_begins_sleep(self) -> None:
+        buddy = SimpleNamespace(
+            _preview_mode=False,
+            _context_menu_open=False,
+            _media_monitor=None,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _begin_sleep=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_idle(buddy)
+
+        buddy._begin_sleep.assert_called_once_with()
+
+    def test_idle_does_not_sleep_while_context_menu_is_open(self) -> None:
+        buddy = SimpleNamespace(
+            _preview_mode=False,
+            _context_menu_open=True,
+            _media_monitor=None,
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _begin_sleep=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_idle(buddy)
+
+        buddy._begin_sleep.assert_not_called()
+
+    def test_idle_does_not_sleep_while_youtube_is_playing(self) -> None:
+        buddy = SimpleNamespace(
+            _preview_mode=False,
+            _context_menu_open=False,
+            _media_monitor=SimpleNamespace(youtube_playing=True),
+            state=SimpleNamespace(current=MochiState.WATCHING),
+            _begin_sleep=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_idle(buddy)
+
+        self.assertTrue(buddy._user_idle)
+        buddy._begin_sleep.assert_not_called()
+
+    def test_real_user_activity_wakes_sleeping_mochi(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.SLEEPING),
+            _wake_up=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_active(buddy)
+
+        buddy._wake_up.assert_called_once_with()
+
+    def test_real_user_activity_does_not_interrupt_awake_mochi(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            _wake_up=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._on_user_active(buddy)
+
+        buddy._wake_up.assert_not_called()
+
+    def test_context_press_cancels_pending_hover_without_changing_state(self) -> None:
+        buddy = SimpleNamespace(
+            _cancel_hover_heart=Mock(),
+            _transition_to=Mock(),
+            _play_animation=Mock(),
+            _cancel_active_emote=Mock(),
+        )
+
+        Buddy._on_context_pressed(buddy, Mock(), 1, 20.0, 20.0)
+
+        buddy._cancel_hover_heart.assert_called_once_with()
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
+        buddy._cancel_active_emote.assert_not_called()
+
+
+
+if __name__ == "__main__":
+    unittest.main()

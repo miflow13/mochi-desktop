@@ -103,6 +103,11 @@ pre {
   line-height: 1.45;
 }
 
+.text-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 code {
   font-family: "Courier New", Courier, monospace;
 }
@@ -129,5 +134,9 @@ footer {
 
   h2 {
     font-size: 21px;
+  }
+
+  .page-glow {
+    display: none;
   }
 }

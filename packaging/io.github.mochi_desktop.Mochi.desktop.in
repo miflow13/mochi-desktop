@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Mochi
+GenericName=Desktop Companion
+Comment=A tiny friend for your Linux desktop
+Exec=@MOCHI_EXEC@
+Icon=io.github.mochi_desktop.Mochi
+Terminal=false
+Categories=Utility;Game;
+Keywords=desktop;companion;pet;mochi;
+StartupNotify=false

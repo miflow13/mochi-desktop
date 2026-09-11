@@ -118,7 +118,7 @@ If Mochi looks blurry, inspect rendering configuration before editing the art.
 
 Runtime rules:
 
-- 128×128 logical frame
+- 256×256 asset frames scaled to the configured window size
 - nearest-neighbor scaling
 - bottom-center anchoring
 - transparent RGBA assets
