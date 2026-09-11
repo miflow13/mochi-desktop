@@ -19,6 +19,11 @@ class EdgeRoamMixin:
         self._edge_roam = False
         self._edge_roam_switch: Gtk.Switch | None = None
         self._edge_roam_clockwise = random.choice((True, False))
+        # Set on the disabled->enabled edge when Mochi cannot walk right away
+        # (dragging, sleeping, a reaction, the context menu, etc.). Consumed
+        # the next time Mochi naturally returns to ambient IDLE so activation
+        # never bypasses the state machine or needs a retry timer.
+        self._edge_roam_start_pending = False
         super().__init__(*args, **kwargs)
 
     def _build_context_menu(self):
@@ -88,6 +93,16 @@ class EdgeRoamMixin:
                 if self._transition_to(MochiState.IDLE):
                     self._play_animation("idle")
 
+            # Head to the nearest edge immediately instead of waiting for the
+            # next random ambient idle-action tick. If Mochi cannot walk right
+            # now (dragging, sleeping, a reaction, the menu, ...), leave the
+            # request pending; it is consumed the next time Mochi naturally
+            # returns to ambient IDLE via _maybe_resume_ambient_activity.
+            self._edge_roam_start_pending = True
+            self._try_start_pending_edge_roam()
+        else:
+            self._edge_roam_start_pending = False
+
         self._logger.info(
             "Edge roam %s%s",
             "enabled" if self._edge_roam else "disabled",
@@ -95,6 +110,43 @@ class EdgeRoamMixin:
             if self._edge_roam and getattr(self, "_stay_put", False)
             else "",
         )
+
+    def _try_start_pending_edge_roam(self) -> bool:
+        """Consume a pending edge-roam activation if Mochi is free to walk.
+
+        Returns True once the walk has started (or was already running),
+        which callers use to know whether ambient priority is now owned by
+        edge roaming.
+        """
+        if not self._edge_roam or not self._edge_roam_start_pending:
+            return False
+        if self._context_menu_open:
+            return False
+        if self.state.current is MochiState.WALKING:
+            self._edge_roam_start_pending = False
+            return True
+        if self.state.current is not MochiState.IDLE:
+            return False
+        self._start_walk()
+        if self.state.current is MochiState.WALKING:
+            self._edge_roam_start_pending = False
+            return True
+        return False
+
+    def _maybe_resume_ambient_activity(self) -> bool:
+        if self._try_start_pending_edge_roam():
+            return True
+        return super()._maybe_resume_ambient_activity()
+
+    def _on_context_menu_closed(self, popover) -> None:
+        super()._on_context_menu_closed(popover)
+        # A pending activation requested while the menu was open is safe to
+        # start now that presentation ownership is free again.
+        self._try_start_pending_edge_roam()
+
+    def _on_developer_menu_closed(self, popover) -> None:
+        super()._on_developer_menu_closed(popover)
+        self._try_start_pending_edge_roam()
 
     def _start_walk(self) -> None:
         # Autonomous walk timers can already be queued when a menu opens. Guard
