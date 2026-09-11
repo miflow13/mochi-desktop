@@ -329,6 +329,8 @@ code {
   background: rgba(114, 229, 97, 0.14);
   border: 1px solid rgba(17, 17, 20, 0.06);
   font-size: 0.88em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .closing {
