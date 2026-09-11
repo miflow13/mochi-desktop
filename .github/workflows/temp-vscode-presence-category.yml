@@ -18,6 +18,13 @@ jobs:
           ref: feat/vscode-presence-category
           fetch-depth: 0
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test runner
+        run: python -m pip install pytest
+
       - name: Apply focused VS Code presence changes
         shell: bash
         run: |
