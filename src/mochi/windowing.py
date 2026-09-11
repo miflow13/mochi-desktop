@@ -17,7 +17,12 @@ except (ImportError, ValueError):
     GdkWayland = None
 
 from mochi.config import Position
-from mochi.x11 import get_window_position, move_window
+from mochi.x11 import (
+    get_pointer_position,
+    get_window_position,
+    move_window,
+    primary_button_pressed,
+)
 
 try:
     gi.require_version("Gtk4LayerShell", "1.0")
@@ -30,6 +35,10 @@ class WindowPlacement:
     """Controls a layer surface, or reports that GTK must use its fallback."""
 
     DEFAULT_POSITION = Position(48, 48)
+
+    # Small safety margin so Mochi can get close to screen edges without clipping.
+    EDGE_PADDING_PX = 8
+    BOTTOM_PADDING_PX = 12
 
     def __init__(self, window: Gtk.Window, saved_position: Position | None) -> None:
         self.window = window
@@ -76,21 +85,78 @@ class WindowPlacement:
             move_window(self.window, x, y)
         return self.position
 
+    def drag_to_pointer(self, anchor_x: float, anchor_y: float) -> Position:
+        """Move the X11/XWayland window under the pointer without compositor drag.
+
+        ``anchor_x`` and ``anchor_y`` are GTK/application-pixel coordinates inside
+        Mochi captured on button press. X11 pointer/window coordinates are device
+        pixels, so the anchor is scaled before calculating the requested top-left.
+
+        Horizontal movement is clamped before XMoveWindow, making the left/right
+        edges true hard walls. Vertical movement remains unconstrained while held;
+        the normal release sync restores the established top/bottom bounds.
+        """
+        if getattr(self, "layer_shell_enabled", False):
+            return self.position
+
+        pointer = get_pointer_position(self.window)
+        if pointer is None:
+            return self.position
+
+        scale = self._x11_coordinate_scale()
+        target_x = round(pointer[0] - anchor_x * scale)
+        target_y = round(pointer[1] - anchor_y * scale)
+        clamped = self.clamp_position(target_x, target_y)
+
+        self.position = Position(clamped.x, target_y)
+        move_window(self.window, self.position.x, self.position.y)
+        return self.position
+
     def clamp_position(self, x: int, y: int) -> Position:
-        monitor = self._monitor()
+        monitor = self._monitor_for_position(x, y)
+        edge_padding = self.EDGE_PADDING_PX
+        bottom_padding = self.BOTTOM_PADDING_PX
+
         if monitor is None:
-            return Position(max(0, round(x)), max(0, round(y)))
+            return Position(round(x), round(y))
+
         geometry = monitor.get_geometry()
         width, height = self.window.get_default_size()
-        min_x = geometry.x
-        min_y = 0 if self.layer_shell_enabled else geometry.y
-        max_x = geometry.x + max(0, geometry.width - width)
-        max_y = max(0, geometry.height - height)
-        if not self.layer_shell_enabled:
-            max_y += geometry.y
+
+        if self.layer_shell_enabled:
+            min_x = geometry.x + edge_padding
+            max_x = geometry.x + max(
+                edge_padding,
+                geometry.width - width - edge_padding,
+            )
+
+            # Layer-shell Y is measured upward from the bottom edge.
+            min_y = bottom_padding
+            max_y = max(
+                bottom_padding,
+                geometry.height - height - edge_padding,
+            )
+        else:
+            # GDK monitor geometry is expressed in application pixels, while the
+            # low-level X11 helpers return/move the window in device pixels.
+            # Convert all four full-window bounds into X11 coordinates before
+            # comparing them with the window position.
+            scale = self._x11_coordinate_scale()
+
+            min_x = (geometry.x + edge_padding) * scale
+            max_x = (
+                geometry.x
+                + max(edge_padding, geometry.width - width - edge_padding)
+            ) * scale
+            min_y = (geometry.y + edge_padding) * scale
+            max_y = (
+                geometry.y
+                + max(edge_padding, geometry.height - height - bottom_padding)
+            ) * scale
+
         return Position(
-            max(min_x, min(round(x), max_x)),
-            max(min_y, min(round(y), max_y)),
+            max(round(min_x), min(round(x), round(max_x))),
+            max(round(min_y), min(round(y), round(max_y))),
         )
 
     def restore(self) -> None:
@@ -98,15 +164,89 @@ class WindowPlacement:
 
     def sync_from_window(self) -> Position:
         coordinates = get_window_position(self.window)
-        if coordinates is not None:
-            self.position = self.clamp_position(*coordinates)
+        if coordinates is None:
+            return self.position
+
+        if primary_button_pressed(self.window):
+            # XWayland dragging is owned by Mochi rather than Gdk.Toplevel.begin_move.
+            # Preserve free vertical motion while held, but never allow the actual
+            # X11 window to exist beyond the horizontal desktop bounds.
+            clamped = self.clamp_position(*coordinates)
+            current_x = round(coordinates[0])
+            current_y = round(coordinates[1])
+            self.position = Position(clamped.x, current_y)
+
+            if current_x != clamped.x:
+                move_window(self.window, clamped.x, current_y)
+
+            return self.position
+
+        clamped = self.clamp_position(*coordinates)
+        self.position = clamped
+
+        if coordinates != (clamped.x, clamped.y):
+            move_window(self.window, clamped.x, clamped.y)
+
         return self.position
 
-    def _monitor(self) -> Gdk.Monitor | None:
+    def _x11_coordinate_scale(self) -> float:
+        """Return the application-pixel to X11 device-pixel scale."""
+        if getattr(self, "layer_shell_enabled", False):
+            return 1.0
+
+        get_surface = getattr(self.window, "get_surface", None)
+        surface = get_surface() if callable(get_surface) else None
+        if surface is None:
+            return 1.0
+
+        get_scale = getattr(surface, "get_scale", None)
+        if callable(get_scale):
+            try:
+                scale = float(get_scale())
+            except (TypeError, ValueError):
+                scale = 1.0
+            if scale > 0:
+                return scale
+
+        get_scale_factor = getattr(surface, "get_scale_factor", None)
+        if callable(get_scale_factor):
+            try:
+                scale = float(get_scale_factor())
+            except (TypeError, ValueError):
+                scale = 1.0
+            if scale > 0:
+                return scale
+
+        return 1.0
+
+    def _monitor_for_position(self, x: int, y: int) -> Gdk.Monitor | None:
         if self.layer_shell_enabled and Gtk4LayerShell is not None:
             monitor = Gtk4LayerShell.get_monitor(self.window)
             if monitor is not None:
                 return monitor
         display = self.window.get_display()
         monitors = display.get_monitors()
-        return monitors.get_item(0) if monitors.get_n_items() else None
+        if not monitors.get_n_items():
+            return None
+
+        scale = 1.0 if self.layer_shell_enabled else self._x11_coordinate_scale()
+        application_x = x / scale
+        application_y = y / scale
+        width, height = self.window.get_default_size()
+        center_x = application_x + width / 2
+        center_y = application_y + height / 2
+        nearest: tuple[float, Gdk.Monitor] | None = None
+        for index in range(monitors.get_n_items()):
+            monitor = monitors.get_item(index)
+            geometry = monitor.get_geometry()
+            if (
+                geometry.x <= center_x < geometry.x + geometry.width
+                and geometry.y <= center_y < geometry.y + geometry.height
+            ):
+                return monitor
+            nearest_x = max(geometry.x, min(center_x, geometry.x + geometry.width))
+            nearest_y = max(geometry.y, min(center_y, geometry.y + geometry.height))
+            distance = (center_x - nearest_x) ** 2 + (center_y - nearest_y) ** 2
+            if nearest is None or distance < nearest[0]:
+                nearest = (distance, monitor)
+        return nearest[1] if nearest is not None else None

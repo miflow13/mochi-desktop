@@ -22,11 +22,11 @@ class SoundManagerTests(unittest.TestCase):
     def test_volume_and_mute_apply_globally(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "pet.ogg").touch()
+            (root / "pet.wav").touch()
             backend = FakeBackend()
             manager = SoundManager(volume=0.4, asset_root=root, backend=backend)
             self.assertTrue(manager.play(SoundEvent.PET))
-            self.assertEqual(backend.calls, [(root / "pet.ogg", 0.4)])
+            self.assertEqual(backend.calls, [(root / "pet.wav", 0.4)])
 
             manager.set_muted(True)
             self.assertFalse(manager.play(SoundEvent.PET))
@@ -40,6 +40,32 @@ class SoundManagerTests(unittest.TestCase):
             manager = SoundManager(asset_root=root, backend=backend)
             self.assertTrue(manager.play_level_up())
             self.assertEqual(backend.calls[0][0].name, "level_up.ogg")
+
+    def test_lifecycle_sounds_use_subtle_event_gain(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "spawn.ogg").touch()
+            (root / "exit.ogg").touch()
+            backend = FakeBackend()
+            manager = SoundManager(volume=0.6, asset_root=root, backend=backend)
+
+            self.assertTrue(manager.play(SoundEvent.SPAWN))
+            self.assertTrue(manager.play(SoundEvent.EXIT))
+            self.assertEqual(backend.calls[0][0].name, "spawn.ogg")
+            self.assertAlmostEqual(backend.calls[0][1], 0.21)
+            self.assertEqual(backend.calls[1][0].name, "exit.ogg")
+            self.assertAlmostEqual(backend.calls[1][1], 0.168)
+
+    def test_context_menu_sound_is_intentionally_quiet(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "menu_open.ogg").touch()
+            backend = FakeBackend()
+            manager = SoundManager(volume=0.6, asset_root=root, backend=backend)
+
+            self.assertTrue(manager.play(SoundEvent.MENU_OPEN))
+            self.assertEqual(backend.calls[0][0].name, "menu_open.ogg")
+            self.assertAlmostEqual(backend.calls[0][1], 0.132)
 
     def test_volume_is_clamped(self) -> None:
         manager = SoundManager(volume=9, backend=FakeBackend())

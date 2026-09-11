@@ -6,7 +6,7 @@ Mochi's visual identity depends on consistent pixel-art handling from source gen
 
 Runtime expectations:
 
-- fixed **128×128 logical frame**
+- fixed **256×256 asset frame**, scaled to Mochi's configured window size
 - transparent RGBA artwork
 - bottom-center anchoring
 - nearest-neighbor scaling only
@@ -98,17 +98,19 @@ Benefits:
 
 ## Frame and spritesheet formats
 
-Mochi has used both individual 128×128 PNG frames and horizontal spritesheets.
+Mochi uses individual 256×256 PNG frames. Imported horizontal spritesheets must
+be split and normalized to that asset size before integration.
 
 For horizontal strips, the runtime should:
 
 1. load the source image once
 2. slice cells once
-3. normalize each cell to the 128×128 logical canvas
+3. normalize each cell to the 256×256 asset canvas
 4. cache the resulting surfaces
 5. reuse them during playback
 
-Some newer authored strips use **64×64 cells**, rendered at 2× nearest-neighbor into the 128×128 logical frame.
+Lower-resolution authored strips must be resized to 256×256 frames with
+nearest-neighbor scaling before they enter the runtime asset tree.
 
 ## Animation timing
 
@@ -180,7 +182,7 @@ When trimming/resizing generated art:
 
 1. trim only source whitespace if necessary
 2. resize with nearest-neighbor
-3. place the sprite on a transparent 64×64 or 128×128 canvas
+3. place the sprite on a transparent 256×256 canvas
 4. align to bottom-center
 5. confirm no feet/body pixels are clipped
 

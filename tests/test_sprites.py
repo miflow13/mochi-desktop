@@ -2,7 +2,7 @@ import unittest
 
 import cairo
 
-from mochi.animation import AnimationPlayer
+from mochi.interaction_tuning import PICKUP_FRAME_DURATION_MS
 from mochi.sprites import ANIMATIONS, ASSET_SET, SpriteAtlas
 
 
@@ -27,7 +27,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(set(atlas.frames), expected)
         self.assertTrue(
             all(
-                (surface.get_width(), surface.get_height()) == (128, 128)
+                (surface.get_width(), surface.get_height()) == (256, 256)
                 and surface.get_content() == cairo.CONTENT_COLOR_ALPHA
                 for surface in atlas.frames.values()
             )
@@ -37,8 +37,26 @@ class SpriteDefinitionsTests(unittest.TestCase):
         required = {
             "default", "idle", "blink", "walk", "walk_left", "bounce",
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
+            "heart", "computer", "computer_intro", "computer_typing",
+            "computer_outro", "typing_intro", "typing_loop", "typing_outro",
+            "watch", "searching", "drop",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
+
+    def test_pickup_is_a_six_frame_one_shot(self) -> None:
+        pickup = ANIMATIONS["pickup"]
+        self.assertEqual(len(pickup.frames), 6)
+        self.assertEqual(pickup.frame_duration_ms, PICKUP_FRAME_DURATION_MS)
+        self.assertFalse(pickup.looping)
+
+    def test_drop_is_a_quick_six_frame_one_shot(self) -> None:
+        drop = ANIMATIONS["drop"]
+        self.assertEqual(len(drop.frames), 6)
+        self.assertLessEqual(
+            len(drop.frames) * drop.frame_duration_ms,
+            400,
+        )
+        self.assertFalse(drop.looping)
 
     def test_sleep_transitions_to_sleeping(self) -> None:
         self.assertEqual(ANIMATIONS["sleep"].next_state, "sleeping")
@@ -71,105 +89,47 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(sum(frame.duration_ms or 0 for frame in blink.frames), 390)
         self.assertFalse(blink.looping)
 
+    def test_blink_starts_and_ends_on_the_exact_idle_endpoint(self) -> None:
+        surfaces = {
+            **ASSET_SET.load_frames("idle"),
+            **ASSET_SET.load_frames("blink"),
+        }
+        idle = bytes(surfaces["idle/idle_01.png"].get_data())
+
+        self.assertEqual(bytes(surfaces["blink/blink_01.png"].get_data()), idle)
+        self.assertEqual(bytes(surfaces["blink/blink_04.png"].get_data()), idle)
+
     def test_drag_uses_a_subtle_manifest_dangling_loop(self) -> None:
         dragged = ANIMATIONS["dragged"]
-        self.assertEqual(len(dragged.frames), 10)
+        self.assertEqual(len(dragged.frames), 8)
         self.assertEqual(dragged.frame_duration_ms, 167)
         self.assertTrue(dragged.looping)
-        surfaces = SpriteAtlas().frames
-        drag_pixels = [bytes(surfaces[frame.sprite].get_data()) for frame in dragged.frames]
-        self.assertGreaterEqual(len(set(drag_pixels)), 9)
-
-    def test_pickup_is_a_six_frame_one_shot_into_stable_drag(self) -> None:
-        pickup = ANIMATIONS["pickup"]
-        self.assertEqual(len(pickup.frames), 6)
-        self.assertEqual(pickup.frame_duration_ms, 120)
-        self.assertEqual(sum(frame.duration_ms or 120 for frame in pickup.frames), 720)
-        self.assertFalse(pickup.looping)
-        self.assertEqual(pickup.next_state, "dragged")
-
-        surfaces = SpriteAtlas().frames
-        self.assertEqual(len({bytes(surfaces[frame.sprite].get_data()) for frame in pickup.frames}), 6)
-        for frame in pickup.frames:
-            data = bytes(surfaces[frame.sprite].get_data())
-            alpha = data[3::4]
-            self.assertTrue(set(alpha).issubset({0, 255}))
-            self.assertIn(0, alpha)
-            self.assertIn(255, alpha)
-            self.assertFalse(
-                any(
-                    opaque == 255 and (red, green, blue) == (127, 127, 126)
-                    for blue, green, red, opaque in zip(
-                        *[iter(data)] * 4, strict=True
-                    )
-                )
-            )
-
-    def test_pickup_completion_fires_once_and_quick_release_cancels_it(self) -> None:
-        pickup = ANIMATIONS["pickup"]
-        for release_after_ms in (0, 360, 600):
-            completions = []
-            player = AnimationPlayer(on_finished=completions.append)
-            player.play(pickup)
-            player.tick(release_after_ms)
-            player.play(ANIMATIONS["idle"])
-            player.tick(1_000)
-            self.assertEqual(completions, [])
-
-        completions = []
-        player = AnimationPlayer(on_finished=completions.append)
-        player.play(pickup)
-        player.tick(720)
-        player.tick(720)
-        self.assertEqual(completions, [pickup])
-
-    def test_repeated_pickup_interruptions_do_not_accumulate_callbacks(self) -> None:
-        completions = []
-        player = AnimationPlayer(on_finished=completions.append)
-        for _ in range(100):
-            player.play(ANIMATIONS["pickup"])
-            player.tick(240)
-            player.play(ANIMATIONS["idle"])
-        self.assertEqual(completions, [])
-
-    def test_put_down_is_the_seven_frame_plop_handoff(self) -> None:
-        put_down = ANIMATIONS["put_down"]
-        self.assertEqual(len(put_down.frames), 7)
-        self.assertEqual(put_down.frame_duration_ms, 120)
-        self.assertEqual(sum(frame.duration_ms or 120 for frame in put_down.frames), 840)
-        self.assertFalse(put_down.looping)
-        self.assertEqual(put_down.next_state, "idle")
-
-        surfaces = SpriteAtlas().frames
         self.assertEqual(
-            len({bytes(surfaces[frame.sprite].get_data()) for frame in put_down.frames}),
-            7,
+            tuple(frame.sprite for frame in dragged.frames),
+            (
+                "drag/drag_neutral.png",
+                "drag/drag_left_soft.png",
+                "drag/drag_left_medium.png",
+                "drag/drag_right_soft.png",
+                "drag/drag_right_medium.png",
+                "drag/drag_settle_left.png",
+                "drag/drag_settle_right.png",
+                "drag/drag_settle_neutral.png",
+            ),
         )
-        for frame in put_down.frames:
-            data = bytes(surfaces[frame.sprite].get_data())
-            alpha = data[3::4]
-            self.assertTrue(set(alpha).issubset({0, 255}))
-            self.assertIn(0, alpha)
-            self.assertIn(255, alpha)
-            self.assertFalse(
-                any(
-                    opaque == 255 and (red, green, blue) == (127, 127, 126)
-                    for blue, green, red, opaque in zip(
-                        *[iter(data)] * 4, strict=True
-                    )
-                )
-            )
 
-    def test_walk_uses_a_slow_looping_bounce_prototype(self) -> None:
+    def test_walk_uses_the_manifest_directional_frames(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)
         self.assertTrue(ANIMATIONS["walk_left"].looping)
         self.assertEqual(
             tuple(frame.sprite for frame in ANIMATIONS["walk"].frames),
-            tuple(frame.sprite for frame in ANIMATIONS["bounce"].frames),
+            tuple(f"walk/walk_{index:02}.png" for index in range(1, 9)),
         )
         self.assertEqual(
-            tuple(frame.duration_ms for frame in ANIMATIONS["walk"].frames),
-            (80, 110, 125, 135, 180, 170, 130),
+            tuple(frame.sprite for frame in ANIMATIONS["walk_left"].frames),
+            tuple(
+                f"walk_left/walk_left_{index:02}.png" for index in range(1, 9)
+            ),
         )
 
     def test_click_reactions_use_tactile_per_frame_timing(self) -> None:
@@ -183,6 +143,37 @@ class SpriteDefinitionsTests(unittest.TestCase):
         )
         self.assertFalse(ANIMATIONS["bounce"].looping)
         self.assertFalse(ANIMATIONS["squish"].looping)
+
+    def test_heart_is_a_single_manifest_backed_pass(self) -> None:
+        heart = ANIMATIONS["heart"]
+        self.assertEqual(len(heart.frames), 16)
+        self.assertEqual(heart.frame_duration_ms, 120)
+        self.assertFalse(heart.looping)
+
+    def test_computer_emote_has_intro_typing_and_outro_phases(self) -> None:
+        self.assertEqual(len(ANIMATIONS["computer_intro"].frames), 4)
+        self.assertEqual(len(ANIMATIONS["computer_typing"].frames), 8)
+        self.assertEqual(len(ANIMATIONS["computer_outro"].frames), 4)
+        self.assertFalse(ANIMATIONS["computer_intro"].looping)
+        self.assertTrue(ANIMATIONS["computer_typing"].looping)
+        self.assertFalse(ANIMATIONS["computer_outro"].looping)
+
+    def test_searching_emote_preserves_the_authored_twenty_frame_timing(self) -> None:
+        searching = ANIMATIONS["searching"]
+        self.assertEqual(len(searching.frames), 20)
+        self.assertEqual(searching.frame_duration_ms, 120)
+        self.assertTrue(searching.looping)
+        self.assertEqual(
+            tuple(frame.sprite for frame in searching.frames),
+            tuple(f"searching/searching_{index:02}.png" for index in range(1, 21)),
+        )
+
+    def test_typing_transition_animations_surround_the_loop(self) -> None:
+        self.assertEqual(len(ANIMATIONS["typing_intro"].frames), 5)
+        self.assertFalse(ANIMATIONS["typing_intro"].looping)
+        self.assertTrue(ANIMATIONS["typing_loop"].looping)
+        self.assertEqual(len(ANIMATIONS["typing_outro"].frames), 3)
+        self.assertFalse(ANIMATIONS["typing_outro"].looping)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,10 @@
-# Mochi audio placeholders
+# Mochi audio
 
-Replace these event files with final audio later:
+Audio files in this directory are optional interaction cues loaded by `SoundManager`.
 
-- `pet.ogg` — accepted left-click reaction
-- `pickup.ogg` — drag begins
-- `drop.ogg` — drag ends
-- `level_up.ogg` — future level-up event
+- `mochi_chirp_01.ogg` — left-click chirp
+- `spawn.ogg` — launch cue
+- `exit.ogg` — shutdown cue
+- `menu_open.ogg` — context-menu cue
 
-Missing files are intentionally ignored. Keep clips short and normalized; global
-volume and mute settings are applied by `mochi.sound.SoundManager`.
+Missing optional sounds are skipped safely.

@@ -15,8 +15,16 @@ class MochiState(Enum):
     WALKING = auto()
     SLEEPING = auto()
     WAKING = auto()
-    PICKING_UP = auto()
+    HEART = auto()
+    COMPUTER = auto()
+    TYPING = auto()
+    WATCHING = auto()
+    DANCING = auto()
+    SEARCHING = auto()
+    PICKUP = auto()
     DRAGGED = auto()
+    DROPPING = auto()
+    FEDORA = auto()
 
 
 class StateMachine:

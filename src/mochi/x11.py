@@ -19,6 +19,9 @@ except (ImportError, ValueError):
     GdkX11 = None
 
 
+_BUTTON1_MASK = 1 << 8
+
+
 class _ClientMessageData(ctypes.Union):
     _fields_ = [("longs", ctypes.c_long * 5)]
 
@@ -143,6 +146,74 @@ def get_window_position(window: Gtk.Window) -> tuple[int, int] | None:
         x11.XCloseDisplay(display)
 
 
+def get_pointer_position(window: Gtk.Window) -> tuple[int, int] | None:
+    """Return the pointer position in X11 root/device coordinates."""
+    surface = window.get_surface()
+    if GdkX11 is None or not isinstance(surface, GdkX11.X11Surface):
+        return None
+
+    x11, display = _open_x11()
+    if display is None:
+        return None
+
+    try:
+        root = ctypes.c_ulong()
+        child = ctypes.c_ulong()
+        root_x = ctypes.c_int()
+        root_y = ctypes.c_int()
+        window_x = ctypes.c_int()
+        window_y = ctypes.c_int()
+        mask = ctypes.c_uint()
+        queried = x11.XQueryPointer(
+            display,
+            surface.get_xid(),
+            ctypes.byref(root),
+            ctypes.byref(child),
+            ctypes.byref(root_x),
+            ctypes.byref(root_y),
+            ctypes.byref(window_x),
+            ctypes.byref(window_y),
+            ctypes.byref(mask),
+        )
+        return (root_x.value, root_y.value) if queried else None
+    finally:
+        x11.XCloseDisplay(display)
+
+
+def primary_button_pressed(window: Gtk.Window) -> bool:
+    """Return whether X11 button 1 is currently held for Mochi's display."""
+    surface = window.get_surface()
+    if GdkX11 is None or not isinstance(surface, GdkX11.X11Surface):
+        return False
+
+    x11, display = _open_x11()
+    if display is None:
+        return False
+
+    try:
+        root = ctypes.c_ulong()
+        child = ctypes.c_ulong()
+        root_x = ctypes.c_int()
+        root_y = ctypes.c_int()
+        window_x = ctypes.c_int()
+        window_y = ctypes.c_int()
+        mask = ctypes.c_uint()
+        queried = x11.XQueryPointer(
+            display,
+            surface.get_xid(),
+            ctypes.byref(root),
+            ctypes.byref(child),
+            ctypes.byref(root_x),
+            ctypes.byref(root_y),
+            ctypes.byref(window_x),
+            ctypes.byref(window_y),
+            ctypes.byref(mask),
+        )
+        return bool(queried and mask.value & _BUTTON1_MASK)
+    finally:
+        x11.XCloseDisplay(display)
+
+
 def _open_x11() -> tuple[ctypes.CDLL, int | None]:
     library_name = ctypes.util.find_library("X11")
     if library_name is None:
@@ -164,6 +235,18 @@ def _open_x11() -> tuple[ctypes.CDLL, int | None]:
         ctypes.POINTER(ctypes.c_int),
         ctypes.POINTER(ctypes.c_ulong),
     ]
+    x11.XQueryPointer.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+        ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_uint),
+    ]
+    x11.XQueryPointer.restype = ctypes.c_int
     x11.XFlush.argtypes = [ctypes.c_void_p]
     x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
     return x11, x11.XOpenDisplay(None)
