@@ -49,42 +49,11 @@ class CommandAudioBackend:
             stderr=subprocess.DEVNULL,
         )
 
-    def play_pitched(
-        self, path: Path, volume: float, pitch_ratio: float, source_rate: int
-    ) -> None:
-        """Play a short cue at a reinterpreted sample rate to shift pitch."""
-        rate = max(8_000, round(source_rate * pitch_ratio))
-        if self.kind == "pw-play":
-            command = (
-                self.executable,
-                "--volume",
-                str(volume),
-                f"--rate={rate}",
-                str(path),
-            )
-        elif self.kind == "paplay":
-            pulse_volume = round(volume * 65_536)
-            command = (
-                self.executable,
-                f"--volume={pulse_volume}",
-                f"--rate={rate}",
-                str(path),
-            )
-        else:
-            raise ValueError(f"Unsupported audio backend: {self.kind}")
-        subprocess.Popen(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
 
 class SoundManager:
     """Maps semantic events to replaceable files and applies global settings."""
 
     DEFAULT_VOLUME = 0.6
-    CLICK_SOURCE_RATE = 32_000
     EVENT_FILES = {
         SoundEvent.CLICK: "mochi_chirp_01.ogg",
         SoundEvent.PET: "pet.wav",
@@ -95,6 +64,14 @@ class SoundManager:
         SoundEvent.EXIT: "exit.ogg",
         SoundEvent.MENU_OPEN: "menu_open.ogg",
     }
+    FEDORA_CLICK_FILES = (
+        "mochi_chirp_01.ogg",
+        "mochi_chirp_fedora_02.ogg",
+        "mochi_chirp_fedora_03.ogg",
+        "mochi_chirp_fedora_04.ogg",
+        "mochi_chirp_fedora_05.ogg",
+        "mochi_chirp_fedora_06.ogg",
+    )
 
     # Keep lifecycle cues quieter than direct interaction sounds.
     EVENT_GAINS = {
@@ -117,11 +94,24 @@ class SoundManager:
         self.muted = bool(muted)
         self._missing_logged: set[SoundEvent] = set()
 
-    def play(self, event: SoundEvent, *, pitch_ratio: float = 1.0) -> bool:
+    def play(self, event: SoundEvent) -> bool:
         filename = self.EVENT_FILES.get(event)
         if filename is None:
             self._logger.warning("Unknown sound event: %s", event)
             return False
+        return self._play_filename(event, filename)
+
+    def play_fedora_click(self, position: int) -> bool:
+        """Play one of six authored click pitches for the Fedora easter egg."""
+        index = max(1, min(int(position), len(self.FEDORA_CLICK_FILES))) - 1
+        filename = self.FEDORA_CLICK_FILES[index]
+        path = self.asset_root / filename
+        if not path.is_file() and filename != self.EVENT_FILES[SoundEvent.CLICK]:
+            # Installed builds from before the easter egg should still click.
+            return self.play(SoundEvent.CLICK)
+        return self._play_filename(SoundEvent.CLICK, filename)
+
+    def _play_filename(self, event: SoundEvent, filename: str) -> bool:
         if self.muted or self.volume <= 0:
             return False
 
@@ -137,20 +127,7 @@ class SoundManager:
 
         effective_volume = self.volume * self.EVENT_GAINS.get(event, 1.0)
         try:
-            play_pitched = getattr(self.backend, "play_pitched", None)
-            if (
-                event is SoundEvent.CLICK
-                and pitch_ratio != 1.0
-                and callable(play_pitched)
-            ):
-                play_pitched(
-                    path,
-                    effective_volume,
-                    max(0.5, min(float(pitch_ratio), 2.0)),
-                    self.CLICK_SOURCE_RATE,
-                )
-            else:
-                self.backend.play(path, effective_volume)
+            self.backend.play(path, effective_volume)
         except OSError as error:
             self._logger.warning("Could not play sound %s: %s", path, error)
             return False
