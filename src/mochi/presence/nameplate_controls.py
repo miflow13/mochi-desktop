@@ -16,6 +16,9 @@ The reusable surface has deterministic content priority:
 
     speech bubble > temporary feedback > persistent mood > name only
 
+Mood is derived from successful Mochi state transitions through `MoodModel`;
+the UI layer does not invent its own random mood cadence.
+
 The speech bubble and nameplate remain mutually exclusive at the same anchor.
 Temporary feedback lives on the nameplate itself, overrides the mood line for
 a bounded amount of *visible* time, then restores the mood automatically. If
@@ -26,6 +29,9 @@ not silently consumed while hidden.
 from __future__ import annotations
 
 import time
+
+from mochi.mood import MoodModel
+from mochi.state import MochiState
 
 from .nameplate import Nameplate
 
@@ -38,8 +44,9 @@ class NameplateMixin:
     def __init__(self, *args, **kwargs) -> None:
         self._nameplate: Nameplate | None = None
         self._nameplate_shown = False
+        self._mood_model = MoodModel()
         self._nameplate_name = "Mochi"
-        self._nameplate_mood: str | None = None
+        self._nameplate_mood: str | None = self._mood_model.label
         self._nameplate_feedback: str | None = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since: float | None = None
@@ -48,6 +55,13 @@ class NameplateMixin:
         if self._preview_mode:
             return
 
+        # State normally starts at IDLE, but synchronize from the actual state
+        # after the Buddy core has initialized so alternate startup paths remain
+        # correct without special-casing them here.
+        startup_mood = self._mood_model.observe_state(self.state.current)
+        self._nameplate_mood = (
+            startup_mood.value if startup_mood is not None else self._mood_model.label
+        )
         self._nameplate = Nameplate(
             owner=self._window,
             anchor_widget=self,
@@ -68,7 +82,13 @@ class NameplateMixin:
         self._refresh_nameplate_content()
 
     def set_nameplate_mood(self, mood: str | None) -> None:
-        """Set persistent mood/state text shown when no feedback overrides it."""
+        """Set the mood line directly.
+
+        Normal runtime mood is owned by `MoodModel` and will synchronize again
+        on the next successful mapped MochiState transition. Keeping this small
+        presentation setter preserves the reusable surface API for previews and
+        future tooling without making UI code the mood source of truth.
+        """
         self._nameplate_mood = self._normalize_nameplate_text(mood)
         self._refresh_nameplate_content()
 
@@ -146,6 +166,20 @@ class NameplateMixin:
         )
         if self._nameplate_feedback_remaining_seconds <= 0.0:
             self.clear_nameplate_feedback()
+
+    def _transition_to(self, next_state: MochiState) -> bool:
+        """Update mood only after the core state machine accepts a transition."""
+        transitioned = super()._transition_to(next_state)
+        if not transitioned:
+            return False
+
+        mood = self._mood_model.observe_state(next_state)
+        if mood is not None:
+            # The behavior state remains the source of truth. Reapplying the
+            # mapped label also repairs any temporary/manual mood preview on
+            # the next meaningful transition.
+            self.set_nameplate_mood(mood.value)
+        return True
 
     def _tick(self) -> bool:
         result = super()._tick()
