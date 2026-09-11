@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from mochi.presence.clicks import ClickBurstDetector
@@ -82,6 +83,7 @@ from mochi.state import MochiState
 
 class _FedoraHarness(FedoraModeMixin, _FedoraHarnessBase):
     def __init__(self) -> None:
+        self._logger = logging.getLogger(__name__)
         self._fedora_mode_active = True
         self._fedora_mode_exiting = False
         self._preview_mode = False
