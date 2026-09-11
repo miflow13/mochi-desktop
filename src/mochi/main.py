@@ -52,6 +52,19 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(levelname)s %(name)s: %(message)s",
     )
+    if args.debug:
+        logging.getLogger(__name__).debug(
+            "Display environment: session_type=%r current_desktop=%r "
+            "session_desktop=%r wayland_display=%r display=%r "
+            "gdk_backend=%r forced_xwayland=%s",
+            os.environ.get("XDG_SESSION_TYPE"),
+            os.environ.get("XDG_CURRENT_DESKTOP"),
+            os.environ.get("XDG_SESSION_DESKTOP"),
+            os.environ.get("WAYLAND_DISPLAY"),
+            os.environ.get("DISPLAY"),
+            os.environ.get("GDK_BACKEND"),
+            selected_xwayland,
+        )
     if selected_xwayland:
         logging.getLogger(__name__).info(
             "GNOME Wayland detected; using XWayland for the buddy window"

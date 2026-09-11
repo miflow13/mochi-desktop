@@ -5,6 +5,7 @@ from mochi.config import Position
 from mochi.edge_roam import (
     EdgeBounds,
     EdgeWalkMotion,
+    bounds_for_placement,
     build_edge_roam_motion,
     nearest_edge_point,
 )
@@ -110,6 +111,16 @@ class EdgeRoamTests(unittest.TestCase):
         )
         self.assertIsInstance(motion, EdgeWalkMotion)
         self.assertEqual(motion.bounds, EdgeBounds(16, 1784, 16, 1376))
+
+    def test_layer_shell_secondary_monitor_bounds_are_output_local(self) -> None:
+        placement = _Placement()
+        geometry = SimpleNamespace(x=-1920, y=-200, width=1280, height=1024)
+        placement._monitor = SimpleNamespace(get_geometry=lambda: geometry)
+        placement.layer_shell_enabled = True
+
+        bounds = bounds_for_placement(placement, Position(64, 64))
+
+        self.assertEqual(bounds, EdgeBounds(8, 1172, 12, 916))
 
 
 if __name__ == "__main__":

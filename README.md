@@ -88,6 +88,14 @@ The repository checkout is not required to *run* Mochi after installation.
 > [!NOTE]
 > GNOME Wayland may require one logout/login after the first install before Mochi's desktop-awareness helper becomes active. The installer will tell you if that is needed.
 
+### Fedora + Niri
+
+Niri uses Wayland layer-shell for explicitly positioned desktop surfaces. The
+installer includes Fedora's `gtk4-layer-shell` package so Mochi can use that
+path. After updating an existing installation, run `./install.sh` again and
+start Mochi with `mochi --reset-position` once to discard coordinates saved
+under another desktop layout.
+
 ### Open Mochi
 
 Search for **Mochi** in the GNOME app grid and launch him like a normal application.

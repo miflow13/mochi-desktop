@@ -124,8 +124,12 @@ class WindowPlacement:
         width, height = self.window.get_default_size()
 
         if self.layer_shell_enabled:
-            min_x = geometry.x + edge_padding
-            max_x = geometry.x + max(
+            # Layer-shell margins are relative to the selected output, rather
+            # than the global GDK monitor coordinate space.  Adding geometry.x
+            # here sends a surface on a secondary (or negative-origin) monitor
+            # far beyond that output's edge.
+            min_x = edge_padding
+            max_x = max(
                 edge_padding,
                 geometry.width - width - edge_padding,
             )
