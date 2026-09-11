@@ -78,6 +78,7 @@ class MusicDanceMixin:
 
     def _on_music_started(self) -> None:
         """Start the low-priority dance when recognized music begins."""
+        self._on_user_active()
         # Sparse Chromium MPRIS data can temporarily look like generic focused
         # browser media. Confident music detection is more specific, so music
         # may replace only that coarse fallback WATCHING state. Explicit
@@ -103,7 +104,7 @@ class MusicDanceMixin:
                 and self._media_monitor.youtube_playing
             )
             if not self._context_menu_open and not youtube_playing:
-                self._begin_sleep()
+                self._on_user_idle()
             return
 
         if (
@@ -201,7 +202,7 @@ class MusicDanceMixin:
         self._logger.debug("YouTube watch-along stopped")
 
         if self._user_idle:
-            self._begin_sleep()
+            self._on_user_idle()
         elif (
             not self._maybe_resume_vscode_coworking()
             and not self._maybe_resume_dancing()

@@ -156,7 +156,7 @@ class PresenceBuddyMixin:
 
     def _choose_idle_action(self) -> bool:
         """Suppress only autonomous walking while Stay put is enabled."""
-        if not self._stay_put:
+        if not self._stay_put or self._user_idle:
             return super()._choose_idle_action()
 
         self._idle_action_source_id = None
@@ -576,6 +576,8 @@ class PresenceBuddyMixin:
     def _on_presence_app_category_changed(self, category: str) -> None:
         previous = self._presence_app_category
         self._presence_app_category = category
+        if category != previous and category in ("terminal", "vscode"):
+            self._on_user_active()
         if category == "vscode":
             self._schedule_vscode_coworking()
         elif previous == "vscode" or self._vscode_coworking_active:
