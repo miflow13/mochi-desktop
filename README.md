@@ -3,7 +3,6 @@
 
 # Mochi 🌱
 
-> [!WARNING]
 > Mochi is developed with the assistance of coding agents for implementation, debugging, code review, and investigation. I direct the architecture, product decisions, testing, releases, and overall development process.
 
 All Mochi pixel art, animations, and audio are created by me.
