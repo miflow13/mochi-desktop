@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from mochi.presence.clicks import ClickBurstDetector
-from mochi.presence.click_dialogue import FEDORA_CLICK_PITCH_RATIOS
+from mochi.sound import SoundManager
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,15 +42,18 @@ def test_fedora_secret_resets_when_clicks_are_not_rapid() -> None:
     assert detector.record(now=4.0) is False
 
 
-def test_fedora_click_pitch_ramp_ends_highest() -> None:
-    assert len(FEDORA_CLICK_PITCH_RATIOS) == 6
-    assert FEDORA_CLICK_PITCH_RATIOS[0] == 1.0
-    assert all(
-        current < following
-        for current, following in zip(
-            FEDORA_CLICK_PITCH_RATIOS, FEDORA_CLICK_PITCH_RATIOS[1:]
-        )
+def test_fedora_click_pitch_assets_are_complete() -> None:
+    audio_root = ROOT / "assets" / "audio"
+
+    assert SoundManager.FEDORA_CLICK_FILES == (
+        "mochi_chirp_01.ogg",
+        "mochi_chirp_fedora_02.ogg",
+        "mochi_chirp_fedora_03.ogg",
+        "mochi_chirp_fedora_04.ogg",
+        "mochi_chirp_fedora_05.ogg",
+        "mochi_chirp_fedora_06.ogg",
     )
+    assert all((audio_root / filename).is_file() for filename in SoundManager.FEDORA_CLICK_FILES)
 
 
 def test_fedora_manifest_preserves_handoff_timing_and_sequence() -> None:
