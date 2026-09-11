@@ -39,9 +39,14 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
-            "watch", "searching", "drop",
+            "watch", "dance", "searching", "drop",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
+
+    def test_dance_is_an_eight_frame_loop(self) -> None:
+        dance = ANIMATIONS["dance"]
+        self.assertEqual(len(dance.frames), 8)
+        self.assertTrue(dance.looping)
 
     def test_pickup_is_a_six_frame_one_shot(self) -> None:
         pickup = ANIMATIONS["pickup"]
