@@ -6,8 +6,6 @@ import random
 
 from gi.repository import GLib
 
-from mochi.sound import SoundEvent
-
 from .clicks import ClickBurstDetector
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
@@ -26,11 +24,6 @@ CLICK_BURST_PHRASES = (
     "gentle!",
     "eep!",
     "tiny creature here!",
-)
-
-# Secret Fedora sequence: one semitone per click, then a two-semitone final jump.
-FEDORA_CLICK_PITCH_RATIOS = tuple(
-    2 ** (semitones / 12) for semitones in (0, 1, 2, 3, 4, 6)
 )
 
 
@@ -75,11 +68,10 @@ class ClickDialogueMixin:
         if not self._preview_mode:
             burst_triggered = self._click_burst_detector.record()
             fedora_triggered = self._fedora_click_detector.record()
-            # The hidden six-click Fedora gesture quietly announces itself: each
-            # accepted click climbs in pitch, with click six landing highest.
+            # The hidden six-click Fedora gesture announces itself with six real
+            # pre-pitched chirps. Position six is the highest authored asset.
             position = max(1, self._fedora_click_detector.last_position)
-            pitch_ratio = FEDORA_CLICK_PITCH_RATIOS[position - 1]
-            self._sound.play(SoundEvent.CLICK, pitch_ratio=pitch_ratio)
+            self._sound.play_fedora_click(position)
 
         if fedora_triggered:
             # Six rapid clicks are intentionally secret. They take precedence
