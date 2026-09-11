@@ -16,7 +16,7 @@ class FedoraModeMixin:
     FEDORA_INTRO_ANIMATION = "fedora_intro"
     FEDORA_LOOP_ANIMATION = "fedora_loop"
     FEDORA_OUTRO_ANIMATION = "fedora_outro"
-    FEDORA_ENGAGED_TEXT = "Fedora mode engaged"
+    FEDORA_ENGAGED_TEXT = "fedora mode engaged"
 
     def __init__(self, *args, **kwargs) -> None:
         self._fedora_mode_active = False
