@@ -140,6 +140,48 @@ class MochiApplication(Gtk.Application):
                 padding: 0 8px;
             }
 
+            /*
+             * Some third-party GTK themes make the checked Gtk.Switch track
+             * effectively transparent inside undecorated/translucent windows.
+             * Keep Mochi's menu controls self-contained so an enabled setting
+             * never looks like the control disappeared.
+             */
+            window.mochi-menu-window switch {
+                min-width: 38px;
+                min-height: 20px;
+                padding: 2px;
+                background-image: none;
+                background-color: alpha(@window_fg_color, 0.16);
+                border: 1px solid alpha(@window_fg_color, 0.18);
+                border-radius: 999px;
+                box-shadow: none;
+            }
+
+            window.mochi-menu-window switch:checked {
+                background-image: none;
+                background-color: #79c98b;
+                border-color: #79c98b;
+            }
+
+            window.mochi-menu-window switch slider {
+                min-width: 16px;
+                min-height: 16px;
+                background-image: none;
+                background-color: @window_bg_color;
+                border: 1px solid alpha(@window_fg_color, 0.18);
+                border-radius: 999px;
+                box-shadow: 0 1px 2px alpha(black, 0.22);
+            }
+
+            window.mochi-menu-window switch:checked slider {
+                background-color: white;
+                border-color: alpha(black, 0.08);
+            }
+
+            window.mochi-menu-window switch:disabled {
+                opacity: 0.45;
+            }
+
             scale.mochi-menu-scale {
                 margin: 0 6px 2px 6px;
             }
