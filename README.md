@@ -1,10 +1,11 @@
+
 <div align="center">
 
 # Mochi 🌱
 
 ### A tiny Deskling companion for Linux
 
-<img width="800" height="475" alt="Mochi on the Linux desktop" src="https://github.com/user-attachments/assets/cd9a4907-3f53-47a1-b0d6-0526ccd674bc" />
+<<img width="2370" height="1782" alt="mochi-article-banner-upscaled" src="https://github.com/user-attachments/assets/5fe458e3-22fe-4575-92ee-6b2fdc53f39e" />
 
 **A handcrafted pixel-art companion who wanders, reacts, chats, sleeps, and quietly lives on your desktop.**
 
@@ -31,6 +32,8 @@ Mochi is currently available as an **early public alpha**. Fedora + GNOME on Way
 ---
 
 ## Install Mochi
+<img width="1280" height="803" alt="hellofrommochi" src="https://github.com/user-attachments/assets/d7cb090d-5fae-4315-8b10-d809eda3da39" />
+
 
 ### Recommended: Fedora + GNOME
 
