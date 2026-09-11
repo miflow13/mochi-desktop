@@ -6,6 +6,7 @@ import random
 
 from gi.repository import GLib
 
+from mochi.quick_start import QuickStartMixin
 from mochi.sound import SoundEvent
 
 from .clicks import ClickBurstDetector
@@ -183,6 +184,7 @@ class ClickDialogueMixin:
 
 class PresenceBuddy(
     ClickDialogueMixin,
+    QuickStartMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
     MusicDanceMixin,
@@ -194,6 +196,7 @@ class PresenceBuddy(
 
 class PresenceX11Buddy(
     ClickDialogueMixin,
+    QuickStartMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
     MusicDanceMixin,
