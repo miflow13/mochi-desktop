@@ -44,6 +44,18 @@ class WindowPlacementMonitorTests(unittest.TestCase):
 
         self.assertEqual((position.x, position.y), (2200, 300))
 
+    def test_layer_shell_secondary_monitor_uses_output_local_margins(self) -> None:
+        """Layer-shell margins must not include a monitor's global origin."""
+        secondary = monitor(-1920, 0, 1280, 1024)
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(MonitorList(secondary), 128, 128)
+        placement.layer_shell_enabled = True
+        placement._monitor_for_position = lambda _x, _y: secondary
+
+        position = WindowPlacement.clamp_position(placement, 5000, -5000)
+
+        self.assertEqual((position.x, position.y), (1144, 12))
+
     @patch("mochi.windowing.primary_button_pressed", return_value=False)
     @patch("mochi.windowing.move_window")
     @patch("mochi.windowing.get_window_position", return_value=(-80, 790))

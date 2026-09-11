@@ -41,8 +41,9 @@ def bounds_for_placement(placement, origin: Position) -> EdgeBounds | None:
     bottom_padding = placement.BOTTOM_PADDING_PX
 
     if placement.layer_shell_enabled:
-        left = geometry.x + edge_padding
-        right = geometry.x + max(edge_padding, geometry.width - width - edge_padding)
+        # Layer-shell margins are local to the output selected for the surface.
+        left = edge_padding
+        right = max(edge_padding, geometry.width - width - edge_padding)
         top = bottom_padding
         bottom = max(bottom_padding, geometry.height - height - edge_padding)
     else:

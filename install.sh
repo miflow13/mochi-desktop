@@ -39,6 +39,7 @@ if command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1; then
         python3-gobject
         python3-cairo
         gtk4
+        gtk4-layer-shell
         libX11
         xorg-x11-server-Xwayland
         pipewire-utils
