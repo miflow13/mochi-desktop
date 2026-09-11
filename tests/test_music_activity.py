@@ -89,6 +89,32 @@ class MprisMusicBackendTests(unittest.TestCase):
             "xesam:title": "A video - YouTube",
         }))
 
+    def test_browser_creator_metadata_alone_is_not_music(self):
+        backend = self._backend({
+            "org.mpris.MediaPlayer2.chromium.instance123": {
+                "PlaybackStatus": "Playing",
+                "Metadata": {
+                    "xesam:title": "A normal YouTube video",
+                    "xesam:artist": ["Video channel"],
+                    "xesam:url": "",
+                },
+            }
+        })
+        self.assertFalse(backend.sample_music_playing())
+
+    def test_spotify_web_url_is_music(self):
+        backend = self._backend({
+            "org.mpris.MediaPlayer2.chromium.instance123": {
+                "PlaybackStatus": "Playing",
+                "Metadata": {
+                    "xesam:title": "A track",
+                    "xesam:artist": ["An artist"],
+                    "xesam:url": "https://open.spotify.com/track/abc",
+                },
+            }
+        })
+        self.assertTrue(backend.sample_music_playing())
+
     def test_local_audio_file_is_music(self):
         self.assertTrue(_metadata_indicates_music({
             "xesam:url": "file:///home/user/Music/song.flac"
