@@ -10,7 +10,7 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 
 ## Canonical asset rules
 
-- Canvas: **256 × 256 px** per runtime frame.
+- Canonical runtime canvas: **256 × 256 px**. Authored smaller pixel-art cells may declare `source_cell_size` in the manifest and are scaled to the canonical canvas in memory with nearest-neighbor filtering; stored artwork is not resampled.
 - Format: **PNG with alpha**.
 - Scaling: **nearest-neighbor**.
 - Character anchor: **bottom-center**.
@@ -39,11 +39,13 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 - `bounce` — tactile click reaction.
 - `squish` — tactile click reaction.
 - `heart` — affectionate one-shot emote.
+- `fedora_intro`, `fedora_loop`, `fedora_outro` — hidden six-click Fedora-mode hat transition, held loop, and exit transition.
 
 ### Ambient / contextual activity
 
 - `computer` — computer-use emote source sequence.
 - `typing_intro`, `typing_loop`, `typing_outro` — sustained typing state.
+- `terminal_intro`, `terminal_loop`, `terminal_outro` — focused-terminal coworking state with authored entry and exit transitions.
 - `watch` — media/watch-along state.
 - `searching` — file/search activity state.
 - `sway_idle` — drag/held idle motion.

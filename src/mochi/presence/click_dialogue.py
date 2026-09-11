@@ -11,11 +11,13 @@ from mochi.sound import SoundEvent
 from .clicks import ClickBurstDetector
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
+from .fedora_mode import FedoraModeMixin
 from .integration import (
     PresenceBuddy as BasePresenceBuddy,
     PresenceX11Buddy as BasePresenceX11Buddy,
 )
 from .music_dance import MusicDanceMixin
+from .terminal_cowork import TerminalCoworkMixin
 
 
 CLICK_BURST_PHRASES = (
@@ -34,6 +36,10 @@ class ClickDialogueMixin:
         self._click_burst_detector = ClickBurstDetector(
             required_clicks=3,
             window_seconds=1.4,
+        )
+        self._fedora_click_detector = ClickBurstDetector(
+            required_clicks=6,
+            window_seconds=2.4,
         )
         self._last_click_burst_phrase: str | None = None
         self._preserve_presence_bubble_for_press = False
@@ -60,11 +66,25 @@ class ClickDialogueMixin:
 
     def react_to_click(self) -> None:
         burst_triggered = False
+        fedora_triggered = False
         if not self._preview_mode:
             # Play on the accepted pointer click itself, not later when a queued
             # bounce/squish animation happens to begin.
             self._sound.play(SoundEvent.CLICK)
             burst_triggered = self._click_burst_detector.record()
+            fedora_triggered = self._fedora_click_detector.record()
+
+        if fedora_triggered:
+            # Six rapid clicks are intentionally secret. They take precedence
+            # over the normal triple-click line and toggle the held Fedora mode.
+            self._click_burst_detector.reset()
+            self._toggle_fedora_mode()
+            return
+
+        if getattr(self, "_fedora_mode_holding", False):
+            # Keep counting toward the secret six-click toggle without letting
+            # normal click reactions replace the Fedora hat loop.
+            return
 
         super().react_to_click()
 
@@ -163,17 +183,21 @@ class ClickDialogueMixin:
 
 class PresenceBuddy(
     ClickDialogueMixin,
+    FedoraModeMixin,
+    TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
     BasePresenceBuddy,
 ):
-    """Layer-shell buddy with Mochi Sense, music dance, edge roam, and dialogue."""
+    """Layer-shell buddy with terminal coworking, Mochi Sense, music, and dialogue."""
 
 
 class PresenceX11Buddy(
     ClickDialogueMixin,
+    FedoraModeMixin,
+    TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
     BasePresenceX11Buddy,
 ):
-    """X11 buddy with Mochi Sense, music dance, edge roam, and dialogue."""
+    """X11 buddy with terminal coworking, Mochi Sense, music, and dialogue."""

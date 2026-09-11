@@ -297,15 +297,19 @@ class MprisMediaBackend:
             return True
 
         youtube_metadata = _metadata_indicates_youtube(metadata)
+        brainfm_metadata = _metadata_indicates_brainfm(metadata)
+
+        # Brain.fm is a known music-first browser source. Never let the broad
+        # focused-browser fallback reinterpret it as watchable video. The music
+        # monitor owns this source and can transition Mochi into DANCING.
+        if brainfm_metadata and is_browser:
+            return False
 
         # Browser YouTube is focus-sensitive so background playback does not
         # make Mochi behave as though the user is actively watching it.
         if youtube_metadata and is_browser:
             if self._youtube_focused:
                 self._watching_via_youtube_focus = True
-                return True
-            if self._focused_browser:
-                self._watching_via_browser_focus = True
                 return True
             return False
 
@@ -319,14 +323,10 @@ class MprisMediaBackend:
             self._watching_via_youtube_focus = True
             return True
 
-        # Chromium on Fedora commonly exposes exactly what playerctl reports:
-        # a browser MPRIS player in Playing state, a media title, and no URL or
-        # site branding. If that browser is also the coarse focused-app category,
-        # treat it as focused browser media. No title, URL, or page content is
-        # retained or transmitted to make this decision.
-        if self._focused_browser and is_browser:
-            self._watching_via_browser_focus = True
-            return True
+        # Do not infer watchable video from browser focus alone. The Shell
+        # helper already provides a dedicated privacy-reduced YouTube focus
+        # signal, and explicit video metadata covers local/direct video files.
+        # This avoids turning ordinary browser audio into WATCHING.
 
         return False
 
@@ -608,6 +608,26 @@ def _metadata_indicates_video_file(metadata) -> bool:
 
     for title in _string_values(metadata.get("xesam:title")):
         if _looks_like_video_file(title):
+            return True
+
+    return False
+
+
+def _metadata_indicates_brainfm(metadata) -> bool:
+    metadata = _deep_unpack(metadata)
+    if not isinstance(metadata, dict):
+        return False
+
+    for value in _string_values(metadata.get("xesam:url")):
+        try:
+            host = (urlparse(value).hostname or "").lower().rstrip(".")
+        except Exception:
+            host = ""
+        if host == "brain.fm" or host.endswith(".brain.fm"):
+            return True
+
+    for value in _string_values(metadata.get("xesam:title")):
+        if "brain.fm" in value.strip().lower():
             return True
 
     return False

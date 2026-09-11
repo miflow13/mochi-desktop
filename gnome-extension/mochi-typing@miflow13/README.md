@@ -9,7 +9,7 @@ It currently provides:
 - `UserActive` — emitted on the first real input after `UserIdle`.
 - `FileBrowsingStarted` / `FileBrowsingStopped` — semantic focus state for supported file managers such as GNOME Files/Nautilus.
 - `YouTubeFocusedStarted` / `YouTubeFocusedStopped` — a privacy-reduced focused-YouTube boolean used by watch-along behavior.
-- `AppCategoryChanged` — a coarse category only: `editor`, `terminal`, `browser`, `media`, `pixel_art`, or `unknown`.
+- `AppCategoryChanged` — a coarse category only: `vscode`, `editor`, `terminal`, `browser`, `media`, `pixel_art`, or `unknown`.
 
 Presence uses Mutter's server-global idle monitor. Typing inspects only the broad input-device type needed to distinguish keyboard activity. File browsing and app category are classified inside GNOME Shell from application identifiers and reduced to semantic state before reaching Mochi. General app-category detection never sends application IDs or window titles. The extension never stores or transmits key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, typed text, pointer coordinates, file names, folder names, paths, or application content.
 

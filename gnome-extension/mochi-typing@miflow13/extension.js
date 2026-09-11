@@ -38,9 +38,14 @@ const FILE_MANAGER_MARKERS = [
 
 // Presence receives only one of these broad categories. The raw application
 // identity used to classify it remains inside GNOME Shell.
-const EDITOR_MARKERS = [
+const VSCODE_MARKERS = [
     'code',
     'code-oss',
+    'com.visualstudio.code',
+    'com.visualstudio.code.oss',
+    'visual-studio-code',
+];
+const EDITOR_MARKERS = [
     'vscodium',
     'codium',
     'cursor',
@@ -178,7 +183,7 @@ export default class MochiTypingActivityExtension extends Extension {
             GLib.PRIORITY_DEFAULT,
             VIDEO_FOCUS_HEARTBEAT_MS,
             () => {
-                this._updateYouTubeFocusedState(true);
+                this._updateYouTubeFocusedState(false);
                 this._updateAppCategory();
                 return GLib.SOURCE_CONTINUE;
             },
@@ -296,6 +301,8 @@ export default class MochiTypingActivityExtension extends Extension {
         );
         if (matches(PIXEL_ART_MARKERS))
             return 'pixel_art';
+        if (matches(VSCODE_MARKERS))
+            return 'vscode';
         if (matches(EDITOR_MARKERS))
             return 'editor';
         if (matches(TERMINAL_MARKERS))

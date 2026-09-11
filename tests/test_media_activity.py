@@ -6,6 +6,7 @@ from unittest.mock import Mock
 from mochi.media_activity import (
     MediaActivityMonitor,
     MprisMediaBackend,
+    _metadata_indicates_brainfm,
     _metadata_indicates_video_file,
     _metadata_indicates_watchable_video,
     _metadata_indicates_youtube,
@@ -120,6 +121,50 @@ class MprisMediaBackendTests(unittest.TestCase):
             }
         )
         self.assertFalse(backend.sample_youtube_playing())
+    def test_focused_generic_browser_audio_is_not_watchable(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:title": "Background audio"},
+                }
+            }
+        )
+        backend._focused_browser = True
+        self.assertFalse(backend.sample_youtube_playing())
+
+    def test_browser_focus_alone_does_not_activate_background_youtube(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:url": "https://www.youtube.com/watch?v=abc"},
+                }
+            }
+        )
+        backend._focused_browser = True
+        self.assertFalse(backend.sample_youtube_playing())
+
+
+    def test_focused_brainfm_is_not_watchable_browser_media(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {
+                        "xesam:url": "https://www.brain.fm/player",
+                        "xesam:title": "Brain.fm",
+                    },
+                }
+            }
+        )
+        backend._focused_browser = True
+        self.assertFalse(backend.sample_youtube_playing())
+
+    def test_brainfm_title_is_recognized_without_url(self) -> None:
+        self.assertTrue(_metadata_indicates_brainfm({"xesam:title": "Brain.fm"}))
+
+
     def test_focused_youtube_allows_chromium_without_url_metadata(self) -> None:
         backend = self._backend(
             {

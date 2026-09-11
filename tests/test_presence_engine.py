@@ -78,6 +78,42 @@ def test_category_selection_respects_context():
         assert engine._select_unsolicited_category(context) not in {"developer", "creative", "body_care", "rest"}
 
 
+def test_vscode_makes_coding_phrases_more_likely_than_generic_editor():
+    tuning = generous_tuning()
+    editor_engine = PresenceEngine(tuning=tuning, rng=random.Random(17), clock=Clock())
+    vscode_engine = PresenceEngine(tuning=generous_tuning(), rng=random.Random(17), clock=Clock())
+    editor = AmbientContext(current_app_category="editor", session_duration=10)
+    vscode = AmbientContext(current_app_category="vscode", session_duration=10)
+
+    editor_coding = sum(
+        editor_engine._select_unsolicited_category(editor) == "developer"
+        for _ in range(1000)
+    )
+    vscode_coding = sum(
+        vscode_engine._select_unsolicited_category(vscode) in {"developer", "vscode"}
+        for _ in range(1000)
+    )
+
+    assert vscode_coding > editor_coding * 2
+
+
+def test_vscode_specific_phrases_only_participate_in_vscode_context():
+    editor_engine = PresenceEngine(tuning=generous_tuning(), rng=random.Random(5), clock=Clock())
+    vscode_engine = PresenceEngine(tuning=generous_tuning(), rng=random.Random(5), clock=Clock())
+    editor = AmbientContext(current_app_category="editor", session_duration=10)
+    vscode = AmbientContext(current_app_category="vscode", session_duration=10)
+
+    assert all(
+        editor_engine._select_unsolicited_category(editor) != "vscode"
+        for _ in range(500)
+    )
+    assert any(
+        vscode_engine._select_unsolicited_category(vscode) == "vscode"
+        for _ in range(500)
+    )
+    assert vscode_engine.phrases.choose("vscode")
+
+
 def test_event_priority_prefers_system_reaction():
     clock = Clock()
     engine = PresenceEngine(tuning=generous_tuning(), rng=random.Random(1), clock=clock)
@@ -212,10 +248,11 @@ def test_app_category_adapter_accepts_only_coarse_allow_list():
             return (self.value,)
 
     adapter._on_category_signal(None, None, None, None, None, Params("editor"))
+    adapter._on_category_signal(None, None, None, None, None, Params("vscode"))
     adapter._on_category_signal(None, None, None, None, None, Params("secret-app-id"))
     adapter._on_category_signal(None, None, None, None, None, Params("pixel_art"))
 
-    assert seen == ["editor", "pixel_art"]
+    assert seen == ["editor", "vscode", "pixel_art"]
     assert adapter.category == "pixel_art"
 
 

@@ -302,7 +302,7 @@ class AppCategorySignalAdapter:
     OBJECT_PATH = "/io/github/mochi_desktop/Mochi/TypingMonitor"
     INTERFACE = "io.github.mochi_desktop.Mochi.TypingMonitor"
     SIGNAL_NAME = "AppCategoryChanged"
-    ALLOWED = frozenset(("editor", "terminal", "browser", "media", "pixel_art", "unknown"))
+    ALLOWED = frozenset(("vscode", "editor", "terminal", "browser", "media", "pixel_art", "unknown"))
 
     def __init__(
         self,

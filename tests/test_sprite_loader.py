@@ -37,26 +37,37 @@ class AnimationAssetSetTests(unittest.TestCase):
             )
         )
 
-    def test_every_runtime_frame_is_a_256px_rgba_asset(self) -> None:
+    def test_every_runtime_frame_matches_its_declared_source_size(self) -> None:
         assets = AnimationAssetSet()
-        paths = {
-            assets.root / path
-            for animation in assets.animations.values()
-            for path in animation.frame_paths
-        }
 
-        self.assertTrue(paths)
-        for path in paths:
-            surface = cairo.ImageSurface.create_from_png(str(path))
-            self.assertEqual(
-                (surface.get_width(), surface.get_height()),
-                (256, 256),
-                path.relative_to(assets.root),
-            )
-            self.assertEqual(
-                surface.get_content(),
-                cairo.CONTENT_COLOR_ALPHA,
-                path.relative_to(assets.root),
+        self.assertTrue(assets.animations)
+        for animation in assets.animations.values():
+            for relative_path in animation.frame_paths:
+                path = assets.root / relative_path
+                surface = cairo.ImageSurface.create_from_png(str(path))
+                self.assertEqual(
+                    (surface.get_width(), surface.get_height()),
+                    animation.source_cell_size,
+                    path.relative_to(assets.root),
+                )
+                self.assertEqual(
+                    surface.get_content(),
+                    cairo.CONTENT_COLOR_ALPHA,
+                    path.relative_to(assets.root),
+                )
+
+    def test_loaded_frames_are_canonical_256px_surfaces(self) -> None:
+        assets = AnimationAssetSet()
+
+        for name in assets.animations:
+            loaded = assets.load_frames(name)
+            self.assertTrue(loaded)
+            self.assertTrue(
+                all(
+                    (surface.get_width(), surface.get_height()) == (256, 256)
+                    for surface in loaded.values()
+                ),
+                name,
             )
 
     def test_manifest_is_the_complete_runtime_png_inventory(self) -> None:
