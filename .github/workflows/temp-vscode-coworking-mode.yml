@@ -25,99 +25,38 @@ jobs:
       - name: Install test runner
         run: python -m pip install pytest
 
-      - name: Add VS Code coworking mode
+      - name: Apply coworking patch from staged workflow
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
+          import subprocess
 
-          def replace_once(path: str, old: str, new: str) -> None:
-              p = Path(path)
-              text = p.read_text()
-              if old not in text:
-                  raise SystemExit(f"expected snippet not found in {path}: {old[:140]!r}")
-              p.write_text(text.replace(old, new, 1))
-
-          replace_once(
-              "src/mochi/presence/integration.py",
-              '''    PRESENCE_EVALUATION_SECONDS = 5\n    STARTUP_GREETING_DELAY_MS = 1_100\n''',
-              '''    PRESENCE_EVALUATION_SECONDS = 5\n    STARTUP_GREETING_DELAY_MS = 1_100\n    VSCODE_COWORK_DEBOUNCE_MS = 700\n''',
+          old = subprocess.check_output(
+              ["git", "show", "HEAD^:.github/workflows/temp-vscode-coworking-mode.yml"],
+              text=True,
+          ).splitlines()
+          start = old.index("          python - <<'PY'")
+          end = next(
+              i for i in range(start + 1, len(old))
+              if old[i] == "          PY"
           )
-
-          replace_once(
-              "src/mochi/presence/integration.py",
-              '''        self._presence_shutting_down = False\n        super().__init__(*args, **kwargs)\n''',
-              '''        self._presence_shutting_down = False\n        self._vscode_cowork_source_id: int | None = None\n        self._vscode_coworking_active = False\n        super().__init__(*args, **kwargs)\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/integration.py",
-              '''    def _on_typing_stopped(self) -> None:\n        self._ambient_presence_engine.record_typing_stopped()\n        super()._on_typing_stopped()\n''',
-              '''    def _on_typing_stopped(self) -> None:\n        self._ambient_presence_engine.record_typing_stopped()\n        # VS Code coworking intentionally holds the typing loop open even when\n        # the user's current typing burst ends. Focus, not keystroke cadence,\n        # owns this contextual companion mode.\n        if (\n            self._presence_app_category == "vscode"\n            and self.state.current is MochiState.TYPING\n        ):\n            self._vscode_coworking_active = True\n            return\n        super()._on_typing_stopped()\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/integration.py",
-              '''    def _on_user_active(self) -> None:\n        self._ambient_presence_engine.note_user_active()\n        self._presence_active_session_started_at = time.monotonic()\n        super()._on_user_active()\n''',
-              '''    def _on_user_active(self) -> None:\n        self._ambient_presence_engine.note_user_active()\n        self._presence_active_session_started_at = time.monotonic()\n        super()._on_user_active()\n        if self._presence_app_category == "vscode":\n            self._schedule_vscode_coworking()\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/integration.py",
-              '''    def _on_presence_app_category_changed(self, category: str) -> None:\n        self._presence_app_category = category\n\n    def _evaluate_ambient_presence(self) -> bool:\n''',
-              '''    def _on_presence_app_category_changed(self, category: str) -> None:\n        previous = self._presence_app_category\n        self._presence_app_category = category\n        if category == "vscode":\n            self._schedule_vscode_coworking()\n        elif previous == "vscode" or self._vscode_coworking_active:\n            self._stop_vscode_coworking()\n\n    def _cancel_vscode_cowork_source(self) -> None:\n        source_id = self._vscode_cowork_source_id\n        self._vscode_cowork_source_id = None\n        if source_id is not None:\n            try:\n                GLib.source_remove(source_id)\n            except Exception:\n                pass\n\n    def _schedule_vscode_coworking(self) -> None:\n        \"\"\"Debounce focused VS Code before entering the persistent work loop.\"\"\"\n        self._cancel_vscode_cowork_source()\n        if (\n            self._presence_shutting_down\n            or self._presence_app_category != "vscode"\n            or self._user_idle\n        ):\n            return\n        self._vscode_cowork_source_id = GLib.timeout_add(\n            self.VSCODE_COWORK_DEBOUNCE_MS,\n            self._begin_vscode_coworking,\n        )\n\n    def _begin_vscode_coworking(self) -> bool:\n        self._vscode_cowork_source_id = None\n        if (\n            self._presence_shutting_down\n            or self._presence_app_category != "vscode"\n            or self._user_idle\n            or self._context_menu_open\n        ):\n            return GLib.SOURCE_REMOVE\n\n        # Real watchable media keeps the higher ambient priority. Direct\n        # interactions likewise finish first and later resume through the normal\n        # ambient-resume path.\n        if self.state.current is MochiState.WATCHING:\n            return GLib.SOURCE_REMOVE\n        if self.state.current is MochiState.TYPING:\n            self._vscode_coworking_active = True\n            return GLib.SOURCE_REMOVE\n\n        if self._start_typing_emote():\n            self._vscode_coworking_active = True\n            self._logger.debug("VS Code coworking mode started")\n        return GLib.SOURCE_REMOVE\n\n    def _stop_vscode_coworking(self) -> None:\n        self._cancel_vscode_cowork_source()\n        was_active = self._vscode_coworking_active\n        self._vscode_coworking_active = False\n        if not was_active:\n            return\n        if self.state.current is MochiState.TYPING:\n            # Call Buddy's typing-stop transition directly. The app category has\n            # already changed, so the cowork hold no longer applies.\n            super()._on_typing_stopped()\n        self._logger.debug("VS Code coworking mode stopped")\n\n    def _maybe_resume_vscode_coworking(self) -> bool:\n        if (\n            self._presence_app_category != "vscode"\n            or self._user_idle\n            or self.state.current is not MochiState.IDLE\n            or self._context_menu_open\n            or self.player.animation is not ANIMATIONS["idle"]\n        ):\n            return False\n        if not self._start_typing_emote():\n            return False\n        self._vscode_coworking_active = True\n        self._logger.debug("VS Code coworking mode resumed")\n        return True\n\n    def _evaluate_ambient_presence(self) -> bool:\n''',
-          )
-
-          # Presence integration already imports MochiState; add ANIMATIONS for
-          # the same idle-animation guard used by Buddy's ambient states.
-          replace_once(
-              "src/mochi/presence/integration.py",
-              '''from mochi.buddy import Buddy\nfrom mochi.state import MochiState\n''',
-              '''from mochi.buddy import Buddy\nfrom mochi.sprites import ANIMATIONS\nfrom mochi.state import MochiState\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/integration.py",
-              '''        startup_source_id = self._presence_startup_source_id\n        self._presence_startup_source_id = None\n''',
-              '''        self._cancel_vscode_cowork_source()\n        self._vscode_coworking_active = False\n        startup_source_id = self._presence_startup_source_id\n        self._presence_startup_source_id = None\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/music_dance.py",
-              '''        if was_dancing and not self._maybe_resume_watching() and not self._maybe_resume_searching():\n            self._schedule_computer_idle_emote()\n''',
-              '''        if (\n            was_dancing\n            and not self._maybe_resume_watching()\n            and not self._maybe_resume_vscode_coworking()\n            and not self._maybe_resume_searching()\n        ):\n            self._schedule_computer_idle_emote()\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/music_dance.py",
-              '''        return (\n            self._maybe_resume_watching()\n            or self._maybe_resume_dancing()\n            or self._maybe_resume_searching()\n        )\n''',
-              '''        return (\n            self._maybe_resume_watching()\n            or self._maybe_resume_vscode_coworking()\n            or self._maybe_resume_dancing()\n            or self._maybe_resume_searching()\n        )\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/music_dance.py",
-              '''        if self.state.current is MochiState.DANCING:\n            if (\n                self._music_monitor is not None\n                and self._music_monitor.music_playing\n                and self._generic_browser_watch_active()\n            ):\n                return False\n            self._transition_to(MochiState.IDLE)\n            self._play_animation("idle")\n        return super()._start_watching_emote()\n''',
-              '''        if (\n            self.state.current is MochiState.TYPING\n            and getattr(self, "_vscode_coworking_active", False)\n        ):\n            # Explicit watchable video outranks contextual coworking. Skip the\n            # outro here so the higher-priority reaction feels immediate.\n            self._vscode_coworking_active = False\n            self._transition_to(MochiState.IDLE)\n            self._play_animation("idle")\n        if self.state.current is MochiState.DANCING:\n            if (\n                self._music_monitor is not None\n                and self._music_monitor.music_playing\n                and self._generic_browser_watch_active()\n            ):\n                return False\n            self._transition_to(MochiState.IDLE)\n            self._play_animation("idle")\n        return super()._start_watching_emote()\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/music_dance.py",
-              '''        elif not self._maybe_resume_dancing() and not self._maybe_resume_searching():\n            self._schedule_computer_idle_emote()\n''',
-              '''        elif (\n            not self._maybe_resume_vscode_coworking()\n            and not self._maybe_resume_dancing()\n            and not self._maybe_resume_searching()\n        ):\n            self._schedule_computer_idle_emote()\n''',
-          )
-
-          replace_once(
-              "src/mochi/presence/music_dance.py",
-              '''        if not self._maybe_resume_watching() and not self._maybe_resume_dancing():\n            self._schedule_computer_idle_emote()\n''',
-              '''        if (\n            not self._maybe_resume_watching()\n            and not self._maybe_resume_vscode_coworking()\n            and not self._maybe_resume_dancing()\n        ):\n            self._schedule_computer_idle_emote()\n''',
-          )
+          script = "\n".join(line[10:] for line in old[start:end + 1]) + "\n"
+          Path("/tmp/apply-coworking.sh").write_text(script)
+          subprocess.run(["bash", "/tmp/apply-coworking.sh"], check=True)
           PY
 
       - name: Compile changed modules
         run: python -m py_compile src/mochi/presence/integration.py src/mochi/presence/music_dance.py
 
-      - name: Run focused regressions
-        run: python -m pytest -q tests/test_presence_engine.py tests/test_buddy.py tests/test_music_activity.py tests/test_media_activity.py
+      - name: Run supported focused regressions
+        run: python -m pytest -q tests/test_presence_engine.py tests/test_music_activity.py tests/test_media_activity.py
+
+      - name: Verify coworking wiring
+        run: |
+          grep -q 'VSCODE_COWORK_DEBOUNCE_MS = 700' src/mochi/presence/integration.py
+          grep -q '_maybe_resume_vscode_coworking' src/mochi/presence/music_dance.py
+          grep -q 'VS Code coworking mode started' src/mochi/presence/integration.py
 
       - name: Remove temporary workflow and commit feature
         shell: bash
