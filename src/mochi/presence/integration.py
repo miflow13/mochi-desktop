@@ -420,6 +420,7 @@ class PresenceBuddyMixin:
 
     def _test_presence_contextual(self, _button: Gtk.Button) -> None:
         category = {
+            "vscode": "developer",
             "editor": "developer",
             "terminal": "developer",
             "pixel_art": "creative",
