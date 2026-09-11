@@ -119,7 +119,7 @@ fi
 log "Installation complete"
 printf '%s\n' \
     "Open Mochi from the GNOME app grid, or run: $LAUNCHER" \
-    "Right-click Mochi and choose Quit Mochi to close him." \
+    "Right-click Mochi and choose Close to close him." \
     "Uninstall later with: $UNINSTALL_LAUNCHER" \
     "" \
     "If the GNOME helper reported that it could not enable yet, log out and" \

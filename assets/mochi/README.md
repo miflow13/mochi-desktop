@@ -47,6 +47,7 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 - `typing_intro`, `typing_loop`, `typing_outro` — sustained typing state.
 - `terminal_intro`, `terminal_loop`, `terminal_outro` — focused-terminal coworking state with authored entry and exit transitions.
 - `watch` — media/watch-along state.
+- `dance` — sustained recognized music playback.
 - `searching` — file/search activity state.
 - `sway_idle` — drag/held idle motion.
 

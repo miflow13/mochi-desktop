@@ -12,3 +12,12 @@ animation-gifs/
 *.orig
 *.save
 *.pre-*
+
+# Local editor and temporary files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.tmp
+.DS_Store

@@ -1,0 +1,5 @@
+include install.sh uninstall.sh
+include packaging/*.desktop.in
+include scripts/install-typing-extension.sh
+recursive-include gnome-extension *.js *.json *.xml *.md
+include assets/mochi/README.md

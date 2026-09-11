@@ -66,7 +66,7 @@ Mochi pays attention to what’s happening around your desktop and occasionally 
 ## Install Mochi
 <img width="1280" height="803" alt="hellofrommochi" src="https://github.com/user-attachments/assets/d7cb090d-5fae-4315-8b10-d809eda3da39" />
 
-### Recommended: Fedora + GNOME
+### Recommended: Fedora 44 + GNOME 50
 
 Clone the repository and run the installer:
 
@@ -208,7 +208,7 @@ The runtime animation library is manifest-driven and validated by tests so artwo
 
 Mochi currently supports a small set of direct and ambient interactions:
 
-- **Left-click** — tactile bounce/squish reaction + chirp
+- **Left-click** — tactile bounce reaction + chirp
 - **Three quick left-clicks** — Mochi may object with a tiny speech bubble
 - **Double-click** — heart emote
 - **Drag** — pick Mochi up and move him around; he may say `wheee!`
@@ -241,7 +241,7 @@ Mochi is also a hands-on Linux software-engineering project. Current work includ
 
 ## Tech Stack & Support
 
-The actively tested target is **Fedora Linux + GNOME + Wayland**.
+The actively tested target is **Fedora 44 + GNOME 50 + Wayland**. The bundled GNOME helper currently declares support for GNOME Shell 50.
 
 Mochi is built with:
 
@@ -284,12 +284,15 @@ For development, clone the repository and use a system-site-packages virtual env
 ```bash
 git clone https://github.com/miflow13/mochi-desktop.git
 cd mochi-desktop
+sudo dnf install python3 python3-pip python3-gobject python3-cairo gtk4 libX11 xorg-x11-server-Xwayland pipewire-utils
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 python -m pytest
 mochi --debug
 ```
+
+For GNOME typing/context awareness and the developer shortcut, install the helper with `./scripts/install-typing-extension.sh` and follow its logout/login instructions. Python package installation alone does not install the helper.
 
 The private developer window, **Mochi Lab**, can be opened with `Ctrl + Alt + Shift + M` when the GNOME helper is active.
 
