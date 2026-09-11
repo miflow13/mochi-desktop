@@ -14,6 +14,7 @@ from .integration import (
     PresenceBuddy as BasePresenceBuddy,
     PresenceX11Buddy as BasePresenceX11Buddy,
 )
+from .music_dance import MusicDanceMixin
 
 
 CLICK_BURST_PHRASES = (
@@ -159,9 +160,9 @@ class ClickDialogueMixin:
             )
 
 
-class PresenceBuddy(ClickDialogueMixin, BasePresenceBuddy):
-    """Layer-shell buddy with Mochi Sense and direct click dialogue."""
+class PresenceBuddy(ClickDialogueMixin, MusicDanceMixin, BasePresenceBuddy):
+    """Layer-shell buddy with Mochi Sense, music dance, and click dialogue."""
 
 
-class PresenceX11Buddy(ClickDialogueMixin, BasePresenceX11Buddy):
-    """X11/XWayland buddy with Mochi Sense and direct click dialogue."""
+class PresenceX11Buddy(ClickDialogueMixin, MusicDanceMixin, BasePresenceX11Buddy):
+    """X11/XWayland buddy with Mochi Sense, music dance, and click dialogue."""
