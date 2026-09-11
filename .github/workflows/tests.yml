@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: fedora:44
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Fedora test dependencies
+        run: |
+          dnf install -y \
+            python3 \
+            python3-pip \
+            python3-gobject \
+            python3-cairo \
+            gtk4 \
+            libX11 \
+            xorg-x11-server-Xwayland \
+            xorg-x11-server-Xvfb
+
+      - name: Create development environment
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[dev]"
+
+      - name: Compile Python sources
+        run: .venv/bin/python -m compileall -q src tests
+
+      - name: Start virtual X11 display
+        run: |
+          Xvfb :99 -screen 0 1280x1024x24 >/tmp/mochi-xvfb.log 2>&1 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          echo "GDK_BACKEND=x11" >> "$GITHUB_ENV"
+
+      - name: Run test suite
+        run: .venv/bin/python -m pytest -q
+
+      - name: Build release artifacts
+        run: .venv/bin/python -m build
