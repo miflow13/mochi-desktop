@@ -44,6 +44,7 @@ class MochiApplication(Gtk.Application):
             return
 
         window = Gtk.ApplicationWindow(application=self)
+        window.add_css_class("mochi-buddy-window")
         window.set_title("Mochi Animation Preview" if self.preview_animations else "Mochi")
         window.set_decorated(False)
         window.set_resizable(False)
@@ -67,20 +68,22 @@ class MochiApplication(Gtk.Application):
         css = Gtk.CssProvider()
         css.load_from_string(
             """
-            window.background {
-                background: unset;
+            /* Only the buddy surface should be transparent. Menu windows are
+             * separate toplevels and must retain an opaque GTK background. */
+            window.mochi-buddy-window {
+                background-color: transparent;
             }
 
             window.mochi-menu-window {
-                background: alpha(@window_bg_color, 0.97);
-                color: @window_fg_color;
-                border: 1px solid alpha(@window_fg_color, 0.10);
+                background-color: @theme_bg_color;
+                color: @theme_fg_color;
+                border: 1px solid alpha(@theme_fg_color, 0.12);
                 border-radius: 18px;
                 box-shadow: 0 12px 34px alpha(black, 0.28);
             }
 
             .mochi-menu-card {
-                background: transparent;
+                background-color: transparent;
             }
 
             .mochi-menu-title {
@@ -92,7 +95,7 @@ class MochiApplication(Gtk.Application):
             .mochi-menu-hint,
             .mochi-menu-value,
             .mochi-menu-section {
-                color: alpha(@window_fg_color, 0.58);
+                color: alpha(@theme_fg_color, 0.58);
             }
 
             .mochi-menu-subtitle,
@@ -120,19 +123,19 @@ class MochiApplication(Gtk.Application):
                 border-radius: 10px;
                 border: none;
                 box-shadow: none;
-                background: transparent;
+                background-color: transparent;
             }
 
             button.mochi-menu-row:hover {
-                background: alpha(@window_fg_color, 0.07);
+                background-color: alpha(@theme_fg_color, 0.07);
             }
 
             button.mochi-menu-row:active {
-                background: alpha(@window_fg_color, 0.12);
+                background-color: alpha(@theme_fg_color, 0.12);
             }
 
             button.mochi-menu-danger {
-                color: @destructive_color;
+                color: #c01c28;
             }
 
             .mochi-setting-row {
@@ -142,17 +145,17 @@ class MochiApplication(Gtk.Application):
 
             /*
              * Some third-party GTK themes make the checked Gtk.Switch track
-             * effectively transparent inside undecorated/translucent windows.
-             * Keep Mochi's menu controls self-contained so an enabled setting
-             * never looks like the control disappeared.
+             * effectively transparent inside undecorated windows. Keep
+             * Mochi's menu controls self-contained so an enabled setting never
+             * looks like the control disappeared.
              */
             window.mochi-menu-window switch {
                 min-width: 38px;
                 min-height: 20px;
                 padding: 2px;
                 background-image: none;
-                background-color: alpha(@window_fg_color, 0.16);
-                border: 1px solid alpha(@window_fg_color, 0.18);
+                background-color: alpha(@theme_fg_color, 0.16);
+                border: 1px solid alpha(@theme_fg_color, 0.18);
                 border-radius: 999px;
                 box-shadow: none;
             }
@@ -167,8 +170,8 @@ class MochiApplication(Gtk.Application):
                 min-width: 16px;
                 min-height: 16px;
                 background-image: none;
-                background-color: @window_bg_color;
-                border: 1px solid alpha(@window_fg_color, 0.18);
+                background-color: @theme_bg_color;
+                border: 1px solid alpha(@theme_fg_color, 0.18);
                 border-radius: 999px;
                 box-shadow: 0 1px 2px alpha(black, 0.22);
             }
@@ -191,7 +194,7 @@ class MochiApplication(Gtk.Application):
             }
 
             separator {
-                background: alpha(@window_fg_color, 0.09);
+                background-color: alpha(@theme_fg_color, 0.09);
                 min-height: 1px;
             }
             """
