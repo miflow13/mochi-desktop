@@ -13,17 +13,6 @@ class FakeBackend:
         self.calls.append((path, volume))
 
 
-class FakePitchBackend(FakeBackend):
-    def __init__(self) -> None:
-        super().__init__()
-        self.pitched_calls: list[tuple[Path, float, float, int]] = []
-
-    def play_pitched(
-        self, path: Path, volume: float, pitch_ratio: float, source_rate: int
-    ) -> None:
-        self.pitched_calls.append((path, volume, pitch_ratio, source_rate))
-
-
 class SoundManagerTests(unittest.TestCase):
     def test_missing_placeholder_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -78,21 +67,48 @@ class SoundManagerTests(unittest.TestCase):
             self.assertEqual(backend.calls[0][0].name, "menu_open.ogg")
             self.assertAlmostEqual(backend.calls[0][1], 0.132)
 
-    def test_click_pitch_uses_optional_backend_pitch_hook(self) -> None:
+    def test_fedora_click_uses_authored_pitch_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for filename in SoundManager.FEDORA_CLICK_FILES:
+                (root / filename).touch()
+            backend = FakeBackend()
+            manager = SoundManager(volume=0.6, asset_root=root, backend=backend)
+
+            self.assertTrue(manager.play_fedora_click(1))
+            self.assertTrue(manager.play_fedora_click(3))
+            self.assertTrue(manager.play_fedora_click(6))
+            self.assertEqual(
+                [path.name for path, _volume in backend.calls],
+                [
+                    "mochi_chirp_01.ogg",
+                    "mochi_chirp_fedora_03.ogg",
+                    "mochi_chirp_fedora_06.ogg",
+                ],
+            )
+
+    def test_fedora_click_falls_back_to_base_chirp(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "mochi_chirp_01.ogg").touch()
-            backend = FakePitchBackend()
-            manager = SoundManager(volume=0.6, asset_root=root, backend=backend)
+            backend = FakeBackend()
+            manager = SoundManager(asset_root=root, backend=backend)
 
-            self.assertTrue(manager.play(SoundEvent.CLICK, pitch_ratio=1.25))
-            self.assertEqual(len(backend.calls), 0)
-            self.assertEqual(len(backend.pitched_calls), 1)
-            path, volume, pitch_ratio, source_rate = backend.pitched_calls[0]
-            self.assertEqual(path.name, "mochi_chirp_01.ogg")
-            self.assertAlmostEqual(volume, 0.6)
-            self.assertAlmostEqual(pitch_ratio, 1.25)
-            self.assertEqual(source_rate, 32_000)
+            self.assertTrue(manager.play_fedora_click(6))
+            self.assertEqual(backend.calls[0][0].name, "mochi_chirp_01.ogg")
+
+    def test_fedora_click_position_is_clamped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for filename in SoundManager.FEDORA_CLICK_FILES:
+                (root / filename).touch()
+            backend = FakeBackend()
+            manager = SoundManager(asset_root=root, backend=backend)
+
+            self.assertTrue(manager.play_fedora_click(0))
+            self.assertTrue(manager.play_fedora_click(99))
+            self.assertEqual(backend.calls[0][0].name, "mochi_chirp_01.ogg")
+            self.assertEqual(backend.calls[1][0].name, "mochi_chirp_fedora_06.ogg")
 
     def test_volume_is_clamped(self) -> None:
         manager = SoundManager(volume=9, backend=FakeBackend())
