@@ -15,6 +15,7 @@ handling -- just position + text.
 
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 
 import gi
@@ -23,6 +24,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
+from mochi.sprites import ANIMATIONS
 from mochi.x11 import get_window_position, move_window
 
 
@@ -81,7 +83,7 @@ class Nameplate:
         self._popover = Gtk.Popover()
         self._popover.set_parent(anchor_widget)
         self._popover.set_autohide(False)
-        self._popover.set_has_arrow(False)
+        self._popover.set_has_arrow(True)
         self._popover.set_position(Gtk.PositionType.TOP)
         self._popover.set_offset(0, -self.GAP_PX)
         self._popover.set_focusable(False)
@@ -105,8 +107,15 @@ class Nameplate:
 
     @staticmethod
     def _make_content(label: Gtk.Label) -> Gtk.Box:
+        # Keep a little transparent breathing room outside the painted capsule
+        # so GTK has room to render the soft shadow without clipping it,
+        # matching SpeechBubble's shell margins for a consistent look.
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         box.add_css_class("mochi-nameplate-shell")
+        box.set_margin_top(7)
+        box.set_margin_bottom(7)
+        box.set_margin_start(7)
+        box.set_margin_end(7)
         box.set_focusable(False)
         box.set_can_focus(False)
         box.set_can_target(False)
@@ -186,13 +195,26 @@ class Nameplate:
         Reuses the same sprite-aware bounds lookup as SpeechBubble so the
         nameplate sits just above the drawn character rather than above the
         transparent authoring canvas padding.
+
+        Unlike the speech bubble, the nameplate is meant to stay rock-steady
+        above Mochi rather than track every frame's per-animation motion.
+        Live animation frames vary both in whole-frame offset (breathing,
+        bounce, emotes) *and* in silhouette bounds (blink/idle frames are
+        each drawn slightly differently), so anchoring to whichever frame
+        happens to be playing makes the plate jitter a few pixels every
+        tick. Anchoring to a single fixed reference frame (idle's first
+        frame, with any offset zeroed) keeps the plate glued to one stable
+        position above Mochi regardless of his current animation.
         """
         atlas = getattr(self._anchor, "atlas", None)
-        player = getattr(self._anchor, "player", None)
-        frame = getattr(player, "frame", None)
-        if atlas is not None and frame is not None and hasattr(atlas, "visible_bounds"):
+        if atlas is not None and hasattr(atlas, "visible_bounds"):
+            reference_frame = replace(
+                ANIMATIONS["idle"].frames[0],
+                horizontal_offset=0.0,
+                vertical_offset=0.0,
+            )
             try:
-                return atlas.visible_bounds(frame, owner_width, owner_height)
+                return atlas.visible_bounds(reference_frame, owner_width, owner_height)
             except Exception as exc:
                 self._logger.debug(
                     "Nameplate visible-bounds lookup failed; using widget bounds: %s",
@@ -330,12 +352,15 @@ class Nameplate:
                 background: transparent;
             }
             .mochi-nameplate-shell {
-                background: alpha(black, 0.42);
-                border-radius: 999px;
-                padding: 2px 9px;
+                background: transparent;
             }
             .mochi-nameplate-text {
-                color: white;
+                background: alpha(@window_bg_color, 0.96);
+                color: @window_fg_color;
+                border: 1px solid alpha(#79c98b, 0.30);
+                border-radius: 999px;
+                box-shadow: 0 5px 16px alpha(black, 0.14);
+                padding: 2px 10px;
                 font-size: 11px;
                 font-weight: 700;
             }
@@ -346,7 +371,8 @@ class Nameplate:
                 padding: 0;
             }
             popover.mochi-nameplate-popover > arrow {
-                background: transparent;
+                background: alpha(@window_bg_color, 0.96);
+                border-color: alpha(#79c98b, 0.30);
             }
             """
         )

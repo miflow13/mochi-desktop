@@ -14,6 +14,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from mochi.animation import AnimationFrame
 from mochi.presence.nameplate import Nameplate
 
 
@@ -174,6 +175,80 @@ class NameplatePositionTests(unittest.TestCase):
 
         expected_center_x = 800 + (128 * 2.0) / 2
         self.assertAlmostEqual(moved["x"] + (52 * 2.0) / 2, expected_center_x, delta=2)
+
+    def test_anchor_ignores_live_player_frame_and_stays_pixel_stable(self) -> None:
+        """The plate must anchor to a fixed reference frame, not whatever
+        Mochi's live animation frame happens to be.
+
+        Different idle/blink/bounce/emote frames vary in both whole-frame
+        offset and silhouette bounds (breathing, blinking, etc.), so using
+        the live `player.frame` made the plate jitter a few pixels every
+        tick. Anchoring is fixed regardless of what `player.frame` reports.
+        """
+        monitors = MonitorList(monitor(0, 0, 1920, 1080))
+
+        # A visible_bounds stand-in whose output *would* differ per frame,
+        # to prove the live/varying frame is never actually consulted.
+        def _visible_bounds(frame, width, height):
+            return (10.0 + frame.horizontal_offset, 10.0, 100.0, 100.0)
+
+        positions = []
+        live_frames = (
+            AnimationFrame(sprite="idle_0", horizontal_offset=0.0),
+            AnimationFrame(sprite="bounce_3", horizontal_offset=12.0, vertical_offset=-8.0),
+            AnimationFrame(sprite="blink_2", horizontal_offset=-6.0, vertical_offset=5.0),
+        )
+        for live_frame in live_frames:
+            owner = _owner(monitors, width=128, height=128, x=800, y=400)
+            plate_window, _ = _plate_window(width=52, height=18)
+            plate = _make_nameplate(owner=owner, plate_window=plate_window)
+            plate._anchor.atlas = SimpleNamespace(visible_bounds=_visible_bounds)
+            plate._anchor.player = SimpleNamespace(frame=live_frame)
+
+            moved = {}
+            with patch(
+                "mochi.presence.nameplate.get_window_position",
+                return_value=(800, 400),
+            ), patch(
+                "mochi.presence.nameplate.move_window",
+                side_effect=lambda _window, x, y: moved.update(x=x, y=y),
+            ):
+                plate._position_x11()
+            positions.append((moved["x"], moved["y"]))
+
+        self.assertEqual(positions[0], positions[1])
+        self.assertEqual(positions[0], positions[2])
+
+    def test_reference_frame_passed_to_visible_bounds_has_zeroed_offsets(self) -> None:
+        monitors = MonitorList(monitor(0, 0, 1920, 1080))
+        owner = _owner(monitors, width=128, height=128, x=800, y=400)
+        plate_window, _ = _plate_window(width=52, height=18)
+        plate = _make_nameplate(owner=owner, plate_window=plate_window)
+
+        seen_frames = []
+
+        def _visible_bounds(frame, width, height):
+            seen_frames.append(frame)
+            return (10.0, 10.0, 100.0, 100.0)
+
+        plate._anchor.atlas = SimpleNamespace(visible_bounds=_visible_bounds)
+        # Even a live frame with large offsets must not influence the frame
+        # actually passed to visible_bounds().
+        plate._anchor.player = SimpleNamespace(
+            frame=AnimationFrame(
+                sprite="idle_0", horizontal_offset=25.0, vertical_offset=-14.0
+            )
+        )
+
+        with patch(
+            "mochi.presence.nameplate.get_window_position",
+            return_value=(800, 400),
+        ), patch("mochi.presence.nameplate.move_window"):
+            plate._position_x11()
+
+        self.assertEqual(len(seen_frames), 1)
+        self.assertEqual(seen_frames[0].horizontal_offset, 0.0)
+        self.assertEqual(seen_frames[0].vertical_offset, 0.0)
 
 
 class NameplateContentTests(unittest.TestCase):
