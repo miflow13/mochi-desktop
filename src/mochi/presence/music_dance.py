@@ -66,8 +66,28 @@ class MusicDanceMixin:
             return
         super()._on_user_idle()
 
+    def _generic_browser_watch_active(self) -> bool:
+        """Return whether WATCHING came only from coarse focused-browser fallback."""
+        monitor = self._media_monitor
+        backend = getattr(monitor, "_backend", None) if monitor is not None else None
+        return bool(
+            monitor is not None
+            and monitor.youtube_playing
+            and getattr(backend, "watching_via_browser_focus", False)
+        )
+
     def _on_music_started(self) -> None:
         """Start the low-priority dance when recognized music begins."""
+        # Sparse Chromium MPRIS data can temporarily look like generic focused
+        # browser media. Confident music detection is more specific, so music
+        # may replace only that coarse fallback WATCHING state. Explicit
+        # YouTube/video detection continues to outrank dancing.
+        if (
+            self.state.current is MochiState.WATCHING
+            and self._generic_browser_watch_active()
+        ):
+            self._transition_to(MochiState.IDLE)
+            self._play_animation("idle")
         self._start_dancing_emote()
 
     def _on_music_stopped(self) -> None:
@@ -123,6 +143,17 @@ class MusicDanceMixin:
             return False
         return self._start_dancing_emote()
 
+    def _maybe_resume_watching(self) -> bool:
+        # A confidently detected music source outranks only the intentionally
+        # broad browser-focus fallback. Real/identified video still wins.
+        if (
+            self._music_monitor is not None
+            and self._music_monitor.music_playing
+            and self._generic_browser_watch_active()
+        ):
+            return False
+        return super()._maybe_resume_watching()
+
     def _maybe_resume_ambient_activity(self) -> bool:
         # Preserve Buddy's established media/file priority and insert music in
         # the middle. This is called after direct reactions and typing finish.
@@ -133,8 +164,15 @@ class MusicDanceMixin:
         )
 
     def _start_watching_emote(self) -> bool:
-        # Watchable video wins if it begins while music is already playing.
+        # Explicit watchable video wins over music. A coarse focused-browser
+        # fallback does not steal the state back from known music playback.
         if self.state.current is MochiState.DANCING:
+            if (
+                self._music_monitor is not None
+                and self._music_monitor.music_playing
+                and self._generic_browser_watch_active()
+            ):
+                return False
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
         return super()._start_watching_emote()

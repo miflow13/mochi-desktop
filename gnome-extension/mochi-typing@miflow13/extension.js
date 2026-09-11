@@ -98,7 +98,29 @@ const USER_IDLE_AFTER_MS = 120_000;
 const POLL_INTERVAL_MS = 50;
 const EVENT_TIME_EPSILON_MS = 12;
 const VIDEO_FOCUS_HEARTBEAT_MS = 1_000;
-const BROWSER_MARKERS = ['google-chrome', 'chromium', 'chrome', 'firefox'];
+const BROWSER_MARKERS = [
+    'google-chrome',
+    'com.google.chrome',
+    'chromium',
+    'chrome',
+    'firefox',
+    'mozilla.firefox',
+    'brave',
+    'vivaldi',
+    'microsoft-edge',
+    'microsoft.edge',
+    'msedge',
+];
+const BROWSER_TITLE_NAMES = [
+    'google chrome',
+    'chromium',
+    'chrome',
+    'mozilla firefox',
+    'firefox',
+    'brave',
+    'vivaldi',
+    'microsoft edge',
+];
 
 export default class MochiTypingActivityExtension extends Extension {
     enable() {
@@ -157,6 +179,7 @@ export default class MochiTypingActivityExtension extends Extension {
             VIDEO_FOCUS_HEARTBEAT_MS,
             () => {
                 this._updateYouTubeFocusedState(true);
+                this._updateAppCategory();
                 return GLib.SOURCE_CONTINUE;
             },
         );
@@ -278,7 +301,7 @@ export default class MochiTypingActivityExtension extends Extension {
         if (matches(TERMINAL_MARKERS))
             return 'terminal';
         if (matches(BROWSER_MARKERS))
-            return 'browser';
+            return this._isFocusedYouTubeWindow(window) ? 'media' : 'browser';
         if (matches(MEDIA_APP_MARKERS))
             return 'media';
         return 'unknown';
@@ -374,23 +397,37 @@ export default class MochiTypingActivityExtension extends Extension {
         if (!isBrowser)
             return false;
 
-        // Chrome's MPRIS session does not expose the page URL on this system.
-        // Inspect the focused window title only long enough to reduce it to a
-        // boolean. Never retain or transmit the title.
+        // Browser MPRIS data often omits the page URL. Inspect the focused title
+        // only long enough to reduce it to a boolean; the raw title is never
+        // logged, retained, or sent over D-Bus.
         let title = '';
         try {
-            title = String(window.get_title() ?? '').toLowerCase();
+            title = String(window.get_title() ?? '').trim().toLowerCase();
         } catch (_error) {
             return false;
         }
 
-        // Treat only a YouTube-style video/page title as YouTube context.
-        // A plain substring check was too broad: unrelated browser tabs whose
-        // titles merely mentioned "YouTube" could produce false WATCHING
-        // transitions when Chromium still had an MPRIS Playing session.
+        if (title.includes('youtube music'))
+            return false;
+
+        // Chrome/Chromium/Firefox can append their own application name after
+        // the page title, e.g. "Video - YouTube - Google Chrome". Strip only a
+        // known browser suffix, then require YouTube to be the page-brand suffix.
+        for (const browserName of BROWSER_TITLE_NAMES) {
+            for (const separator of [' - ', ' – ', ' — ']) {
+                const suffix = `${separator}${browserName}`;
+                if (title.endsWith(suffix)) {
+                    title = title.slice(0, -suffix.length).trim();
+                    break;
+                }
+            }
+        }
+
         return (
-            title.endsWith(' - youtube') &&
-            !title.includes('youtube music')
+            title.endsWith(' - youtube') ||
+            title.endsWith(' – youtube') ||
+            title.endsWith(' — youtube') ||
+            title === 'youtube'
         );
     }
 

@@ -9,6 +9,7 @@ from gi.repository import GLib
 from mochi.sound import SoundEvent
 
 from .clicks import ClickBurstDetector
+from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
 from .integration import (
     PresenceBuddy as BasePresenceBuddy,
@@ -160,9 +161,19 @@ class ClickDialogueMixin:
             )
 
 
-class PresenceBuddy(ClickDialogueMixin, MusicDanceMixin, BasePresenceBuddy):
-    """Layer-shell buddy with Mochi Sense, music dance, and click dialogue."""
+class PresenceBuddy(
+    ClickDialogueMixin,
+    MusicDanceMixin,
+    EdgeRoamMixin,
+    BasePresenceBuddy,
+):
+    """Layer-shell buddy with Mochi Sense, music dance, edge roam, and dialogue."""
 
 
-class PresenceX11Buddy(ClickDialogueMixin, MusicDanceMixin, BasePresenceX11Buddy):
-    """X11/XWayland buddy with Mochi Sense, music dance, and click dialogue."""
+class PresenceX11Buddy(
+    ClickDialogueMixin,
+    MusicDanceMixin,
+    EdgeRoamMixin,
+    BasePresenceX11Buddy,
+):
+    """X11 buddy with Mochi Sense, music dance, edge roam, and dialogue."""
