@@ -115,6 +115,30 @@ class MprisMusicBackendTests(unittest.TestCase):
         })
         self.assertTrue(backend.sample_music_playing())
 
+    def test_brainfm_web_url_is_music(self):
+        backend = self._backend({
+            "org.mpris.MediaPlayer2.chromium.instance123": {
+                "PlaybackStatus": "Playing",
+                "Metadata": {
+                    "xesam:title": "Deep Work",
+                    "xesam:url": "https://www.brain.fm/player",
+                },
+            }
+        })
+        self.assertTrue(backend.sample_music_playing())
+
+    def test_brainfm_title_is_music_when_browser_omits_url(self):
+        backend = self._backend({
+            "org.mpris.MediaPlayer2.chromium.instance123": {
+                "PlaybackStatus": "Playing",
+                "Metadata": {
+                    "xesam:title": "Deep Work - Brain.fm",
+                    "xesam:url": "",
+                },
+            }
+        })
+        self.assertTrue(backend.sample_music_playing())
+
     def test_local_audio_file_is_music(self):
         self.assertTrue(_metadata_indicates_music({
             "xesam:url": "file:///home/user/Music/song.flac"

@@ -67,6 +67,7 @@ _MUSIC_WEB_HOSTS = (
     "tidal.com",
     "deezer.com",
     "pandora.com",
+    "brain.fm",
 )
 
 
@@ -369,7 +370,11 @@ def _metadata_indicates_music(
 
     for value in _string_values(metadata.get("xesam:title")):
         lowered = value.strip().lower()
-        if "youtube music" in lowered or _looks_like_audio_file(value):
+        if (
+            "youtube music" in lowered
+            or "brain.fm" in lowered
+            or _looks_like_audio_file(value)
+        ):
             return True
 
     # Native music players commonly expose artist/album without a useful URL.
