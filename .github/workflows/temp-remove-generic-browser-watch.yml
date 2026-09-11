@@ -1,0 +1,73 @@
+name: Temporary remove generic browser watch fallback
+
+on:
+  push:
+    branches:
+      - feat/vscode-presence-category
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vscode-presence-category
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test runner
+        run: python -m pip install pytest
+
+      - name: Remove generic focused-browser watch fallback
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected snippet not found in {path}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/mochi/media_activity.py",
+              '''        if youtube_metadata and is_browser:\n            if self._youtube_focused:\n                self._watching_via_youtube_focus = True\n                return True\n            if self._focused_browser:\n                self._watching_via_browser_focus = True\n                return True\n            return False\n''',
+              '''        if youtube_metadata and is_browser:\n            if self._youtube_focused:\n                self._watching_via_youtube_focus = True\n                return True\n            return False\n''',
+          )
+
+          replace_once(
+              "src/mochi/media_activity.py",
+              '''        # Chromium on Fedora commonly exposes exactly what playerctl reports:\n        # a browser MPRIS player in Playing state, a media title, and no URL or\n        # site branding. If that browser is also the coarse focused-app category,\n        # treat it as focused browser media. No title, URL, or page content is\n        # retained or transmitted to make this decision.\n        if self._focused_browser and is_browser:\n            self._watching_via_browser_focus = True\n            return True\n\n''',
+              '''        # Do not infer watchable video from browser focus alone. The Shell\n        # helper already provides a dedicated privacy-reduced YouTube focus\n        # signal, and explicit video metadata covers local/direct video files.\n        # This avoids turning ordinary browser audio into WATCHING.\n\n''',
+          )
+
+          p = Path("tests/test_media_activity.py")
+          text = p.read_text()
+          anchor = '''    def test_focused_brainfm_is_not_watchable_browser_media(self) -> None:\n'''
+          tests = '''    def test_focused_generic_browser_audio_is_not_watchable(self) -> None:\n        backend = self._backend(\n            {\n                "org.mpris.MediaPlayer2.chromium.instance123": {\n                    "PlaybackStatus": "Playing",\n                    "Metadata": {"xesam:title": "Background audio"},\n                }\n            }\n        )\n        backend._focused_browser = True\n        self.assertFalse(backend.sample_youtube_playing())\n\n    def test_browser_focus_alone_does_not_activate_background_youtube(self) -> None:\n        backend = self._backend(\n            {\n                "org.mpris.MediaPlayer2.chromium.instance123": {\n                    "PlaybackStatus": "Playing",\n                    "Metadata": {"xesam:url": "https://www.youtube.com/watch?v=abc"},\n                }\n            }\n        )\n        backend._focused_browser = True\n        self.assertFalse(backend.sample_youtube_playing())\n\n\n'''
+          if anchor not in text:
+              raise SystemExit("test insertion anchor not found")
+          p.write_text(text.replace(anchor, tests + anchor, 1))
+          PY
+
+      - name: Run media and music regression tests
+        run: python -m pytest -q tests/test_media_activity.py tests/test_music_activity.py
+
+      - name: Remove temporary workflow and commit fix
+        shell: bash
+        run: |
+          rm .github/workflows/temp-remove-generic-browser-watch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: require real video evidence for watching"
+          git push origin HEAD:feat/vscode-presence-category
