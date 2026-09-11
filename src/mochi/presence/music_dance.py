@@ -106,7 +106,12 @@ class MusicDanceMixin:
                 self._begin_sleep()
             return
 
-        if was_dancing and not self._maybe_resume_watching() and not self._maybe_resume_searching():
+        if (
+            was_dancing
+            and not self._maybe_resume_watching()
+            and not self._maybe_resume_vscode_coworking()
+            and not self._maybe_resume_searching()
+        ):
             self._schedule_computer_idle_emote()
 
     def _start_dancing_emote(self) -> bool:
@@ -159,6 +164,7 @@ class MusicDanceMixin:
         # the middle. This is called after direct reactions and typing finish.
         return (
             self._maybe_resume_watching()
+            or self._maybe_resume_vscode_coworking()
             or self._maybe_resume_dancing()
             or self._maybe_resume_searching()
         )
@@ -166,6 +172,15 @@ class MusicDanceMixin:
     def _start_watching_emote(self) -> bool:
         # Explicit watchable video wins over music. A coarse focused-browser
         # fallback does not steal the state back from known music playback.
+        if (
+            self.state.current is MochiState.TYPING
+            and getattr(self, "_vscode_coworking_active", False)
+        ):
+            # Explicit watchable video outranks contextual coworking. Skip the
+            # outro here so the higher-priority reaction feels immediate.
+            self._vscode_coworking_active = False
+            self._transition_to(MochiState.IDLE)
+            self._play_animation("idle")
         if self.state.current is MochiState.DANCING:
             if (
                 self._music_monitor is not None
@@ -187,7 +202,11 @@ class MusicDanceMixin:
 
         if self._user_idle:
             self._begin_sleep()
-        elif not self._maybe_resume_dancing() and not self._maybe_resume_searching():
+        elif (
+            not self._maybe_resume_vscode_coworking()
+            and not self._maybe_resume_dancing()
+            and not self._maybe_resume_searching()
+        ):
             self._schedule_computer_idle_emote()
 
     def _on_file_activity_stopped(self) -> None:
@@ -196,7 +215,11 @@ class MusicDanceMixin:
         self._transition_to(MochiState.IDLE)
         self._play_animation("idle")
         self._logger.debug("File activity emote stopped")
-        if not self._maybe_resume_watching() and not self._maybe_resume_dancing():
+        if (
+            not self._maybe_resume_watching()
+            and not self._maybe_resume_vscode_coworking()
+            and not self._maybe_resume_dancing()
+        ):
             self._schedule_computer_idle_emote()
 
     def _start_typing_emote(self) -> bool:

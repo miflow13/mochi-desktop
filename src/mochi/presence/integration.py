@@ -8,6 +8,7 @@ import time
 from gi.repository import GLib, Gtk
 
 from mochi.buddy import Buddy
+from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState
 from mochi.x11_buddy import X11Buddy
 
@@ -22,6 +23,7 @@ class PresenceBuddyMixin:
 
     PRESENCE_EVALUATION_SECONDS = 5
     STARTUP_GREETING_DELAY_MS = 1_100
+    VSCODE_COWORK_DEBOUNCE_MS = 700
 
     def __init__(self, *args, **kwargs) -> None:
         self._ambient_presence_engine = PresenceEngine()
@@ -40,6 +42,8 @@ class PresenceBuddyMixin:
         self._presence_source_id: int | None = None
         self._presence_startup_source_id: int | None = None
         self._presence_shutting_down = False
+        self._vscode_cowork_source_id: int | None = None
+        self._vscode_coworking_active = False
         super().__init__(*args, **kwargs)
 
         if self._preview_mode:
@@ -508,6 +512,15 @@ class PresenceBuddyMixin:
 
     def _on_typing_stopped(self) -> None:
         self._ambient_presence_engine.record_typing_stopped()
+        # VS Code coworking intentionally holds the typing loop open even when
+        # the user's current typing burst ends. Focus, not keystroke cadence,
+        # owns this contextual companion mode.
+        if (
+            self._presence_app_category == "vscode"
+            and self.state.current is MochiState.TYPING
+        ):
+            self._vscode_coworking_active = True
+            return
         super()._on_typing_stopped()
 
     def _on_youtube_started(self) -> None:
@@ -525,6 +538,8 @@ class PresenceBuddyMixin:
         self._ambient_presence_engine.note_user_active()
         self._presence_active_session_started_at = time.monotonic()
         super()._on_user_active()
+        if self._presence_app_category == "vscode":
+            self._schedule_vscode_coworking()
 
     def _on_pressed(self, *args) -> None:
         self._dismiss_presence_bubble(user_initiated=True)
@@ -559,7 +574,86 @@ class PresenceBuddyMixin:
         self._ambient_presence_engine.emit("network_restored")
 
     def _on_presence_app_category_changed(self, category: str) -> None:
+        previous = self._presence_app_category
         self._presence_app_category = category
+        if category == "vscode":
+            self._schedule_vscode_coworking()
+        elif previous == "vscode" or self._vscode_coworking_active:
+            self._stop_vscode_coworking()
+
+    def _cancel_vscode_cowork_source(self) -> None:
+        source_id = self._vscode_cowork_source_id
+        self._vscode_cowork_source_id = None
+        if source_id is not None:
+            try:
+                GLib.source_remove(source_id)
+            except Exception:
+                pass
+
+    def _schedule_vscode_coworking(self) -> None:
+        """Debounce focused VS Code before entering the persistent work loop."""
+        self._cancel_vscode_cowork_source()
+        if (
+            self._presence_shutting_down
+            or self._presence_app_category != "vscode"
+            or self._user_idle
+        ):
+            return
+        self._vscode_cowork_source_id = GLib.timeout_add(
+            self.VSCODE_COWORK_DEBOUNCE_MS,
+            self._begin_vscode_coworking,
+        )
+
+    def _begin_vscode_coworking(self) -> bool:
+        self._vscode_cowork_source_id = None
+        if (
+            self._presence_shutting_down
+            or self._presence_app_category != "vscode"
+            or self._user_idle
+            or self._context_menu_open
+        ):
+            return GLib.SOURCE_REMOVE
+
+        # Real watchable media keeps the higher ambient priority. Direct
+        # interactions likewise finish first and later resume through the normal
+        # ambient-resume path.
+        if self.state.current is MochiState.WATCHING:
+            return GLib.SOURCE_REMOVE
+        if self.state.current is MochiState.TYPING:
+            self._vscode_coworking_active = True
+            return GLib.SOURCE_REMOVE
+
+        if self._start_typing_emote():
+            self._vscode_coworking_active = True
+            self._logger.debug("VS Code coworking mode started")
+        return GLib.SOURCE_REMOVE
+
+    def _stop_vscode_coworking(self) -> None:
+        self._cancel_vscode_cowork_source()
+        was_active = self._vscode_coworking_active
+        self._vscode_coworking_active = False
+        if not was_active:
+            return
+        if self.state.current is MochiState.TYPING:
+            # Call Buddy's typing-stop transition directly. The app category has
+            # already changed, so the cowork hold no longer applies.
+            super()._on_typing_stopped()
+        self._logger.debug("VS Code coworking mode stopped")
+
+    def _maybe_resume_vscode_coworking(self) -> bool:
+        if (
+            self._presence_app_category != "vscode"
+            or self._user_idle
+            or self.state.current is not MochiState.IDLE
+            or self._context_menu_open
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        if not self._start_typing_emote():
+            return False
+        self._vscode_coworking_active = True
+        self._logger.debug("VS Code coworking mode resumed")
+        return True
 
     def _evaluate_ambient_presence(self) -> bool:
         if self._presence_shutting_down:
@@ -641,6 +735,8 @@ class PresenceBuddyMixin:
                 GLib.source_remove(source_id)
             except Exception:
                 pass
+        self._cancel_vscode_cowork_source()
+        self._vscode_coworking_active = False
         startup_source_id = self._presence_startup_source_id
         self._presence_startup_source_id = None
         if startup_source_id is not None:
