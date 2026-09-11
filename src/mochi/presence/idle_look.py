@@ -1,4 +1,4 @@
-"""Low-priority ambient look emote for genuinely idle Mochi."""
+"""Low-priority ambient look cycle for standing-idle Mochi."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from mochi.state import MochiState
 
 
 class IdleLookMixin:
-    """Let idle Mochi glance around without competing with real activity."""
+    """Let standing-idle Mochi glance around on an independent cycle."""
 
-    IDLE_LOOK_INTERVAL_SECONDS = (15, 30)
+    IDLE_LOOK_INTERVAL_SECONDS = (5, 20)
     IDLE_LOOK_ANIMATION = "look"
 
     def __init__(self, *args, **kwargs) -> None:
@@ -54,6 +54,8 @@ class IdleLookMixin:
         if self._can_start_idle_look():
             self._play_idle_look()
         else:
+            # Keep the cadence independent from mouse/keyboard activity. If
+            # another Mochi state owns presentation, simply try again later.
             self._schedule_idle_look()
         return GLib.SOURCE_REMOVE
 
@@ -61,7 +63,6 @@ class IdleLookMixin:
         return bool(
             not getattr(self, "_presence_shutting_down", False)
             and not self._user_idle
-            and not self._context_menu_open
             and self.state.current is MochiState.IDLE
             and self._current_animation == "idle"
             and self.player.animation is ANIMATIONS["idle"]
@@ -121,12 +122,10 @@ class IdleLookMixin:
         if self._idle_look_active and name != self.IDLE_LOOK_ANIMATION:
             self._restore_idle_after_look(resume_ambient=False)
         super()._play_animation(name, after=after)
-        if name == "idle":
-            self._reschedule_idle_look()
 
-    # Contextual starts in Buddy and the presence mixins guard on the canonical
-    # idle animation. Restore that canonical idle frame first so real activity
-    # can interrupt the low-priority look immediately instead of waiting 1.2s.
+    # Higher-priority Mochi states still own presentation. Ordinary pointer and
+    # keyboard activity no longer cancel or restart the look timer; only an
+    # actual state transition interrupts the visual cycle.
     def _start_typing_emote(self) -> bool:
         self._cancel_idle_look()
         return super()._start_typing_emote()
@@ -158,16 +157,6 @@ class IdleLookMixin:
     def _begin_vscode_coworking(self) -> bool:
         self._cancel_idle_look()
         return super()._begin_vscode_coworking()
-
-    def _mark_interaction(self) -> None:
-        self._cancel_idle_look()
-        self._reschedule_idle_look()
-        super()._mark_interaction()
-
-    def _show_context_menu(self, *args) -> None:
-        self._cancel_idle_look()
-        self._reschedule_idle_look()
-        super()._show_context_menu(*args)
 
     def shutdown_presence(self) -> None:
         source_id = self._idle_look_source_id
