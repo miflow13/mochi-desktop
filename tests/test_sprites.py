@@ -39,7 +39,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
-            "watch", "searching", "drop",
+            "watch", "dance", "searching", "drop",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -84,20 +84,17 @@ class SpriteDefinitionsTests(unittest.TestCase):
         blink = ANIMATIONS["blink"]
         self.assertEqual(
             tuple(frame.duration_ms for frame in blink.frames),
-            (90, 90, 120, 90),
+            (50, 55, 65, 85, 65, 55, 50),
         )
-        self.assertEqual(sum(frame.duration_ms or 0 for frame in blink.frames), 390)
+        self.assertEqual(sum(frame.duration_ms or 0 for frame in blink.frames), 425)
         self.assertFalse(blink.looping)
 
-    def test_blink_starts_and_ends_on_the_exact_idle_endpoint(self) -> None:
-        surfaces = {
-            **ASSET_SET.load_frames("idle"),
-            **ASSET_SET.load_frames("blink"),
-        }
-        idle = bytes(surfaces["idle/idle_01.png"].get_data())
+    def test_blink_starts_and_ends_on_the_same_authored_pose(self) -> None:
+        surfaces = ASSET_SET.load_frames("blink")
+        first = bytes(surfaces["blink/blink_01.png"].get_data())
+        last = bytes(surfaces["blink/blink_07.png"].get_data())
 
-        self.assertEqual(bytes(surfaces["blink/blink_01.png"].get_data()), idle)
-        self.assertEqual(bytes(surfaces["blink/blink_04.png"].get_data()), idle)
+        self.assertEqual(first, last)
 
     def test_drag_uses_a_subtle_manifest_dangling_loop(self) -> None:
         dragged = ANIMATIONS["dragged"]
