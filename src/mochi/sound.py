@@ -56,7 +56,7 @@ class SoundManager:
     DEFAULT_VOLUME = 0.6
     EVENT_FILES = {
         SoundEvent.CLICK: "mochi_chirp_01.ogg",
-        SoundEvent.PET: "pet.ogg",
+        SoundEvent.PET: "pet.wav",
         SoundEvent.PICKUP: "pickup.ogg",
         SoundEvent.DROP: "drop.ogg",
         SoundEvent.LEVEL_UP: "level_up.ogg",
