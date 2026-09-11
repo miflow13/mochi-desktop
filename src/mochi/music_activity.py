@@ -56,6 +56,19 @@ _MUSIC_PLAYER_MARKERS = (
     "mpd",
 )
 
+# Browser playback needs a source-specific signal before it is called music.
+# Artist/album metadata alone is not enough because normal YouTube videos often
+# expose channel/creator fields through MPRIS that look music-like.
+_MUSIC_WEB_HOSTS = (
+    "open.spotify.com",
+    "soundcloud.com",
+    "bandcamp.com",
+    "music.apple.com",
+    "tidal.com",
+    "deezer.com",
+    "pandora.com",
+)
+
 
 class MprisMusicBackend:
     """Reduce MPRIS state to a conservative music-playing boolean."""
@@ -163,14 +176,18 @@ class MprisMusicBackend:
             return False
 
         metadata = self._get_property(bus_name, "Metadata", Gio, GLib)
+        is_browser = _is_browser_player(bus_name)
         if _metadata_indicates_watchable_video(metadata):
             return False
-        if _metadata_indicates_music(metadata):
+        if _metadata_indicates_music(
+            metadata,
+            allow_artist_album=not is_browser,
+        ):
             return True
 
         # A browser with ambiguous metadata could be playing any kind of media,
-        # so never classify it as music from playback state alone.
-        if _is_browser_player(bus_name):
+        # so never classify it as music from playback or artist/album state alone.
+        if is_browser:
             return False
         return _is_music_first_player(bus_name)
 
@@ -322,7 +339,19 @@ def _url_is_youtube_music(value: str) -> bool:
     return host == "music.youtube.com" or host.endswith(".music.youtube.com")
 
 
-def _metadata_indicates_music(metadata) -> bool:
+def _url_is_known_music_service(value: str) -> bool:
+    try:
+        host = (urlparse(value).hostname or "").lower().rstrip(".")
+    except Exception:
+        return False
+    return any(host == domain or host.endswith(f".{domain}") for domain in _MUSIC_WEB_HOSTS)
+
+
+def _metadata_indicates_music(
+    metadata,
+    *,
+    allow_artist_album: bool = True,
+) -> bool:
     """Conservatively classify transient MPRIS metadata as music."""
     metadata = _deep_unpack(metadata)
     if not isinstance(metadata, dict):
@@ -331,7 +360,11 @@ def _metadata_indicates_music(metadata) -> bool:
         return False
 
     for value in _string_values(metadata.get("xesam:url")):
-        if _url_is_youtube_music(value) or _looks_like_audio_file(value):
+        if (
+            _url_is_youtube_music(value)
+            or _url_is_known_music_service(value)
+            or _looks_like_audio_file(value)
+        ):
             return True
 
     for value in _string_values(metadata.get("xesam:title")):
@@ -339,12 +372,20 @@ def _metadata_indicates_music(metadata) -> bool:
         if "youtube music" in lowered or _looks_like_audio_file(value):
             return True
 
-    # xesam:artist/album are strong media-type signals and are supplied by
-    # Spotify and most Linux music players without needing to identify a track.
-    if any(value.strip() for value in _string_values(metadata.get("xesam:artist"))):
-        return True
-    if any(value.strip() for value in _string_values(metadata.get("xesam:album"))):
-        return True
+    # Native music players commonly expose artist/album without a useful URL.
+    # Browser video can expose creator/channel fields in the same MPRIS keys,
+    # so browser callers intentionally disable this fallback.
+    if allow_artist_album:
+        if any(
+            value.strip()
+            for value in _string_values(metadata.get("xesam:artist"))
+        ):
+            return True
+        if any(
+            value.strip()
+            for value in _string_values(metadata.get("xesam:album"))
+        ):
+            return True
 
     return False
 
