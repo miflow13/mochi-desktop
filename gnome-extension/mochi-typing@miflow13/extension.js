@@ -183,7 +183,7 @@ export default class MochiTypingActivityExtension extends Extension {
             GLib.PRIORITY_DEFAULT,
             VIDEO_FOCUS_HEARTBEAT_MS,
             () => {
-                this._updateYouTubeFocusedState(true);
+                this._updateYouTubeFocusedState(false);
                 this._updateAppCategory();
                 return GLib.SOURCE_CONTINUE;
             },
