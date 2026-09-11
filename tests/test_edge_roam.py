@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from mochi.config import Position
 from mochi.edge_roam import (
@@ -8,6 +9,8 @@ from mochi.edge_roam import (
     build_edge_roam_motion,
     nearest_edge_point,
 )
+from mochi.presence.edge_roam_controls import EdgeRoamMixin
+from mochi.state import MochiState
 
 
 class _Placement:
@@ -27,6 +30,37 @@ class _Placement:
 
     def _x11_coordinate_scale(self):
         return self._scale
+
+
+class _TogglePlacement(_Placement):
+    def __init__(self, position: Position) -> None:
+        super().__init__()
+        self.position = position
+        self.move_to = Mock(side_effect=self._move_to)
+
+    def sync_from_window(self) -> Position:
+        return self.position
+
+    def _move_to(self, x: int, y: int) -> Position:
+        self.position = Position(x, y)
+        return self.position
+
+
+class _EdgeRoamHarness(EdgeRoamMixin):
+    def __init__(self, position: Position, state: MochiState) -> None:
+        self._edge_roam = False
+        self._edge_roam_switch = Mock()
+        self._edge_roam_clockwise = True
+        self._placement = _TogglePlacement(position)
+        self._config = SimpleNamespace(
+            save_edge_roam=Mock(),
+            save_position=Mock(),
+        )
+        self.state = SimpleNamespace(current=state)
+        self._cancel_walk = Mock()
+        self._transition_to = Mock(return_value=True)
+        self._play_animation = Mock()
+        self._logger = Mock()
 
 
 class EdgeRoamTests(unittest.TestCase):
@@ -110,6 +144,28 @@ class EdgeRoamTests(unittest.TestCase):
         )
         self.assertIsInstance(motion, EdgeWalkMotion)
         self.assertEqual(motion.bounds, EdgeBounds(16, 1784, 16, 1376))
+
+    def test_enabling_edge_roam_moves_mochi_to_nearest_edge(self) -> None:
+        buddy = _EdgeRoamHarness(Position(450, 300), MochiState.IDLE)
+
+        with patch("mochi.presence.edge_roam_controls.random.choice", return_value=True):
+            buddy._toggle_edge_roam(None)
+
+        self.assertTrue(buddy._edge_roam)
+        buddy._placement.move_to.assert_called_once_with(450, 8)
+        buddy._config.save_position.assert_called_once_with(Position(450, 8))
+        buddy._cancel_walk.assert_not_called()
+
+    def test_enabling_edge_roam_cancels_walk_before_moving_to_edge(self) -> None:
+        buddy = _EdgeRoamHarness(Position(450, 300), MochiState.WALKING)
+
+        with patch("mochi.presence.edge_roam_controls.random.choice", return_value=False):
+            buddy._toggle_edge_roam(None)
+
+        buddy._cancel_walk.assert_called_once()
+        buddy._transition_to.assert_called_once_with(MochiState.IDLE)
+        buddy._play_animation.assert_called_once_with("idle")
+        buddy._placement.move_to.assert_called_once_with(450, 8)
 
 
 if __name__ == "__main__":

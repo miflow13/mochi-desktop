@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import random
 
+import gi
+
+gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk
 
 from mochi.behavior import choose_walk_animation
-from mochi.edge_roam import build_edge_roam_motion
+from mochi.edge_roam import (
+    bounds_for_placement,
+    build_edge_roam_motion,
+    nearest_edge_point,
+)
 from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState
 
@@ -87,6 +94,7 @@ class EdgeRoamMixin:
                 self._cancel_walk()
                 if self._transition_to(MochiState.IDLE):
                     self._play_animation("idle")
+            self._move_to_nearest_edge()
 
         self._logger.info(
             "Edge roam %s%s",
@@ -95,6 +103,19 @@ class EdgeRoamMixin:
             if self._edge_roam and getattr(self, "_stay_put", False)
             else "",
         )
+
+    def _move_to_nearest_edge(self) -> None:
+        """Put Mochi on the current monitor's nearest safe perimeter point."""
+        origin = self._placement.sync_from_window()
+        bounds = bounds_for_placement(self._placement, origin)
+        if bounds is None:
+            self._logger.debug("Edge roam move skipped: monitor bounds unavailable")
+            return
+
+        target = nearest_edge_point(origin, bounds)
+        self._placement.move_to(target.x, target.y)
+        self._config.save_position(self._placement.position)
+        self._logger.debug("Edge roam moved Mochi from %s to %s", origin, target)
 
     def _start_walk(self) -> None:
         # Autonomous walk timers can already be queued when a menu opens. Guard

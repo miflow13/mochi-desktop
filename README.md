@@ -215,7 +215,7 @@ Mochi currently supports a small set of direct and ambient interactions:
 - **Hover** — Mochi may answer with a little heart
 - **Right-click** — Sleep/Wake, **Edge roam**, **Stay put**, **What can Mochi do?**, and Close
 - **Stay put** — disables autonomous wandering without freezing Mochi's other behavior
-- **Edge roam** — keeps autonomous wandering along the current screen edge
+- **Edge roam** — moves Mochi to the nearest screen edge and keeps autonomous wandering along it
 - **What can Mochi do?** — opens the built-in Quick Start guide
 - **Mochi Lab** — developer/testing controls for animation and Mochi Sense tuning
 

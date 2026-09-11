@@ -60,7 +60,8 @@ QUICK_START_SECTIONS = (
     ),
     QuickStartSection(
         "You’re in Control",
-        "The right-click menu lets you sleep or wake Mochi, toggle Edge roam, use "
+        "The right-click menu lets you sleep or wake Mochi, toggle Edge roam to move "
+        "him to the nearest screen edge, use "
         "Stay put to stop autonomous wandering, and close Mochi. More granular "
         "Mochi Sense controls for speech bubbles, ambient reactions, and quiet mode "
         "currently live in Mochi Lab, which is a developer/testing surface.",
