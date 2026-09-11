@@ -14,8 +14,19 @@ Mochi is a lightweight Linux desktop companion built to make the desktop feel a 
 
 Mochi is currently available as an **early public alpha**. Fedora + GNOME on Wayland is the actively tested environment; Mochi uses XWayland where GNOME's native Wayland restrictions require it.
 
+<table>
+<tr>
+<td>
+
 > [!WARNING]
 > Alpha software can be weird. Expect rough edges, especially across different Linux desktop configurations. Bug reports and compatibility notes are very welcome.
+
+</td>
+<td width="80" align="center">
+<img width="64" height="64" alt="fedora_mode_loop" src="https://github.com/user-attachments/assets/62b496da-69f8-4f7f-ab58-f09eb1d1874e" />
+</td>
+</tr>
+</table>
 
 ---
 
