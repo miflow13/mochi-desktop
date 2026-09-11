@@ -1,8 +1,9 @@
 """Privacy-conscious media activity detection for Mochi.
 
-Mochi uses MPRIS for playback state and the optional GNOME Shell companion
-extension for a privacy-reduced "YouTube is focused" boolean. Metadata is
-inspected transiently and is never retained, logged, or exposed elsewhere.
+Mochi uses MPRIS for playback state plus coarse GNOME Shell focus signals.
+Metadata is inspected transiently and is never retained, logged, or exposed.
+When Chromium omits URL/site metadata, focused-browser state can safely act as
+the final fallback for an already-playing browser MPRIS session.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ _BROWSER_PLAYER_MARKERS = (
 
 
 class MprisMediaBackend:
-    """Read a minimal boolean watchable-video signal from MPRIS."""
+    """Read a minimal boolean watchable-media signal from MPRIS."""
 
     name = "MPRIS media playback"
     DBUS_NAME = "org.freedesktop.DBus"
@@ -51,14 +52,19 @@ class MprisMediaBackend:
     ACTIVITY_INTERFACE_NAME = "io.github.mochi_desktop.Mochi.TypingMonitor"
     YOUTUBE_FOCUSED_STARTED_SIGNAL = "YouTubeFocusedStarted"
     YOUTUBE_FOCUSED_STOPPED_SIGNAL = "YouTubeFocusedStopped"
+    APP_CATEGORY_SIGNAL = "AppCategoryChanged"
 
     def __init__(self) -> None:
         self._connection = None
         self._youtube_focused = False
+        self._focused_browser = False
         self._watching_via_youtube_focus = False
+        self._watching_via_browser_focus = False
         self._on_youtube_focus_changed: Callable[[bool], None] | None = None
+        self._on_browser_focus_changed: Callable[[bool], None] | None = None
         self._youtube_focus_started_subscription_id: int | None = None
         self._youtube_focus_stopped_subscription_id: int | None = None
+        self._app_category_subscription_id: int | None = None
         self.last_error: str | None = None
 
     @property
@@ -69,10 +75,23 @@ class MprisMediaBackend:
     def watching_via_youtube_focus(self) -> bool:
         return self._watching_via_youtube_focus
 
+    @property
+    def watching_via_browser_focus(self) -> bool:
+        return self._watching_via_browser_focus
+
     def set_youtube_focus_changed_callback(
         self, callback: Callable[[bool], None] | None
     ) -> None:
         self._on_youtube_focus_changed = callback
+
+    def set_browser_focus_changed_callback(
+        self, callback: Callable[[bool], None] | None
+    ) -> None:
+        self._on_browser_focus_changed = callback
+
+    def set_focused_browser(self, active: bool) -> None:
+        """Receive only whether the coarse focused-app category is a browser."""
+        self._focused_browser = bool(active)
 
     @staticmethod
     def _load_gio():
@@ -91,14 +110,14 @@ class MprisMediaBackend:
             if self._connection is None:
                 self.last_error = "session D-Bus connection is unavailable"
                 return False
-            self._subscribe_youtube_focus()
+            self._subscribe_focus_signals()
         except Exception as exc:
             self.last_error = f"{type(exc).__name__}: {exc}"
             self._connection = None
             return False
         return True
 
-    def _subscribe_youtube_focus(self) -> None:
+    def _subscribe_focus_signals(self) -> None:
         connection = self._connection
         if connection is None or not hasattr(connection, "signal_subscribe"):
             return
@@ -124,16 +143,29 @@ class MprisMediaBackend:
                 flags,
                 self._on_youtube_focused_stopped,
             )
+            category_id = connection.signal_subscribe(
+                self.ACTIVITY_BUS_NAME,
+                self.ACTIVITY_INTERFACE_NAME,
+                self.APP_CATEGORY_SIGNAL,
+                self.ACTIVITY_OBJECT_PATH,
+                None,
+                flags,
+                self._on_app_category_changed,
+            )
             self._youtube_focus_started_subscription_id = (
                 int(started_id) if started_id else None
             )
             self._youtube_focus_stopped_subscription_id = (
                 int(stopped_id) if stopped_id else None
             )
+            self._app_category_subscription_id = (
+                int(category_id) if category_id else None
+            )
         except Exception:
             # Metadata-only detection can still operate without the Shell helper.
             self._youtube_focus_started_subscription_id = None
             self._youtube_focus_stopped_subscription_id = None
+            self._app_category_subscription_id = None
 
     def _on_youtube_focused_started(self, *_ignored) -> None:
         changed = not self._youtube_focused
@@ -147,6 +179,26 @@ class MprisMediaBackend:
         if changed and self._on_youtube_focus_changed is not None:
             self._on_youtube_focus_changed(False)
 
+    def _on_app_category_changed(
+        self,
+        _connection,
+        _sender_name,
+        _object_path,
+        _interface_name,
+        _signal_name,
+        parameters,
+    ) -> None:
+        try:
+            unpacked = _deep_unpack(parameters)
+            category = unpacked[0] if isinstance(unpacked, tuple) else unpacked
+        except Exception:
+            return
+        active = category == "browser"
+        changed = active != self._focused_browser
+        self._focused_browser = active
+        if changed and self._on_browser_focus_changed is not None:
+            self._on_browser_focus_changed(active)
+
     def stop(self) -> None:
         if self._connection is not None and hasattr(
             self._connection, "signal_unsubscribe"
@@ -154,6 +206,7 @@ class MprisMediaBackend:
             for subscription_id in (
                 self._youtube_focus_started_subscription_id,
                 self._youtube_focus_stopped_subscription_id,
+                self._app_category_subscription_id,
             ):
                 if subscription_id is None:
                     continue
@@ -164,8 +217,11 @@ class MprisMediaBackend:
 
         self._youtube_focus_started_subscription_id = None
         self._youtube_focus_stopped_subscription_id = None
+        self._app_category_subscription_id = None
         self._youtube_focused = False
+        self._focused_browser = False
         self._watching_via_youtube_focus = False
+        self._watching_via_browser_focus = False
         self._connection = None
 
     def sample_youtube_playing(self) -> bool | None:
@@ -196,6 +252,8 @@ class MprisMediaBackend:
         if not isinstance(names, (list, tuple)):
             return False
 
+        self._watching_via_youtube_focus = False
+        self._watching_via_browser_focus = False
         sampled_player = False
         player_error = False
 
@@ -236,28 +294,38 @@ class MprisMediaBackend:
 
         # Local/direct video files are playback-driven, not focus-driven.
         if _metadata_indicates_video_file(metadata):
-            self._watching_via_youtube_focus = False
             return True
 
         youtube_metadata = _metadata_indicates_youtube(metadata)
 
-        # Browser YouTube represents the user's active viewing context.
-        # Requiring the Shell's boolean focus signal lets tabbing away stop
-        # WATCHING even if playback continues in the background.
+        # Browser YouTube is focus-sensitive so background playback does not
+        # make Mochi behave as though the user is actively watching it.
         if youtube_metadata and is_browser:
-            self._watching_via_youtube_focus = True
-            return self._youtube_focused
+            if self._youtube_focused:
+                self._watching_via_youtube_focus = True
+                return True
+            if self._focused_browser:
+                self._watching_via_browser_focus = True
+                return True
+            return False
 
         # Non-browser players that explicitly identify YouTube can use metadata.
         if youtube_metadata:
-            self._watching_via_youtube_focus = False
             return True
 
-        # Chromium-family browsers frequently omit page URL/art metadata.
-        # Active browser playback + the privacy-reduced focused-YouTube signal
-        # is the intended fallback.
+        # Preferred sparse-metadata fallback: the Shell already reduced the
+        # focused page to a YouTube boolean.
         if self._youtube_focused and is_browser:
             self._watching_via_youtube_focus = True
+            return True
+
+        # Chromium on Fedora commonly exposes exactly what playerctl reports:
+        # a browser MPRIS player in Playing state, a media title, and no URL or
+        # site branding. If that browser is also the coarse focused-app category,
+        # treat it as focused browser media. No title, URL, or page content is
+        # retained or transmitted to make this decision.
+        if self._focused_browser and is_browser:
+            self._watching_via_browser_focus = True
             return True
 
         return False
@@ -281,7 +349,7 @@ class MprisMediaBackend:
 
 
 class MediaActivityMonitor:
-    """Turn MPRIS samples into stable YouTube start/stop events."""
+    """Turn privacy-reduced MPRIS/focus samples into stable media events."""
 
     POLL_INTERVAL_MS = 1_000
     STOP_GRACE_SECONDS = 5.0
@@ -302,6 +370,10 @@ class MediaActivityMonitor:
         if hasattr(self._backend, "set_youtube_focus_changed_callback"):
             self._backend.set_youtube_focus_changed_callback(
                 self._on_youtube_focus_changed
+            )
+        if hasattr(self._backend, "set_browser_focus_changed_callback"):
+            self._backend.set_browser_focus_changed_callback(
+                self._on_browser_focus_changed
             )
         self._clock = clock
         self._source_id: int | None = None
@@ -353,9 +425,33 @@ class MediaActivityMonitor:
         self.youtube_playing = False
         self._last_playing_at = None
 
+    def _on_browser_focus_changed(self, active: bool) -> None:
+        if not self.available:
+            return
+
+        self._logger.debug(
+            "Focused browser media fallback: %s",
+            "active" if active else "inactive",
+        )
+
+        if active:
+            self._poll()
+            return
+
+        if (
+            self.youtube_playing
+            and bool(getattr(self._backend, "watching_via_browser_focus", False))
+        ):
+            self._stop_watching_now("browser focus lost")
+
     def _on_youtube_focus_changed(self, active: bool) -> None:
         if not self.available:
             return
+
+        self._logger.debug(
+            "YouTube focus signal: %s",
+            "active" if active else "inactive",
+        )
 
         if active:
             self._poll()
@@ -372,7 +468,7 @@ class MediaActivityMonitor:
             return
         self.youtube_playing = False
         self._last_playing_at = None
-        self._logger.debug("Watchable video playback inactive: %s", reason)
+        self._logger.debug("Watchable media playback inactive: %s", reason)
         self._on_youtube_stopped()
 
     def _poll(self) -> bool:
@@ -387,7 +483,7 @@ class MediaActivityMonitor:
             self._last_playing_at = now
             if not self.youtube_playing:
                 self.youtube_playing = True
-                self._logger.debug("Watchable video playback active")
+                self._logger.debug("Watchable media playback active")
                 self._on_youtube_started()
             return keep_running
 
