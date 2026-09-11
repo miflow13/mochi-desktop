@@ -1,0 +1,79 @@
+name: Temporary Brain.fm media fallback fix
+
+on:
+  push:
+    branches:
+      - feat/vscode-presence-category
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/vscode-presence-category
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test runner
+        run: python -m pip install pytest
+
+      - name: Exclude Brain.fm from generic browser watch fallback
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected snippet not found in {path}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/mochi/media_activity.py",
+              '''        youtube_metadata = _metadata_indicates_youtube(metadata)\n\n        # Browser YouTube is focus-sensitive so background playback does not\n''',
+              '''        youtube_metadata = _metadata_indicates_youtube(metadata)\n        brainfm_metadata = _metadata_indicates_brainfm(metadata)\n\n        # Brain.fm is a known music-first browser source. Never let the broad\n        # focused-browser fallback reinterpret it as watchable video. The music\n        # monitor owns this source and can transition Mochi into DANCING.\n        if brainfm_metadata and is_browser:\n            return False\n\n        # Browser YouTube is focus-sensitive so background playback does not\n''',
+          )
+
+          replace_once(
+              "src/mochi/media_activity.py",
+              '''def _metadata_indicates_watchable_video(metadata) -> bool:\n    return _metadata_indicates_youtube(metadata) or _metadata_indicates_video_file(metadata)\n''',
+              '''def _metadata_indicates_brainfm(metadata) -> bool:\n    metadata = _deep_unpack(metadata)\n    if not isinstance(metadata, dict):\n        return False\n\n    for value in _string_values(metadata.get("xesam:url")):\n        try:\n            host = (urlparse(value).hostname or "").lower().rstrip(".")\n        except Exception:\n            host = ""\n        if host == "brain.fm" or host.endswith(".brain.fm"):\n            return True\n\n    for value in _string_values(metadata.get("xesam:title")):\n        if "brain.fm" in value.strip().lower():\n            return True\n\n    return False\n\n\ndef _metadata_indicates_watchable_video(metadata) -> bool:\n    return _metadata_indicates_youtube(metadata) or _metadata_indicates_video_file(metadata)\n''',
+          )
+
+          replace_once(
+              "tests/test_media_activity.py",
+              '''    _metadata_indicates_video_file,\n    _metadata_indicates_watchable_video,\n''',
+              '''    _metadata_indicates_brainfm,\n    _metadata_indicates_video_file,\n    _metadata_indicates_watchable_video,\n''',
+          )
+
+          anchor = '''    def test_focused_youtube_allows_chromium_without_url_metadata(self) -> None:\n'''
+          new_tests = '''    def test_focused_brainfm_is_not_watchable_browser_media(self) -> None:\n        backend = self._backend(\n            {\n                "org.mpris.MediaPlayer2.chromium.instance123": {\n                    "PlaybackStatus": "Playing",\n                    "Metadata": {\n                        "xesam:url": "https://www.brain.fm/player",\n                        "xesam:title": "Brain.fm",\n                    },\n                }\n            }\n        )\n        backend._focused_browser = True\n        self.assertFalse(backend.sample_youtube_playing())\n\n    def test_brainfm_title_is_recognized_without_url(self) -> None:\n        self.assertTrue(_metadata_indicates_brainfm({"xesam:title": "Brain.fm"}))\n\n\n'''
+          p = Path("tests/test_media_activity.py")
+          text = p.read_text()
+          if anchor not in text:
+              raise SystemExit("test insertion anchor not found")
+          p.write_text(text.replace(anchor, new_tests + anchor, 1))
+          PY
+
+      - name: Run media and music regression tests
+        run: python -m pytest -q tests/test_media_activity.py tests/test_music_activity.py
+
+      - name: Remove temporary workflow and commit fix
+        shell: bash
+        run: |
+          rm .github/workflows/temp-brainfm-media-fallback-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: keep Brain.fm out of video fallback"
+          git push origin HEAD:feat/vscode-presence-category
