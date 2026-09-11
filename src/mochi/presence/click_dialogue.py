@@ -13,6 +13,7 @@ from .clicks import ClickBurstDetector
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
 from .fedora_mode import FedoraModeMixin
+from .idle_look import IdleLookMixin
 from .integration import (
     PresenceBuddy as BasePresenceBuddy,
     PresenceX11Buddy as BasePresenceX11Buddy,
@@ -184,6 +185,7 @@ class ClickDialogueMixin:
 
 class PresenceBuddy(
     ClickDialogueMixin,
+    IdleLookMixin,
     QuickStartMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
@@ -196,6 +198,7 @@ class PresenceBuddy(
 
 class PresenceX11Buddy(
     ClickDialogueMixin,
+    IdleLookMixin,
     QuickStartMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,

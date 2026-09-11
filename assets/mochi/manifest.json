@@ -43,6 +43,23 @@
       "fps": 1.5,
       "loop": true
     },
+    "look": {
+      "frames": [
+        "look/look_01.png",
+        "look/look_02.png",
+        "look/look_03.png",
+        "look/look_04.png",
+        "look/look_05.png",
+        "look/look_06.png",
+        "look/look_07.png",
+        "look/look_08.png",
+        "look/look_09.png",
+        "look/look_10.png"
+      ],
+      "frame_count": 10,
+      "fps": 8.333333333333334,
+      "loop": false
+    },
     "blink": {
       "frames": [
         "blink/blink_01.png",
