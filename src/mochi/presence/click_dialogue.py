@@ -28,6 +28,11 @@ CLICK_BURST_PHRASES = (
     "tiny creature here!",
 )
 
+# Secret Fedora sequence: one semitone per click, then a two-semitone final jump.
+FEDORA_CLICK_PITCH_RATIOS = tuple(
+    2 ** (semitones / 12) for semitones in (0, 1, 2, 3, 4, 6)
+)
+
 
 class ClickDialogueMixin:
     """Add immediate click audio and a playful three-click response."""
