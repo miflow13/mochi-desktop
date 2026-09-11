@@ -12,6 +12,13 @@ license = { text = "MIT" }
 authors = [{ name = "Mochi contributors" }]
 dependencies = []
 
+[project.optional-dependencies]
+dev = [
+    "build>=1.2",
+    "Pillow>=10",
+    "pytest>=8",
+]
+
 [project.scripts]
 mochi = "mochi.main:main"
 
