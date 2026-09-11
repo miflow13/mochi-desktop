@@ -373,6 +373,7 @@ def _metadata_indicates_music(
         if (
             "youtube music" in lowered
             or "brain.fm" in lowered
+            or "pandora" in lowered
             or _looks_like_audio_file(value)
         ):
             return True

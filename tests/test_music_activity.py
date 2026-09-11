@@ -139,6 +139,18 @@ class MprisMusicBackendTests(unittest.TestCase):
         })
         self.assertTrue(backend.sample_music_playing())
 
+    def test_pandora_title_is_music_when_browser_omits_url(self):
+        backend = self._backend({
+            "org.mpris.MediaPlayer2.chromium.instance123": {
+                "PlaybackStatus": "Playing",
+                "Metadata": {
+                    "xesam:title": "Song title - Artist name - Pandora",
+                    "xesam:url": "",
+                },
+            }
+        })
+        self.assertTrue(backend.sample_music_playing())
+
     def test_local_audio_file_is_music(self):
         self.assertTrue(_metadata_indicates_music({
             "xesam:url": "file:///home/user/Music/song.flac"
