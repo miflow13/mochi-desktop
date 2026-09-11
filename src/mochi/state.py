@@ -24,6 +24,7 @@ class MochiState(Enum):
     PICKUP = auto()
     DRAGGED = auto()
     DROPPING = auto()
+    FEDORA = auto()
 
 
 class StateMachine:

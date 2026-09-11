@@ -18,6 +18,7 @@ class AnimationMetadata:
     frame_paths: tuple[str, ...]
     fps: float
     looping: bool
+    source_cell_size: tuple[int, int]
 
 
 class AnimationAssetSet:
@@ -61,10 +62,26 @@ class AnimationAssetSet:
             path = self._safe_frame_path(relative_path)
             surface = cairo.ImageSurface.create_from_png(str(path))
             actual_size = (surface.get_width(), surface.get_height())
-            if actual_size != self.cell_size:
+            if actual_size != metadata.source_cell_size:
                 raise ValueError(
-                    f"Expected {self.cell_size} frame {relative_path}, got {actual_size}"
+                    f"Expected {metadata.source_cell_size} frame {relative_path}, "
+                    f"got {actual_size}"
                 )
+            if actual_size != self.cell_size:
+                source = surface
+                surface = cairo.ImageSurface(
+                    cairo.FORMAT_ARGB32,
+                    self.cell_size[0],
+                    self.cell_size[1],
+                )
+                context = cairo.Context(surface)
+                context.scale(
+                    self.cell_size[0] / actual_size[0],
+                    self.cell_size[1] / actual_size[1],
+                )
+                context.set_source_surface(source, 0, 0)
+                context.get_source().set_filter(cairo.FILTER_NEAREST)
+                context.paint()
             self.surfaces[relative_path] = surface
         return {
             path: self.surfaces[path]
@@ -94,11 +111,26 @@ class AnimationAssetSet:
                 raise ValueError(f"Animation {name} has an invalid FPS")
             if not isinstance(looping, bool):
                 raise ValueError(f"Animation {name} has an invalid loop value")
+            raw_source_cell_size = raw_metadata.get(
+                "source_cell_size", list(self.cell_size)
+            )
+            if (
+                not isinstance(raw_source_cell_size, list)
+                or len(raw_source_cell_size) != 2
+                or not all(
+                    isinstance(value, int) and value > 0
+                    for value in raw_source_cell_size
+                )
+            ):
+                raise ValueError(
+                    f"Animation {name} has an invalid source cell size"
+                )
             animations[name] = AnimationMetadata(
                 name=name,
                 frame_paths=tuple(frames),
                 fps=float(fps),
                 looping=looping,
+                source_cell_size=tuple(raw_source_cell_size),
             )
         return animations
 

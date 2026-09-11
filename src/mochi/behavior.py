@@ -58,6 +58,14 @@ def can_transition(current: MochiState, requested: MochiState) -> bool:
         return current is not MochiState.SLEEPING
     if requested is MochiState.DRAGGED:
         return True
+    if requested is MochiState.FEDORA:
+        return current not in (
+            MochiState.SLEEPING,
+            MochiState.WAKING,
+            MochiState.PICKUP,
+            MochiState.DRAGGED,
+            MochiState.DROPPING,
+        )
     if current is MochiState.WAKING:
         return False
     if requested is MochiState.WAKING:
