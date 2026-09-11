@@ -362,10 +362,11 @@ class PresenceEngine:
     def _select_unsolicited_category(self, context: AmbientContext) -> str | None:
         weights = dict(self.tuning.category_weights)
         if context.current_app_category == "vscode":
-            # VS Code is Mochi's strongest coding context. Keep the normal
-            # speech cadence, but make developer-flavored lines about 3x more
-            # likely than in a generic editor. A configured zero stays zero.
-            weights["developer"] = weights.get("developer", 0.0) * 3.0
+            # Keep VS Code's total coding-flavored weight at roughly 3x a
+            # generic editor, but reserve two thirds of that weight for lines
+            # that explicitly belong to Mochi's VS Code coworking context.
+            developer_weight = weights.get("developer", 0.0)
+            weights["vscode"] = developer_weight * 2.0
         elif context.current_app_category not in ("editor", "terminal"):
             weights.pop("developer", None)
         if context.current_app_category != "pixel_art":
