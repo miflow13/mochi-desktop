@@ -222,6 +222,7 @@ PHRASES: dict[str, tuple[str, ...]] = {
         'version numbers are just birthdays',
     ),
     "vscode": (
+        'any blockers?',
         'coding time 🌱',
         'ohhh, code',
         'what are we making?',
@@ -526,6 +527,8 @@ PHRASES: dict[str, tuple[str, ...]] = {
         'very clicky today',
         'keyboard busy :)',
         'brain to keyboard pipeline operational',
+        'wow thats like 90 WPM',
+        'go go go!',
     ),
     "media": (
         "oh we're watching something?",
@@ -533,6 +536,14 @@ PHRASES: dict[str, tuple[str, ...]] = {
         'entertainment acquired',
         "i'll be quiet",
         'movie time?',
+        'music time?',
+        'deeply considering the soundtrack',
+        'humming along',
+        'tiny concert',
+        'the pixels are dancing',
+        'the pixels are grooving',
+        'the pixels are vibing',
+        'the pixels are jamming',
     ),
     "network": (
         'internet disappeared...',
@@ -555,6 +566,9 @@ PHRASES: dict[str, tuple[str, ...]] = {
         'there you are',
         'hey again :)',
         'oh, hi',
+        'there you are!',
+        'i missed u',
+        'i was so bored while you were gone',
     ),
 }
 
