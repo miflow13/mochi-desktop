@@ -16,6 +16,7 @@ from .integration import (
     PresenceX11Buddy as BasePresenceX11Buddy,
 )
 from .music_dance import MusicDanceMixin
+from .terminal_cowork import TerminalCoworkMixin
 
 
 CLICK_BURST_PHRASES = (
@@ -163,17 +164,19 @@ class ClickDialogueMixin:
 
 class PresenceBuddy(
     ClickDialogueMixin,
+    TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
     BasePresenceBuddy,
 ):
-    """Layer-shell buddy with Mochi Sense, music dance, edge roam, and dialogue."""
+    """Layer-shell buddy with terminal coworking, Mochi Sense, music, and dialogue."""
 
 
 class PresenceX11Buddy(
     ClickDialogueMixin,
+    TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
     BasePresenceX11Buddy,
 ):
-    """X11 buddy with Mochi Sense, music dance, edge roam, and dialogue."""
+    """X11 buddy with terminal coworking, Mochi Sense, music, and dialogue."""

@@ -44,6 +44,7 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 
 - `computer` — computer-use emote source sequence.
 - `typing_intro`, `typing_loop`, `typing_outro` — sustained typing state.
+- `terminal_loop` — focused-terminal coworking loop; intro/outro slots intentionally reserved.
 - `watch` — media/watch-along state.
 - `searching` — file/search activity state.
 - `sway_idle` — drag/held idle motion.
