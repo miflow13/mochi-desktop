@@ -25,6 +25,7 @@ class ClickBurstDetector:
         self.window_seconds = window_seconds
         self._clock = clock
         self._clicks: deque[float] = deque(maxlen=required_clicks)
+        self.last_position = 0
 
     def record(self, *, now: float | None = None) -> bool:
         timestamp = self._clock() if now is None else now
@@ -32,6 +33,7 @@ class ClickBurstDetector:
         while self._clicks and self._clicks[0] < cutoff:
             self._clicks.popleft()
         self._clicks.append(timestamp)
+        self.last_position = len(self._clicks)
         if len(self._clicks) < self.required_clicks:
             return False
         self._clicks.clear()
@@ -39,3 +41,4 @@ class ClickBurstDetector:
 
     def reset(self) -> None:
         self._clicks.clear()
+        self.last_position = 0

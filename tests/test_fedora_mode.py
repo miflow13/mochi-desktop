@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from mochi.presence.clicks import ClickBurstDetector
+from mochi.presence.click_dialogue import FEDORA_CLICK_PITCH_RATIOS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,19 @@ def test_fedora_secret_requires_six_rapid_clicks() -> None:
     assert detector.record(now=2.0) is True
 
 
+def test_fedora_click_positions_climb_to_six_then_reset() -> None:
+    detector = ClickBurstDetector(required_clicks=6, window_seconds=2.4)
+
+    positions = []
+    for timestamp in (1.0, 1.2, 1.4, 1.6, 1.8, 2.0):
+        detector.record(now=timestamp)
+        positions.append(detector.last_position)
+
+    assert positions == [1, 2, 3, 4, 5, 6]
+    assert detector.record(now=5.0) is False
+    assert detector.last_position == 1
+
+
 def test_fedora_secret_resets_when_clicks_are_not_rapid() -> None:
     detector = ClickBurstDetector(required_clicks=6, window_seconds=2.4)
 
@@ -26,6 +40,17 @@ def test_fedora_secret_resets_when_clicks_are_not_rapid() -> None:
         assert detector.record(now=timestamp) is False
 
     assert detector.record(now=4.0) is False
+
+
+def test_fedora_click_pitch_ramp_ends_highest() -> None:
+    assert len(FEDORA_CLICK_PITCH_RATIOS) == 6
+    assert FEDORA_CLICK_PITCH_RATIOS[0] == 1.0
+    assert all(
+        current < following
+        for current, following in zip(
+            FEDORA_CLICK_PITCH_RATIOS, FEDORA_CLICK_PITCH_RATIOS[1:]
+        )
+    )
 
 
 def test_fedora_manifest_preserves_handoff_timing_and_sequence() -> None:

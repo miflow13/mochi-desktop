@@ -68,11 +68,13 @@ class ClickDialogueMixin:
         burst_triggered = False
         fedora_triggered = False
         if not self._preview_mode:
-            # Play on the accepted pointer click itself, not later when a queued
-            # bounce/squish animation happens to begin.
-            self._sound.play(SoundEvent.CLICK)
             burst_triggered = self._click_burst_detector.record()
             fedora_triggered = self._fedora_click_detector.record()
+            # The hidden six-click Fedora gesture quietly announces itself: each
+            # accepted click climbs in pitch, with click six landing highest.
+            position = max(1, self._fedora_click_detector.last_position)
+            pitch_ratio = FEDORA_CLICK_PITCH_RATIOS[position - 1]
+            self._sound.play(SoundEvent.CLICK, pitch_ratio=pitch_ratio)
 
         if fedora_triggered:
             # Six rapid clicks are intentionally secret. They take precedence

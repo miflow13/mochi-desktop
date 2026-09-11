@@ -13,7 +13,18 @@ class FakeBackend:
         self.calls.append((path, volume))
 
 
-class FakePitchBackend(FakeBackend):\n    def __init__(self) -> None:\n        super().__init__()\n        self.pitched_calls: list[tuple[Path, float, float, int]] = []\n\n    def play_pitched(\n        self, path: Path, volume: float, pitch_ratio: float, source_rate: int\n    ) -> None:\n        self.pitched_calls.append((path, volume, pitch_ratio, source_rate))\n\n\nclass SoundManagerTests(unittest.TestCase):
+class FakePitchBackend(FakeBackend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.pitched_calls: list[tuple[Path, float, float, int]] = []
+
+    def play_pitched(
+        self, path: Path, volume: float, pitch_ratio: float, source_rate: int
+    ) -> None:
+        self.pitched_calls.append((path, volume, pitch_ratio, source_rate))
+
+
+class SoundManagerTests(unittest.TestCase):
     def test_missing_placeholder_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             manager = SoundManager(asset_root=Path(directory), backend=FakeBackend())
@@ -66,6 +77,22 @@ class FakePitchBackend(FakeBackend):\n    def __init__(self) -> None:\n        s
             self.assertTrue(manager.play(SoundEvent.MENU_OPEN))
             self.assertEqual(backend.calls[0][0].name, "menu_open.ogg")
             self.assertAlmostEqual(backend.calls[0][1], 0.132)
+
+    def test_click_pitch_uses_optional_backend_pitch_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mochi_chirp_01.ogg").touch()
+            backend = FakePitchBackend()
+            manager = SoundManager(volume=0.6, asset_root=root, backend=backend)
+
+            self.assertTrue(manager.play(SoundEvent.CLICK, pitch_ratio=1.25))
+            self.assertEqual(len(backend.calls), 0)
+            self.assertEqual(len(backend.pitched_calls), 1)
+            path, volume, pitch_ratio, source_rate = backend.pitched_calls[0]
+            self.assertEqual(path.name, "mochi_chirp_01.ogg")
+            self.assertAlmostEqual(volume, 0.6)
+            self.assertAlmostEqual(pitch_ratio, 1.25)
+            self.assertEqual(source_rate, 32_000)
 
     def test_volume_is_clamped(self) -> None:
         manager = SoundManager(volume=9, backend=FakeBackend())
