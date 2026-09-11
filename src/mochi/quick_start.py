@@ -200,7 +200,7 @@ class QuickStartWindow:
         kicker.add_css_class("mochi-quick-start-kicker")
         hero.append(kicker)
 
-        title = Gtk.Label(label="Getting to know Mochi 🌱")
+        title = Gtk.Label(label="Getting to know Mochi")
         title.set_xalign(0)
         title.set_wrap(True)
         title.add_css_class("mochi-quick-start-title")
