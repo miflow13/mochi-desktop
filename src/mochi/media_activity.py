@@ -311,9 +311,6 @@ class MprisMediaBackend:
             if self._youtube_focused:
                 self._watching_via_youtube_focus = True
                 return True
-            if self._focused_browser:
-                self._watching_via_browser_focus = True
-                return True
             return False
 
         # Non-browser players that explicitly identify YouTube can use metadata.
@@ -326,14 +323,10 @@ class MprisMediaBackend:
             self._watching_via_youtube_focus = True
             return True
 
-        # Chromium on Fedora commonly exposes exactly what playerctl reports:
-        # a browser MPRIS player in Playing state, a media title, and no URL or
-        # site branding. If that browser is also the coarse focused-app category,
-        # treat it as focused browser media. No title, URL, or page content is
-        # retained or transmitted to make this decision.
-        if self._focused_browser and is_browser:
-            self._watching_via_browser_focus = True
-            return True
+        # Do not infer watchable video from browser focus alone. The Shell
+        # helper already provides a dedicated privacy-reduced YouTube focus
+        # signal, and explicit video metadata covers local/direct video files.
+        # This avoids turning ordinary browser audio into WATCHING.
 
         return False
 

@@ -121,6 +121,31 @@ class MprisMediaBackendTests(unittest.TestCase):
             }
         )
         self.assertFalse(backend.sample_youtube_playing())
+    def test_focused_generic_browser_audio_is_not_watchable(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:title": "Background audio"},
+                }
+            }
+        )
+        backend._focused_browser = True
+        self.assertFalse(backend.sample_youtube_playing())
+
+    def test_browser_focus_alone_does_not_activate_background_youtube(self) -> None:
+        backend = self._backend(
+            {
+                "org.mpris.MediaPlayer2.chromium.instance123": {
+                    "PlaybackStatus": "Playing",
+                    "Metadata": {"xesam:url": "https://www.youtube.com/watch?v=abc"},
+                }
+            }
+        )
+        backend._focused_browser = True
+        self.assertFalse(backend.sample_youtube_playing())
+
+
     def test_focused_brainfm_is_not_watchable_browser_media(self) -> None:
         backend = self._backend(
             {
