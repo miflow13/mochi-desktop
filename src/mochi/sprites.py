@@ -49,7 +49,7 @@ ANIMATIONS["idle"] = replace(
     frame_duration_ms=250,
 )
 blink_frames = ANIMATIONS["blink"].frames
-blink_durations = (60, 65, 80, 100, 80, 65, 60)
+blink_durations = (50, 55, 65, 85, 65, 55, 50)
 ANIMATIONS["blink"] = replace(
     ANIMATIONS["blink"],
     frames=tuple(
