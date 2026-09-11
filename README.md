@@ -5,7 +5,7 @@
 
 ### A tiny Deskling companion for Linux
 
-<<img width="2370" height="1782" alt="mochi-article-banner-upscaled" src="https://github.com/user-attachments/assets/5fe458e3-22fe-4575-92ee-6b2fdc53f39e" />
+<img width="2370" height="1782" alt="mochi-article-banner-upscaled" src="https://github.com/user-attachments/assets/5fe458e3-22fe-4575-92ee-6b2fdc53f39e" />
 
 **A handcrafted pixel-art companion who wanders, reacts, chats, sleeps, and quietly lives on your desktop.**
 
@@ -28,6 +28,42 @@ Mochi is currently available as an **early public alpha**. Fedora + GNOME on Way
 </td>
 </tr>
 </table>
+
+### ⌨️ Types when you type
+
+Mochi quietly joins in while you’re typing.
+
+<p align="center">
+  <img
+    width="820"
+    alt="Mochi typing alongside the user"
+    src="https://github.com/user-attachments/assets/785ff1f5-d154-454a-896b-fec6e3664a40"
+  />
+</p>
+
+<p align="center">
+  <sub>Just a little typing buddy. 🌱</sub>
+</p>
+
+### 💬 Little observations
+
+Mochi pays attention to what’s happening around your desktop and occasionally shares a small thought of its own.
+
+<p align="center">
+  <img
+    width="820"
+    alt="Mochi reacting to what is on screen"
+    src="https://github.com/user-attachments/assets/d830ab6f-be30-47ba-86ae-63d46bd0c23c"
+
+  />
+</p>
+
+<p align="center">
+  <sub>Little observations, quiet company. 🌱</sub>
+</p>
+
+
+
 
 ---
 
