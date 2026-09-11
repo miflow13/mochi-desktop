@@ -99,6 +99,20 @@ class ConfigStore:
         self._save(data)
         self._logger.debug("Stay put: %s", bool(enabled))
 
+    def load_edge_roam(self) -> bool:
+        """Return whether autonomous wandering should stay on screen edges."""
+        try:
+            edge_roam = self._load()["edge_roam"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return edge_roam if isinstance(edge_roam, bool) else False
+
+    def save_edge_roam(self, enabled: bool) -> None:
+        data = self._load_or_empty()
+        data["edge_roam"] = bool(enabled)
+        self._save(data)
+        self._logger.debug("Edge roam: %s", bool(enabled))
+
     def reset_position(self) -> None:
         try:
             data = self._load()
