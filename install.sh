@@ -25,6 +25,24 @@ warn() {
     printf '\n⚠ %s\n' "$1" >&2
 }
 
+install_launcher() {
+    local destination="$1"
+    local target="$2"
+    local temporary
+
+    # Redirection follows an existing symlink. A launcher left by an older
+    # install can therefore point into a removed virtual environment and make
+    # `cat > ~/.local/bin/mochi` fail with "No such file or directory".
+    # Write beside it, then rename over any file or dangling symlink.
+    temporary="$(mktemp "$BIN_DIR/.mochi-launcher.XXXXXX")"
+    cat > "$temporary" <<EOF
+#!/usr/bin/env bash
+exec "$target" "\$@"
+EOF
+    chmod 0755 "$temporary"
+    mv -f "$temporary" "$destination"
+}
+
 if [[ ! -f "$ROOT/pyproject.toml" || ! -f "$DESKTOP_TEMPLATE" ]]; then
     echo "Run install.sh from a complete Mochi repository checkout." >&2
     exit 1
@@ -84,18 +102,10 @@ rm -rf "$VENV"
 python3 -m venv --system-site-packages "$VENV"
 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"
 
-cat > "$LAUNCHER" <<EOF
-#!/usr/bin/env bash
-exec "$VENV/bin/mochi" "\$@"
-EOF
-chmod 0755 "$LAUNCHER"
+install_launcher "$LAUNCHER" "$VENV/bin/mochi"
 
 install -m 0755 "$ROOT/uninstall.sh" "$INSTALLED_UNINSTALLER"
-cat > "$UNINSTALL_LAUNCHER" <<EOF
-#!/usr/bin/env bash
-exec "$INSTALLED_UNINSTALLER" "\$@"
-EOF
-chmod 0755 "$UNINSTALL_LAUNCHER"
+install_launcher "$UNINSTALL_LAUNCHER" "$INSTALLED_UNINSTALLER"
 
 install -m 0644 "$ICON_SOURCE" "$ICON_FILE"
 sed "s|@MOCHI_EXEC@|$LAUNCHER|g" "$DESKTOP_TEMPLATE" > "$DESKTOP_FILE"
