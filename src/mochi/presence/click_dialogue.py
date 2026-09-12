@@ -108,7 +108,7 @@ class ClickDialogueMixin:
         self._last_click_burst_phrase = text
 
         # This is a direct user interaction, not unsolicited ambient speech.
-        # Replace any current bubble and do not spend Mochi Sense cooldown budget.
+        # Replace any current bubble and do not spend AmbiSense cooldown budget.
         self._dismiss_presence_bubble(user_initiated=False)
         shown = bubble.show(
             text,
@@ -193,7 +193,7 @@ class PresenceBuddy(
     EdgeRoamMixin,
     BasePresenceBuddy,
 ):
-    """Layer-shell buddy with terminal coworking, Mochi Sense, music, and dialogue."""
+    """Layer-shell buddy with terminal coworking, AmbiSense, music, and dialogue."""
 
 
 class PresenceX11Buddy(
@@ -206,4 +206,4 @@ class PresenceX11Buddy(
     EdgeRoamMixin,
     BasePresenceX11Buddy,
 ):
-    """X11 buddy with terminal coworking, Mochi Sense, music, and dialogue."""
+    """X11 buddy with terminal coworking, AmbiSense, music, and dialogue."""
