@@ -1,4 +1,4 @@
-"""Thin integration layer between Buddy and Mochi Sense ambient awareness."""
+"""Thin integration layer between Buddy and AmbiSense ambient awareness."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from .signals import AppCategorySignalAdapter, SystemSignalMonitor
 
 
 class PresenceBuddyMixin:
-    """Add Mochi Sense without changing Buddy's proven interaction code."""
+    """Add AmbiSense without changing Buddy's proven interaction code."""
 
     PRESENCE_EVALUATION_SECONDS = 5
     STARTUP_GREETING_DELAY_MS = 1_100
@@ -27,7 +27,7 @@ class PresenceBuddyMixin:
 
     def __init__(self, *args, **kwargs) -> None:
         self._ambient_presence_engine = PresenceEngine()
-        # Mochi Sense is lively by default. Extra-chatty remains an optional
+        # AmbiSense is lively by default. Extra-chatty remains an optional
         # developer stress-test profile rather than defining normal behavior.
         self._presence_chatty_test_mode = False
         self._presence_chatty_switch: Gtk.Switch | None = None
@@ -85,7 +85,7 @@ class PresenceBuddyMixin:
 
     @property
     def presence_engine(self) -> PresenceEngine:
-        """Developer/test access to the Mochi Sense decision engine."""
+        """Developer/test access to the AmbiSense decision engine."""
         return self._ambient_presence_engine
 
     def _build_context_menu(self):
@@ -166,9 +166,9 @@ class PresenceBuddyMixin:
             self._schedule_idle_action()
 
     def _build_developer_menu(self):
-        """Extend Mochi Lab with isolated Mochi Sense controls.
+        """Extend Mochi Lab with isolated AmbiSense controls.
 
-        Buddy still owns the developer surface and lifecycle. Mochi Sense appends
+        Buddy still owns the developer surface and lifecycle. AmbiSense appends
         its widgets without changing the user menu lifecycle, then promotes the
         Lab surface into a conventional resizable, scrollable GTK window.
         """
@@ -178,7 +178,7 @@ class PresenceBuddyMixin:
 
         card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        presence_label = Gtk.Label(label="Mochi Sense")
+        presence_label = Gtk.Label(label="AmbiSense")
         presence_label.set_xalign(0)
         presence_label.add_css_class("mochi-menu-section")
         card.append(presence_label)
@@ -207,7 +207,7 @@ class PresenceBuddyMixin:
         card.append(quiet_row)
         animated_rows.append(quiet_row)
 
-        # Extra-chatty is intentionally button-backed. The normal Mochi Sense
+        # Extra-chatty is intentionally button-backed. The normal AmbiSense
         # profile is already lively; this control exists only for stress testing.
         chatty_row, self._presence_chatty_switch = self._make_presence_chatty_row()
         card.append(chatty_row)
@@ -285,7 +285,7 @@ class PresenceBuddyMixin:
         button = Gtk.Button()
         button.add_css_class("mochi-menu-row")
         button.set_tooltip_text(
-            "Stress-test Mochi Sense with much faster ambient speech"
+            "Stress-test AmbiSense with much faster ambient speech"
         )
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -354,7 +354,7 @@ class PresenceBuddyMixin:
     def _apply_presence_chatty_test_mode(
         self, enabled: bool, *, clear_cooldowns: bool = True
     ) -> None:
-        """Swap between normal Mochi Sense and an aggressive stress-test profile."""
+        """Swap between normal AmbiSense and an aggressive stress-test profile."""
         self._presence_chatty_test_mode = bool(enabled)
         engine = self._ambient_presence_engine
         tuning = engine.tuning
@@ -405,7 +405,7 @@ class PresenceBuddyMixin:
         logger = getattr(self, "_logger", None)
         if logger is not None:
             logger.info(
-                "Mochi Sense extra-chatty mode %s",
+                "AmbiSense extra-chatty mode %s",
                 "enabled" if enabled else "disabled",
             )
 
@@ -745,8 +745,8 @@ class PresenceBuddyMixin:
 
 
 class PresenceBuddy(PresenceBuddyMixin, Buddy):
-    """Wayland/layer-shell Buddy with Mochi Sense."""
+    """Wayland/layer-shell Buddy with AmbiSense."""
 
 
 class PresenceX11Buddy(PresenceBuddyMixin, X11Buddy):
-    """X11/XWayland Buddy with Mochi Sense and unchanged drag behavior."""
+    """X11/XWayland Buddy with AmbiSense and unchanged drag behavior."""

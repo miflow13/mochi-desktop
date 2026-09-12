@@ -8,7 +8,7 @@
 
 [website](https://miflow13.github.io/mochi-desktop/) · [issues](https://github.com/miflow13/mochi-desktop/issues) · [animation guide](assets/mochi/README.md)
 
-Mochi is a lightweight Linux desktop companion designed to make the desktop feel a little more alive. He wanders, reacts to clicks and dragging, notices broad desktop activity through **Mochi Sense**, sleeps, chats, and mostly keeps to himself.
+Mochi is a lightweight Linux desktop companion designed to make the desktop feel a little more alive. He wanders, reacts to clicks and dragging, notices broad desktop activity through **AmbiSense**, sleeps, chats, and mostly keeps to himself.
 
 Mochi is currently an **early public alpha**. Fedora + GNOME on Wayland is the actively tested environment; XWayland is used where GNOME's native Wayland restrictions require it.
 
@@ -106,7 +106,7 @@ Working now:
 - click chirps + triple-click dialogue
 - sleep / wake behavior
 - typing + media companion states
-- Mochi Sense ambient dialogue
+- AmbiSense ambient dialogue
 - multi-monitor / XWayland reliability work
 
 Still growing:
@@ -115,13 +115,13 @@ Still growing:
 - animation-library polish
 - broader Linux compatibility
 - installation testing outside the dev machines
-- more Mochi Sense contexts
+- more AmbiSense contexts
 
 ---
 
-## Mochi Sense
+## AmbiSense
 
-**Mochi Sense** is Mochi's lightweight local awareness system. It turns privacy-reduced desktop signals into small behavior decisions: say something, react, perform an activity, or simply do nothing.
+**AmbiSense** is Mochi's lightweight local awareness system. It turns privacy-reduced desktop signals into small behavior decisions: say something, react, perform an activity, or simply do nothing.
 
 Depending on what is available on the system, Mochi can notice broad signals such as:
 
@@ -133,7 +133,7 @@ Depending on what is available on the system, Mochi can notice broad signals suc
 - network connection transitions
 - file-browsing activity
 
-Mochi Sense is a **local rule-based behavior engine**, not an LLM and not a cloud AI service.
+AmbiSense is a **local rule-based behavior engine**, not an LLM and not a cloud AI service.
 
 ### privacy
 
@@ -151,7 +151,7 @@ Application awareness is reduced to broad semantic categories before Mochi react
 - **Drag** — pick Mochi up and move him around
 - **Right-click** — size, audio, sleep/wake, **Stay put**, and Quit
 - **Stay put** — disables autonomous wandering without freezing other behavior
-- **Mochi Lab** — developer controls for animations and Mochi Sense tuning
+- **Mochi Lab** — developer controls for animations and AmbiSense tuning
 
 Nothing requires a response. You can ignore Mochi completely and let him do his little thing.
 
@@ -182,7 +182,7 @@ See [`assets/mochi/README.md`](assets/mochi/README.md) for frame, naming, loopin
 Mochi is also a hands-on Linux software-engineering project. Current work includes:
 
 - state-driven behavior for idle, movement, reactions, sleep, media, typing, and interaction transitions
-- privacy-first event and context handling through Mochi Sense
+- privacy-first event and context handling through AmbiSense
 - manifest-driven sprite assets with runtime inventory validation
 - per-frame animation timing with cached Cairo surfaces and nearest-neighbor rendering
 - persistent configuration for placement and preferences
@@ -204,7 +204,7 @@ The actively tested target is **Fedora Linux + GNOME + Wayland**. Other distribu
 | version | focus |
 | --- | --- |
 | **v0.1 — Exists** | core desktop buddy functionality |
-| **v0.2 — Feels alive** | animation polish, Mochi Sense, reactions, contextual behavior, reliability, public alpha |
+| **v0.2 — Feels alive** | animation polish, AmbiSense, reactions, contextual behavior, reliability, public alpha |
 | **v0.3 — Needs care** | lightweight care / progression without turning Mochi into a chore |
 | **v0.4 — Develops personality** | more behaviors, expressions, traits, and cosmetic personality |
 | **v0.5 — Lives on your desktop** | deeper Linux desktop interactions and broader environment support |

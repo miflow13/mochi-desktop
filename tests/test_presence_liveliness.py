@@ -15,7 +15,7 @@ class Clock:
         return self.value
 
 
-def test_default_presence_uses_lively_mochi_sense_profile():
+def test_default_presence_uses_lively_ambisense_profile():
     tuning = PresenceTuning()
     assert tuning.ambient_min_seconds == 20
     assert tuning.ambient_max_seconds == 60

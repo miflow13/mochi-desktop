@@ -29,7 +29,7 @@ QUICK_START_SECTIONS = (
     ),
     QuickStartSection(
         "Ambient Reactions",
-        "Mochi Sense uses broad, privacy-reduced activity signals rather than the "
+        "AmbiSense uses broad, privacy-reduced activity signals rather than the "
         "content of what you type. Depending on what your desktop exposes, Mochi "
         "may respond with animations, behavior changes, or an occasional phrase.",
         (
@@ -62,7 +62,7 @@ QUICK_START_SECTIONS = (
         "You’re in Control",
         "The right-click menu lets you sleep or wake Mochi, toggle Edge roam, use "
         "Stay put to stop autonomous wandering, and close Mochi. More granular "
-        "Mochi Sense controls for speech bubbles, ambient reactions, and quiet mode "
+        "AmbiSense controls for speech bubbles, ambient reactions, and quiet mode "
         "currently live in Mochi Lab, which is a developer/testing surface.",
     ),
     QuickStartSection(
