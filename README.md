@@ -52,13 +52,31 @@ If `~/.local/bin` is not on your PATH:
 ```bash
 ~/.local/bin/mochi
 ```
+## Why isn't Mochi typing when I type?
 
-### update
+Mochi's typing reactions depend on the GNOME Shell helper being enabled.
+
+If typing reactions are not working, try enabling the extension manually:
 
 ```bash
+gnome-extensions enable mochi-typing@miflow13
+```
+
+```
 git pull
 ./install.sh
 ```
+Then verify that it is active:
+
+`gnome-extensions info mochi-typing@miflow13 | grep State`
+
+You should see:
+
+`State: ACTIVE`
+
+> 💡 On a fresh GNOME Wayland install, you may need to log out and back in once before the extension can be enabled.
+
+---
 
 ### uninstall
 
