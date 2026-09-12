@@ -53,6 +53,18 @@ from mochi.windowing import WindowPlacement
 class Buddy(Gtk.DrawingArea):
     SIZE = 128
     TICK_MS = 16
+    CONTEXT_MENU_WIDTH = 244
+    CONTEXT_MENU_BASE_HEIGHT = 176
+    CONTEXT_MENU_UNKNOWN_ROW_HEIGHT = 44
+    CONTEXT_MENU_MIN_HEIGHTS = {
+        "sleep": 176,
+        "stay-put": 224,
+        "edge-roam": 268,
+        "quick-start": 312,
+    }
+    CONTEXT_MENU_BASE_SIZED_ROWS = frozenset(
+        ("header", "separator", "status", "sleep", "close")
+    )
     WALK_SPEED_PX_PER_SECOND = 72.0
     BLINK_INTERVAL_SECONDS = (4.0, 12.0)
     DOUBLE_BLINK_CHANCE = 0.075
@@ -216,13 +228,105 @@ class Buddy(Gtk.DrawingArea):
             self._schedule_blink()
             self._schedule_computer_idle_emote()
 
+    def _initialize_context_menu_layout(
+        self,
+        menu: MenuWindow,
+        content: Gtk.Box,
+    ) -> None:
+        """Create the single owner for user-menu ordering and layout metadata."""
+        self._context_menu_layout_window = menu
+        self._context_menu_content = content
+        self._context_menu_rows: dict[str, Gtk.Widget] = {}
+        self._context_menu_row_order: list[str] = []
+        self._context_menu_animated_row_ids: set[str] = set()
+        self._context_menu_animated_rows: tuple[Gtk.Widget, ...] = ()
+
+    def _register_context_menu_row(
+        self,
+        row_id: str,
+        widget: Gtk.Widget,
+        *,
+        after: str | None = None,
+        before: str | None = None,
+        animated: bool = True,
+    ) -> None:
+        """Register and place one user-menu row through the shared layout seam."""
+        if not row_id:
+            raise ValueError("Context-menu row ID must not be empty")
+        if row_id in self._context_menu_rows:
+            raise ValueError(f"Context-menu row already registered: {row_id!r}")
+        if after is not None and before is not None:
+            raise ValueError(
+                "Context-menu row cannot specify both 'after' and 'before'"
+            )
+
+        anchor_id = after if after is not None else before
+        if anchor_id is not None and anchor_id not in self._context_menu_rows:
+            raise KeyError(f"Unknown context-menu row: {anchor_id!r}")
+
+        if after is not None:
+            insert_at = self._context_menu_row_order.index(after) + 1
+        elif before is not None:
+            insert_at = self._context_menu_row_order.index(before)
+        else:
+            insert_at = len(self._context_menu_row_order)
+
+        if insert_at == len(self._context_menu_row_order):
+            self._context_menu_content.append(widget)
+        elif insert_at == 0:
+            self._context_menu_content.prepend(widget)
+        else:
+            previous_id = self._context_menu_row_order[insert_at - 1]
+            previous_widget = self._context_menu_rows[previous_id]
+            self._context_menu_content.insert_child_after(widget, previous_widget)
+
+        self._context_menu_rows[row_id] = widget
+        self._context_menu_row_order.insert(insert_at, row_id)
+        if animated:
+            self._context_menu_animated_row_ids.add(row_id)
+        self._recalculate_context_menu_layout()
+
+    def _get_context_menu_row(self, row_id: str) -> Gtk.Widget:
+        """Return a registered user-menu row by its stable layout ID."""
+        return self._context_menu_rows[row_id]
+
+    def _recalculate_context_menu_layout(self) -> None:
+        """Synchronize animation order and the menu's pre-allocation size."""
+        self._context_menu_animated_rows = tuple(
+            self._context_menu_rows[row_id]
+            for row_id in self._context_menu_row_order
+            if row_id in self._context_menu_animated_row_ids
+        )
+
+        preferred_height = max(
+            (
+                self.CONTEXT_MENU_MIN_HEIGHTS.get(
+                    row_id,
+                    self.CONTEXT_MENU_BASE_HEIGHT,
+                )
+                for row_id in self._context_menu_row_order
+            ),
+            default=self.CONTEXT_MENU_BASE_HEIGHT,
+        )
+        unknown_rows = set(self._context_menu_row_order).difference(
+            self.CONTEXT_MENU_BASE_SIZED_ROWS,
+            self.CONTEXT_MENU_MIN_HEIGHTS,
+        )
+        preferred_height += (
+            len(unknown_rows) * self.CONTEXT_MENU_UNKNOWN_ROW_HEIGHT
+        )
+        self._context_menu_layout_window.set_preferred_size(
+            self.CONTEXT_MENU_WIDTH,
+            preferred_height,
+        )
+
     def _build_context_menu(self) -> MenuWindow:
         """Build Mochi's intentionally tiny user-facing right-click menu."""
         popover = MenuWindow(
             owner=self._window,
             anchor_widget=self,
-            preferred_width=244,
-            preferred_height=176,
+            preferred_width=self.CONTEXT_MENU_WIDTH,
+            preferred_height=self.CONTEXT_MENU_BASE_HEIGHT,
             follow_owner=True,
             dismiss_on_focus_loss=True,
             logger=self._logger,
@@ -252,19 +356,18 @@ class Buddy(Gtk.DrawingArea):
         header_text.append(title)
         header_text.append(subtitle)
         header.append(header_text)
-        card.append(header)
+        self._initialize_context_menu_layout(popover, card)
+        self._register_context_menu_row("header", header, animated=False)
 
-        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-
-        animated_rows: list[Gtk.Widget] = []
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        self._register_context_menu_row("separator", separator, animated=False)
 
         self._sleep_button, self._sleep_label = self._make_menu_button(
             "Sleep",
             "weather-clear-night-symbolic",
             self._toggle_sleep,
         )
-        card.append(self._sleep_button)
-        animated_rows.append(self._sleep_button)
+        self._register_context_menu_row("sleep", self._sleep_button)
 
         close_button, _ = self._make_menu_button(
             "Close",
@@ -272,11 +375,8 @@ class Buddy(Gtk.DrawingArea):
             self._quit_from_context_menu,
         )
         close_button.add_css_class("mochi-menu-secondary")
-        card.append(close_button)
-        animated_rows.append(close_button)
+        self._register_context_menu_row("close", close_button)
 
-        self._context_menu_content = card
-        self._context_menu_animated_rows = tuple(animated_rows)
         popover.set_child(card)
         return popover
 

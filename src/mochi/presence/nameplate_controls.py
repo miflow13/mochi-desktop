@@ -87,7 +87,6 @@ class NameplateMixin:
         made earlier status/nameplate experiments interfere with right-click.
         """
         popover = super()._build_context_menu()
-        card = self._context_menu_content
 
         status_block = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         status_block.set_can_target(False)
@@ -105,15 +104,12 @@ class NameplateMixin:
         mood_row, self._context_mood_value = self._make_context_status_row("Mood")
         status_block.append(mood_row)
 
-        # Base Buddy's user menu is header -> separator -> actions. Insert the
-        # passive status block after that existing separator so no action row,
-        # focus behavior, or close callback needs to change.
-        header = card.get_first_child()
-        separator = header.get_next_sibling() if header is not None else None
-        if separator is None:
-            card.prepend(status_block)
-        else:
-            card.insert_child_after(status_block, separator)
+        self._register_context_menu_row(
+            "status",
+            status_block,
+            before="sleep",
+            animated=False,
+        )
 
         self._refresh_context_status()
         return popover
