@@ -1,7 +1,5 @@
-These are known failure modes to check whenever interaction, animation,
-input, or state-management code changes.
-
-## Input / Context Menu
+known failure modes
+## input / Context Menu
 
 - [ ] Context menu does not leave an invisible GTK input grab
 - [ ] Right-click works after Walk
