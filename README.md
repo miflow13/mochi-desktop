@@ -1,4 +1,6 @@
 # Mochi 🌱
+> **Known issue!!! — ambient awareness on fresh installs:
+On some Fedora GNOME/Wayland setups, Mochi may start before its GNOME helper is available. When this happens, typing/app awareness may not activate until Mochi is restarted. A lifecycle fix is in progress for v0.3.**
 
 *A tiny Deskling companion for Linux.*
 
