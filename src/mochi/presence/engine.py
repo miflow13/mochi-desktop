@@ -1,4 +1,4 @@
-"""Decision engine for Mochi Sense ambient awareness."""
+"""Decision engine for AmbiSense ambient awareness."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ class PresenceAction:
     display_seconds: float = 3.5
 
     def __post_init__(self) -> None:
-        # Normal ambient/contextual Mochi Sense speech gets the small fake
+        # Normal ambient/contextual AmbiSense speech gets the small fake
         # typing beat. Critical system reactions stay immediate. Startup,
         # direct click reactions, drag dialogue, and developer previews do not
         # use PresenceAction and therefore remain immediate automatically.
