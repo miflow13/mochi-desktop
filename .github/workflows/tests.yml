@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install test runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pytest \
+            python3-gi \
+            python3-cairo \
+            gir1.2-gtk-4.0 \
+            gsettings-desktop-schemas \
+            libx11-6 \
+            xvfb
+
+      - name: Run test suite
+        env:
+          PYTHONPATH: src
+        run: xvfb-run -a python3 -m pytest -q
