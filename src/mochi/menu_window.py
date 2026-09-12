@@ -117,6 +117,12 @@ class MenuWindow:
     def set_child(self, child: Gtk.Widget) -> None:
         self.window.set_child(child)
 
+    def set_preferred_size(self, width: int, height: int) -> None:
+        """Update the fallback size used before GTK allocation settles."""
+        self._preferred_width = width
+        self._preferred_height = height
+        self.window.set_default_size(width, height)
+
     def set_drag_handle(self, widget: Gtk.Widget) -> None:
         """Use the compositor/window manager for a smooth titlebar-style move."""
         self._drag_handle = widget

@@ -94,21 +94,11 @@ class PresenceBuddyMixin:
         self._stay_put = self._config.load_stay_put()
 
         stay_row, self._stay_put_switch = self._make_stay_put_row()
-        card = self._context_menu_content
-        card.insert_child_after(stay_row, self._sleep_button)
-
-        existing_rows = list(self._context_menu_animated_rows)
-        if existing_rows:
-            self._context_menu_animated_rows = (
-                existing_rows[0],
-                stay_row,
-                *existing_rows[1:],
-            )
-        else:
-            self._context_menu_animated_rows = (stay_row,)
-
-        popover._preferred_height = max(popover._preferred_height, 224)
-        popover.window.set_default_size(popover._preferred_width, popover._preferred_height)
+        self._register_context_menu_row(
+            "stay-put",
+            stay_row,
+            after="sleep",
+        )
         return popover
 
     def _make_stay_put_row(self) -> tuple[Gtk.Button, Gtk.Switch]:
