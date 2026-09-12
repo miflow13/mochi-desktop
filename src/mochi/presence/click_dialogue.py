@@ -19,6 +19,7 @@ from .integration import (
     PresenceX11Buddy as BasePresenceX11Buddy,
 )
 from .music_dance import MusicDanceMixin
+from .nameplate_controls import NameplateMixin
 from .terminal_cowork import TerminalCoworkMixin
 
 
@@ -191,6 +192,7 @@ class PresenceBuddy(
     TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
+    NameplateMixin,
     BasePresenceBuddy,
 ):
     """Layer-shell buddy with terminal coworking, Mochi Sense, music, and dialogue."""
@@ -204,6 +206,7 @@ class PresenceX11Buddy(
     TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
+    NameplateMixin,
     BasePresenceX11Buddy,
 ):
     """X11 buddy with terminal coworking, Mochi Sense, music, and dialogue."""

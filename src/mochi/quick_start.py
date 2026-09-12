@@ -200,7 +200,7 @@ class QuickStartWindow:
         kicker.add_css_class("mochi-quick-start-kicker")
         hero.append(kicker)
 
-        title = Gtk.Label(label="Getting to know Mochi 🌱")
+        title = Gtk.Label(label="Getting to know Mochi")
         title.set_xalign(0)
         title.set_wrap(True)
         title.add_css_class("mochi-quick-start-title")
@@ -320,18 +320,11 @@ class QuickStartMixin:
         popover = super()._build_context_menu()
 
         help_button = self._make_quick_start_menu_button()
-        card = self._context_menu_content
-        close_row = card.get_last_child()
-        before_close = close_row.get_prev_sibling() if close_row is not None else None
-        card.insert_child_after(help_button, before_close)
-
-        rows = list(self._context_menu_animated_rows)
-        insert_at = max(0, len(rows) - 1)
-        rows.insert(insert_at, help_button)
-        self._context_menu_animated_rows = tuple(rows)
-
-        popover._preferred_height = max(popover._preferred_height, 312)
-        popover.window.set_default_size(popover._preferred_width, popover._preferred_height)
+        self._register_context_menu_row(
+            "quick-start",
+            help_button,
+            before="close",
+        )
         return popover
 
     def _make_quick_start_menu_button(self) -> Gtk.Button:
