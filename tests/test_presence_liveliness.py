@@ -38,7 +38,7 @@ def test_large_phrase_bank_is_loaded_by_category():
         "ambient": 49,
         "encouragement": 41,
         "focus": 38,
-        "developer": 59,
+        "developer": 61,
         "body_care": 42,
         "rest": 31,
         "frustration": 32,
@@ -49,7 +49,7 @@ def test_large_phrase_bank_is_loaded_by_category():
     for category, expected in expected_counts.items():
         assert len(PHRASES[category]) == expected
         assert len(set(PHRASES[category])) == expected
-    assert sum(len(PHRASES[name]) for name in expected_counts) == 401
+    assert sum(len(PHRASES[name]) for name in expected_counts) == 403
 
 
 def test_context_only_lines_do_not_leak_into_random_ambient_pool():
