@@ -89,9 +89,9 @@ class SpriteDefinitionsTests(unittest.TestCase):
         blink = ANIMATIONS["blink"]
         self.assertEqual(
             tuple(frame.duration_ms for frame in blink.frames),
-            (90, 90, 120, 90),
+            (50, 55, 65, 85, 65, 55, 50),
         )
-        self.assertEqual(sum(frame.duration_ms or 0 for frame in blink.frames), 390)
+        self.assertEqual(sum(frame.duration_ms or 0 for frame in blink.frames), 425)
         self.assertFalse(blink.looping)
 
     def test_blink_starts_and_ends_on_the_exact_idle_endpoint(self) -> None:
@@ -102,7 +102,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
         idle = bytes(surfaces["idle/idle_01.png"].get_data())
 
         self.assertEqual(bytes(surfaces["blink/blink_01.png"].get_data()), idle)
-        self.assertEqual(bytes(surfaces["blink/blink_04.png"].get_data()), idle)
+        self.assertEqual(bytes(surfaces["blink/blink_07.png"].get_data()), idle)
 
     def test_drag_uses_a_subtle_manifest_dangling_loop(self) -> None:
         dragged = ANIMATIONS["dragged"]
