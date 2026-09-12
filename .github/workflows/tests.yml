@@ -32,4 +32,4 @@ jobs:
       - name: Run test suite
         env:
           PYTHONPATH: src
-        run: xvfb-run -a python3 -m pytest -vv
+        run: xvfb-run -a python3 -m pytest -q
