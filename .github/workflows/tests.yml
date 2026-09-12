@@ -25,6 +25,7 @@ jobs:
             python3-gi \
             python3-cairo \
             gir1.2-gtk-4.0 \
+            gsettings-desktop-schemas \
             libx11-6 \
             xvfb
 
