@@ -13,6 +13,7 @@ from .clicks import ClickBurstDetector
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
 from .fedora_mode import FedoraModeMixin
+from .helper_setup_reminder import GnomeHelperSetupReminderMixin
 from .idle_look import IdleLookMixin
 from .integration import (
     PresenceBuddy as BasePresenceBuddy,
@@ -193,6 +194,7 @@ class PresenceBuddy(
     MusicDanceMixin,
     EdgeRoamMixin,
     NameplateMixin,
+    GnomeHelperSetupReminderMixin,
     BasePresenceBuddy,
 ):
     """Layer-shell buddy with terminal coworking, Mochi Sense, music, and dialogue."""
@@ -207,6 +209,7 @@ class PresenceX11Buddy(
     MusicDanceMixin,
     EdgeRoamMixin,
     NameplateMixin,
+    GnomeHelperSetupReminderMixin,
     BasePresenceX11Buddy,
 ):
     """X11 buddy with terminal coworking, Mochi Sense, music, and dialogue."""
