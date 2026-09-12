@@ -42,7 +42,9 @@ if ! command -v gnome-extensions >/dev/null 2>&1; then
     exit 1
 fi
 
-if [[ ! -x "$ONE_SHOT_SOURCE" ]]; then
+# The source file does not need to carry an executable bit in the checkout.
+# install_one_time_enable() deliberately installs it as mode 0755.
+if [[ ! -f "$ONE_SHOT_SOURCE" ]]; then
     echo "Missing one-time GNOME helper setup script: $ONE_SHOT_SOURCE" >&2
     exit 1
 fi
