@@ -1,7 +1,9 @@
 # Mochi 🌱
-> **Known issue!!! — ambient awareness on fresh installs:
-On some Fedora GNOME/Wayland setups, Mochi may start before its GNOME helper is available. When this happens, typing/app awareness may not activate until Mochi is restarted. A lifecycle fix is in progress for v0.3.**
-
+>⚠️ **First install on GNOME Wayland**
+>
+> **Log out and back in once after installing Mochi.**
+>
+> This activates Mochi’s desktop-awareness helper for typing, app, file, and focused media reactions. Mochi will finish enabling it automatically after you sign back in.
 *A tiny Deskling companion for Linux.*
 
 [website](https://miflow13.github.io/mochi-desktop/) · [issues](https://github.com/miflow13/mochi-desktop/issues) · [animation guide](assets/mochi/README.md)
