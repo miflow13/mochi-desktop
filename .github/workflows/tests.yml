@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install test runtime
         run: |
@@ -31,4 +31,4 @@ jobs:
       - name: Run test suite
         env:
           PYTHONPATH: src
-        run: xvfb-run -a python3 -m pytest -x -vv
+        run: xvfb-run -a python3 -m pytest -vv
