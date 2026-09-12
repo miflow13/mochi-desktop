@@ -220,6 +220,74 @@ class TypingActivityMonitorTests(unittest.TestCase):
         self.assertEqual(preferred.start_calls, 1)
         self.assertEqual(fallback.start_calls, 1)
 
+    def test_helper_appearance_promotes_fallback_without_emitting_activity(self) -> None:
+        activity = []
+        stopped = []
+        preferred = _FakeBackend("shell", available=False)
+        fallback = _FakeBackend("text", available=True)
+        monitor = TypingActivityMonitor(
+            on_typing_activity=lambda: activity.append(True),
+            on_typing_stopped=lambda: stopped.append(True),
+            backends=[preferred, fallback],
+        )
+        monitor._glib = _FakeGLib()
+        self.assertTrue(monitor.start())
+        self.assertEqual(monitor.backend_name, "text")
+
+        preferred.available = True
+        self.assertTrue(monitor.on_gnome_helper_available())
+
+        self.assertEqual(monitor.backend_name, "shell")
+        self.assertEqual(fallback.stop_calls, 1)
+        self.assertEqual(activity, [])
+        self.assertEqual(stopped, [])
+
+    def test_helper_loss_restores_typing_fallback(self) -> None:
+        preferred = _FakeBackend("shell", available=True)
+        fallback = _FakeBackend("text", available=True)
+        monitor = TypingActivityMonitor(
+            on_typing_activity=lambda: None,
+            on_typing_stopped=lambda: None,
+            backends=[preferred, fallback],
+        )
+        monitor._glib = _FakeGLib()
+        self.assertTrue(monitor.start())
+
+        preferred.available = False
+        self.assertTrue(monitor.on_gnome_helper_unavailable())
+
+        self.assertEqual(monitor.backend_name, "text")
+        self.assertEqual(fallback.start_calls, 1)
+
+    def test_reconnecting_preserves_an_active_typing_session_and_timer(self) -> None:
+        events = []
+        preferred = _FakeBackend("shell", available=False)
+        fallback = _FakeBackend("text")
+        monitor = TypingActivityMonitor(
+            on_typing_activity=lambda: events.append("activity"),
+            on_typing_stopped=lambda: events.append("stopped"),
+            backends=[preferred, fallback],
+        )
+        glib = _FakeGLib()
+        monitor._glib = glib
+        monitor.start()
+        for now in (1.0, 1.1, 1.2, 1.3, 1.4):
+            fallback.emit(now)
+        timer = monitor._stop_source_id
+        preferred.available = True
+        monitor.on_gnome_helper_available()
+        monitor.on_gnome_helper_available()
+        self.assertTrue(monitor.active)
+        self.assertEqual(monitor._stop_source_id, timer)
+        self.assertEqual(preferred.start_calls, 2)  # Initial failure + promotion.
+        self.assertEqual(events, ["activity"])
+        preferred.available = False
+        monitor.on_gnome_helper_unavailable()
+        monitor.on_gnome_helper_unavailable()
+        glib.fire_latest_timer()
+        self.assertEqual(events, ["activity", "stopped"])
+        self.assertFalse(monitor.active)
+
     def test_stop_disconnects_backend_once(self) -> None:
         self.monitor.stop()
         self.monitor.stop()

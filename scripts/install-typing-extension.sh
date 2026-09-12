@@ -46,5 +46,6 @@ else
     echo "  gnome-extensions enable $UUID"
 fi
 
+echo "Mochi can launch now; ambient awareness connects when the helper is active."
 echo "Check state with:"
 echo "  gnome-extensions info $UUID"

@@ -302,13 +302,11 @@ class FileActivityMonitor:
         return tuple(names)
 
     def start(self) -> bool:
-        if self.available:
-            return True
-
-        self.file_context_available = self._file_context_backend.start(
-            self._on_file_browser_started,
-            self._on_file_browser_stopped,
-        )
+        if not self.file_context_available:
+            self.file_context_available = self._file_context_backend.start(
+                self._on_file_browser_started,
+                self._on_file_browser_stopped,
+            )
         if not self.file_context_available:
             self._logger.debug(
                 "File-browser awareness unavailable via %s: %s",
@@ -316,9 +314,10 @@ class FileActivityMonitor:
                 self._file_context_backend.last_error or "unknown error",
             )
 
-        self.downloads_available = self._downloads_backend.start(
-            self._on_download_activity,
-        )
+        if not self.downloads_available:
+            self.downloads_available = self._downloads_backend.start(
+                self._on_download_activity,
+            )
         if not self.downloads_available:
             self._logger.debug(
                 "Download awareness unavailable via %s: %s",
@@ -329,6 +328,8 @@ class FileActivityMonitor:
         self.available = self.file_context_available or self.downloads_available
         if not self.available:
             return False
+        if self._source_id is not None:
+            return True
 
         try:
             from gi.repository import GLib
@@ -351,6 +352,17 @@ class FileActivityMonitor:
             " + ".join(self.backend_names),
         )
         return True
+
+    def on_gnome_helper_available(self) -> bool:
+        """Retry file context even when Downloads already makes us available."""
+        return self.start()
+
+    def on_gnome_helper_unavailable(self) -> None:
+        if self.file_context_available:
+            self._file_context_backend.stop()
+        self.file_context_available = False
+        self.available = self.downloads_available
+        self._on_file_browser_stopped()
 
     def stop(self) -> None:
         if self._source_id is not None:

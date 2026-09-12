@@ -383,6 +383,12 @@ class AppCategorySignalAdapter:
         self.available = False
         self.category = "unknown"
 
+    def on_gnome_helper_unavailable(self) -> None:
+        previous = self.category
+        self.stop()
+        if previous != "unknown":
+            self._on_category_changed("unknown")
+
     def _on_category_signal(
         self,
         _connection,

@@ -134,4 +134,6 @@ printf '%s\n' \
     "Uninstall later with: $UNINSTALL_LAUNCHER" \
     "" \
     "If the GNOME helper reported that it could not enable yet, log out and" \
-    "back in once before testing typing/context awareness."
+    "back in once, then follow the helper's enable instructions above." \
+    "Mochi can launch now. Typing/context awareness connects automatically" \
+    "once the GNOME helper is active."

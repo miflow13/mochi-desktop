@@ -21,6 +21,7 @@ const YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME = 'YouTubeFocusedStopped';
 const APP_CATEGORY_SIGNAL_NAME = 'AppCategoryChanged';
 const DEVELOPER_MENU_SIGNAL_NAME = 'DeveloperMenuRequested';
 const DEVELOPER_MENU_KEYBINDING = 'developer-menu-shortcut';
+const SYNC_STATE_REQUESTED_SIGNAL_NAME = 'SyncStateRequested';
 
 // These are application identifiers only. Window titles, folder names, file
 // names, and paths are never inspected or transmitted to Mochi.
@@ -189,24 +190,25 @@ export default class MochiTypingActivityExtension extends Extension {
             },
         );
 
+        // Clients may start before or after the helper. A zero-payload request
+        // replays only existing semantic state, never typing/input history.
+        this._syncSubscriptionId = this._connection.signal_subscribe(
+            null,
+            INTERFACE_NAME,
+            SYNC_STATE_REQUESTED_SIGNAL_NAME,
+            OBJECT_PATH,
+            null,
+            Gio.DBusSignalFlags.NONE,
+            () => this._publishCurrentState(),
+        );
+
         this._nameOwnerId = Gio.bus_own_name_on_connection(
             this._connection,
             BUS_NAME,
             Gio.BusNameOwnerFlags.NONE,
             () => {
                 this._nameReady = true;
-                // If semantic state changed before D-Bus ownership completed,
-                // publish the current state once ownership is ready.
-                if (this._presenceIsIdle)
-                    this._emitSignal(USER_IDLE_SIGNAL_NAME);
-                if (this._fileBrowsingActive)
-                    this._emitSignal(FILE_BROWSING_STARTED_SIGNAL_NAME);
-                this._emitSignal(
-                    this._youtubeFocusedActive
-                        ? YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME
-                        : YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME,
-                );
-                this._emitAppCategory();
+                this._publishCurrentState();
             },
             () => {
                 this._nameReady = false;
@@ -227,6 +229,23 @@ export default class MochiTypingActivityExtension extends Extension {
         );
 
         this._armPresenceIdleWatch();
+    }
+
+    _publishCurrentState() {
+        this._emitSignal(
+            this._presenceIsIdle ? USER_IDLE_SIGNAL_NAME : USER_ACTIVE_SIGNAL_NAME,
+        );
+        this._emitSignal(
+            this._fileBrowsingActive
+                ? FILE_BROWSING_STARTED_SIGNAL_NAME
+                : FILE_BROWSING_STOPPED_SIGNAL_NAME,
+        );
+        this._emitSignal(
+            this._youtubeFocusedActive
+                ? YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME
+                : YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME,
+        );
+        this._emitAppCategory();
     }
 
     _emitSignal(signalName) {
@@ -510,6 +529,10 @@ export default class MochiTypingActivityExtension extends Extension {
     }
 
     disable() {
+        if (this._syncSubscriptionId) {
+            this._connection.signal_unsubscribe(this._syncSubscriptionId);
+            this._syncSubscriptionId = 0;
+        }
         Main.wm.removeKeybinding(DEVELOPER_MENU_KEYBINDING);
         this._settings = null;
 

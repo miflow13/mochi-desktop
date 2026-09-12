@@ -32,6 +32,18 @@ gnome-extensions info mochi-typing@miflow13
 
 The expected state is `ACTIVE`.
 
+Mochi can launch before the helper is active. It watches the helper's D-Bus name
+and reconnects automatically when the helper appears, including after disabling
+and re-enabling the extension. Downloads and the limited AT-SPI typing fallback
+remain independent of the helper.
+
+After attaching its subscriptions, Mochi sends a zero-payload
+`SyncStateRequested` signal. The helper replays current presence, file-browser,
+YouTube-focus, and app-category state through the existing signals. This never
+replays typing pulses or developer shortcuts. Both Mochi and the extension need
+this update for initial state synchronization; replacing extension files may
+still require the logout/login described above.
+
 ## Developer shortcut
 
 `Ctrl + Alt + Shift + M` opens Mochi's private developer-tuning popover. The shortcut is handled inside GNOME Shell and emits only a zero-payload `DeveloperMenuRequested` signal; no key identity is sent to Mochi.

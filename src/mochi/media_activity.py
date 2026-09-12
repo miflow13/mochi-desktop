@@ -173,6 +173,16 @@ class MprisMediaBackend:
         if changed and self._on_youtube_focus_changed is not None:
             self._on_youtube_focus_changed(True)
 
+    def on_gnome_helper_unavailable(self) -> None:
+        """Forget Shell focus while retaining MPRIS and its subscriptions."""
+        self._on_youtube_focused_stopped()
+        changed = self._focused_browser
+        self._focused_browser = False
+        if changed and self._on_browser_focus_changed is not None:
+            self._on_browser_focus_changed(False)
+        self._watching_via_youtube_focus = False
+        self._watching_via_browser_focus = False
+
     def _on_youtube_focused_stopped(self, *_ignored) -> None:
         changed = self._youtube_focused
         self._youtube_focused = False
@@ -424,6 +434,9 @@ class MediaActivityMonitor:
         self.available = False
         self.youtube_playing = False
         self._last_playing_at = None
+
+    def on_gnome_helper_unavailable(self) -> None:
+        self._backend.on_gnome_helper_unavailable()
 
     def _on_browser_focus_changed(self, active: bool) -> None:
         if not self.available:

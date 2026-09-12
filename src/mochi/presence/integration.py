@@ -8,6 +8,7 @@ import time
 from gi.repository import GLib, Gtk
 
 from mochi.buddy import Buddy
+from mochi.gnome_helper import GnomeHelperLifecycle
 from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState
 from mochi.x11_buddy import X11Buddy
@@ -38,6 +39,7 @@ class PresenceBuddyMixin:
         self._presence_bubble: SpeechBubble | None = None
         self._system_signal_monitor: SystemSignalMonitor | None = None
         self._app_category_monitor: AppCategorySignalAdapter | None = None
+        self._gnome_helper_lifecycle: GnomeHelperLifecycle | None = None
         self._presence_app_category = "unknown"
         self._presence_source_id: int | None = None
         self._presence_startup_source_id: int | None = None
@@ -82,6 +84,33 @@ class PresenceBuddyMixin:
             self.STARTUP_GREETING_DELAY_MS,
             self._show_startup_greeting,
         )
+        # Buddy's monitors and the app-category adapter must exist before Gio
+        # announces the initial owner and asks the helper to replay current state.
+        self._gnome_helper_lifecycle = GnomeHelperLifecycle(
+            on_available=self._on_gnome_helper_available,
+            on_unavailable=self._on_gnome_helper_unavailable,
+            logger=self._logger,
+        )
+        self._gnome_helper_lifecycle.start()
+
+    def _on_gnome_helper_available(self) -> None:
+        if self._presence_shutting_down:
+            return
+        self._typing_monitor.on_gnome_helper_available()
+        self._presence_monitor.start()
+        self._file_activity_monitor.on_gnome_helper_available()
+        self._app_category_monitor.start()
+        # Media focus and the developer shortcut already subscribe by bus name;
+        # they survive owner changes without replacing their subscriptions.
+
+    def _on_gnome_helper_unavailable(self) -> None:
+        if self._presence_shutting_down:
+            return
+        self._typing_monitor.on_gnome_helper_unavailable()
+        self._app_category_monitor.on_gnome_helper_unavailable()
+        self._media_monitor.on_gnome_helper_unavailable()
+        self._file_activity_monitor.on_gnome_helper_unavailable()
+        self._presence_monitor.on_gnome_helper_unavailable()
 
     @property
     def presence_engine(self) -> PresenceEngine:
@@ -720,6 +749,9 @@ class PresenceBuddyMixin:
         if self._presence_shutting_down:
             return
         self._presence_shutting_down = True
+        helper = getattr(self, "_gnome_helper_lifecycle", None)
+        if helper is not None:
+            helper.stop()
         source_id = self._presence_source_id
         self._presence_source_id = None
         if source_id is not None:
@@ -740,6 +772,16 @@ class PresenceBuddyMixin:
             self._system_signal_monitor.stop()
         if self._app_category_monitor is not None:
             self._app_category_monitor.stop()
+        for name in (
+            "_typing_monitor",
+            "_presence_monitor",
+            "_media_monitor",
+            "_file_activity_monitor",
+            "_developer_shortcut_monitor",
+        ):
+            monitor = getattr(self, name, None)
+            if monitor is not None:
+                monitor.stop()
         if self._presence_bubble is not None:
             self._presence_bubble.hide()
 

@@ -470,7 +470,10 @@ class TypingActivityMonitor:
                 return False
             self._glib = GLib
 
-        for backend in self._backends:
+        return self._start_backends(self._backends)
+
+    def _start_backends(self, backends: Iterable[TypingActivityBackend]) -> bool:
+        for backend in backends:
             self._logger.debug("Typing backend trying: %s", backend.name)
             try:
                 started = backend.start(self._record_anonymous_activity)
@@ -506,8 +509,28 @@ class TypingActivityMonitor:
             self._log_accessibility_coverage_hint()
             return True
 
-        self._log_unavailable_once()
+        if self._backend is None:
+            self._log_unavailable_once()
         return False
+
+    def on_gnome_helper_available(self) -> bool:
+        """Promote the preferred Shell backend without restarting a session."""
+        if self._backend is None:
+            return self.start()
+        if not self._backends or self._backend is self._backends[0]:
+            return self.available
+        fallback = self._backend
+        if self._start_backends(self._backends[:1]):
+            fallback.stop()
+        return self.available
+
+    def on_gnome_helper_unavailable(self) -> bool:
+        """Restore fallback coverage; the existing inactivity timer still ends typing."""
+        if self._backends and self._backend is self._backends[0]:
+            self._backend.stop()
+            self._backend = None
+            return self._start_backends(self._backends[1:])
+        return self.available
 
     def _log_accessibility_coverage_hint(self) -> None:
         """Warn when GNOME accessibility exposure is disabled; never change it."""

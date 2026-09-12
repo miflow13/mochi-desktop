@@ -13,6 +13,31 @@ class _Backend:
         pass
 
 
+class _ReconnectableBackend(_Backend):
+    def __init__(self, name: str, *, available: bool) -> None:
+        super().__init__(name)
+        self.available = available
+        self.start_calls = 0
+        self.stop_calls = 0
+        self.on_started = None
+        self.on_stopped = None
+
+    def start(self, on_started, on_stopped) -> bool:
+        self.start_calls += 1
+        if not self.available:
+            self.last_error = "unavailable"
+            return False
+        self.on_started = on_started
+        self.on_stopped = on_stopped
+        self.last_error = None
+        return True
+
+    def stop(self) -> None:
+        self.stop_calls += 1
+        self.on_started = None
+        self.on_stopped = None
+
+
 class FileActivityMonitorTests(unittest.TestCase):
     def _monitor(self, now):
         return FileActivityMonitor(
@@ -78,6 +103,36 @@ class FileActivityMonitorTests(unittest.TestCase):
 
         self.assertTrue(monitor.file_activity_active)
         monitor._on_file_activity_stopped.assert_not_called()
+
+    def test_file_context_reconnects_while_download_monitor_stays_running(self) -> None:
+        now = [10.0]
+        context = _ReconnectableBackend("file context", available=False)
+        monitor = FileActivityMonitor(
+            on_file_activity_started=Mock(),
+            on_file_activity_stopped=Mock(),
+            file_context_backend=context,
+            downloads_backend=_Backend("downloads"),
+            clock=lambda: now[0],
+        )
+        monitor.downloads_available = True
+        monitor.available = True
+        monitor._source_id = 42  # Existing Downloads expiry timer.
+
+        context.available = True
+        self.assertTrue(monitor.on_gnome_helper_available())
+        self.assertTrue(monitor.file_context_available)
+        self.assertEqual(monitor._source_id, 42)
+        context.on_started()
+        context.on_started()
+        monitor._on_file_activity_started.assert_called_once_with()
+
+        monitor.on_gnome_helper_unavailable()
+        self.assertFalse(monitor.file_context_available)
+        self.assertTrue(monitor.available)
+        monitor._on_file_activity_stopped.assert_called_once_with()
+
+        self.assertTrue(monitor.on_gnome_helper_available())
+        self.assertEqual(context.start_calls, 2)
 
 
 class DownloadsActivityPrivacyTests(unittest.TestCase):

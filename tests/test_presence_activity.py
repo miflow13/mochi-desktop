@@ -180,3 +180,20 @@ class PresenceMonitorTests(unittest.TestCase):
         monitor.stop()
         monitor.stop()
         self.assertEqual(backend.stop_calls, 1)
+
+    def test_replayed_presence_does_not_duplicate_events_or_wake_on_initial_active(self):
+        backend = _FakeBackend()
+        events = []
+        monitor = PresenceActivityMonitor(
+            on_user_idle=lambda: events.append("idle"),
+            on_user_active=lambda: events.append("active"),
+            backend=backend,
+        )
+        monitor.start()
+        backend.active()
+        self.assertEqual(events, [])
+        backend.idle()
+        backend.idle()
+        backend.active()
+        backend.active()
+        self.assertEqual(events, ["idle", "active"])

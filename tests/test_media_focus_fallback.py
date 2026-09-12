@@ -90,6 +90,29 @@ class MediaFocusFallbackTests(unittest.TestCase):
         self.assertIsNone(monitor._last_playing_at)
         stopped.assert_called_once_with()
 
+    def test_helper_loss_clears_focus_state_and_stops_focus_dependent_media(self) -> None:
+        stopped = Mock()
+        backend = MprisMediaBackend()
+        monitor = MediaActivityMonitor(
+            on_youtube_started=Mock(),
+            on_youtube_stopped=stopped,
+            backend=backend,
+        )
+        monitor.available = True
+        monitor.youtube_playing = True
+        monitor._last_playing_at = 10.0
+        backend._youtube_focused = True
+        backend._focused_browser = True
+        backend._watching_via_youtube_focus = True
+
+        backend.on_gnome_helper_unavailable()
+        backend.on_gnome_helper_unavailable()
+
+        self.assertFalse(backend._youtube_focused)
+        self.assertFalse(backend._focused_browser)
+        self.assertFalse(monitor.youtube_playing)
+        stopped.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

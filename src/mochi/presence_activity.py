@@ -166,6 +166,7 @@ class PresenceActivityMonitor:
         self._logger = logger or logging.getLogger(__name__)
         self._backend = backend or GnomeShellPresenceBackend()
         self.available = False
+        self._user_idle = False
 
     @property
     def backend_name(self) -> str | None:
@@ -176,8 +177,8 @@ class PresenceActivityMonitor:
             return True
 
         self.available = self._backend.start(
-            self._on_user_idle,
-            self._on_user_active,
+            self._idle,
+            self._active,
         )
         if self.available:
             self._logger.info(
@@ -191,6 +192,21 @@ class PresenceActivityMonitor:
                 self._backend.last_error or "unknown error",
             )
         return self.available
+
+    def _idle(self) -> None:
+        if not self._user_idle:
+            self._user_idle = True
+            self._on_user_idle()
+
+    def _active(self) -> None:
+        if self._user_idle:
+            self._user_idle = False
+            self._on_user_active()
+
+    def on_gnome_helper_unavailable(self) -> None:
+        self.stop()
+        # Return to the startup assumption when global idle information is lost.
+        self._active()
 
     def stop(self) -> None:
         if not self.available:
