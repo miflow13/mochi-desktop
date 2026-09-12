@@ -7,8 +7,8 @@ import logging
 class GnomeHelperLifecycle:
     """Reconnect dependents before requesting the helper's semantic snapshot.
 
-    Gio delivers owner changes on the GLib main loop. No polling, input data,
-    or application identities are needed to recover from a late Shell helper.
+    Gio delivers owner changes on the GLib main loop. Failed attachment retries
+    use one backoff timer; a successful attachment has no timer or polling.
     """
 
     BUS_NAME = "io.github.mochi_desktop.Mochi.TypingMonitor"
@@ -19,7 +19,7 @@ class GnomeHelperLifecycle:
     def __init__(
         self,
         *,
-        on_available: Callable[[], None],
+        on_available: Callable[[], bool],
         on_unavailable: Callable[[], None],
         logger: logging.Logger | None = None,
     ) -> None:
@@ -31,6 +31,8 @@ class GnomeHelperLifecycle:
         self._running = False
         self._owner: str | None = None
         self._owner_known = False
+        self._retry_source_id = None
+        self._retry_delay = 1
         self.last_error: str | None = None
 
     @property
@@ -42,6 +44,12 @@ class GnomeHelperLifecycle:
         from gi.repository import Gio
 
         return Gio
+
+    @staticmethod
+    def _load_glib():
+        from gi.repository import GLib
+
+        return GLib
 
     def start(self) -> bool:
         if self._running:
@@ -72,6 +80,7 @@ class GnomeHelperLifecycle:
 
     def stop(self) -> None:
         self._running = False
+        self._cancel_retry()
         if self._watch_id is not None:
             self._gio.bus_unwatch_name(self._watch_id)
         self._watch_id = None
@@ -81,27 +90,64 @@ class GnomeHelperLifecycle:
     def _appeared(self, connection, _name, owner) -> None:
         if not self._running or owner == self._owner:
             return
+        self._cancel_retry()
         if self._owner is not None:
             self._on_unavailable()
         self._owner = owner
         self._owner_known = True
-        self._on_available()
+        self._attempt_attachment(connection, owner)
+
+    def _attempt_attachment(self, connection, owner) -> None:
+        if not self._running or owner != self._owner:
+            return
         # Subscriptions are attached before the request. The helper replies
         # using existing signals; a snapshot never synthesizes a typing pulse.
         try:
-            connection.emit_signal(
+            if not self._on_available():
+                self._schedule_retry(connection, owner)
+                return
+            if not self._running or owner != self._owner:
+                return
+            sent = connection.emit_signal(
                 owner,
                 self.OBJECT_PATH,
                 self.INTERFACE_NAME,
                 self.SYNC_SIGNAL_NAME,
                 None,
             )
+            if sent is False:
+                raise RuntimeError("snapshot request was not sent")
+            self.last_error = None
         except Exception as exc:
-            self._logger.debug("GNOME helper state sync unavailable: %s", exc)
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            self._logger.debug("GNOME helper attachment/sync unavailable: %s", exc)
+            self._schedule_retry(connection, owner)
+
+    def _schedule_retry(self, connection, owner) -> None:
+        if (not self._running or owner != self._owner
+                or self._retry_source_id is not None):
+            return
+
+        def retry():
+            self._retry_source_id = None
+            self._attempt_attachment(connection, owner)
+            return False
+
+        self._retry_source_id = self._load_glib().timeout_add_seconds(
+            self._retry_delay, retry,
+        )
+        self._retry_delay = min(self._retry_delay * 2, 30)
+
+    def _cancel_retry(self) -> None:
+        if self._retry_source_id is not None:
+            self._load_glib().source_remove(self._retry_source_id)
+        self._retry_source_id = None
+        self._retry_delay = 1
 
     def _vanished(self, _connection, _name) -> None:
         if not self._running or (self._owner_known and self._owner is None):
             return
+        self._cancel_retry()
         self._owner = None
         self._owner_known = True
         self._on_unavailable()

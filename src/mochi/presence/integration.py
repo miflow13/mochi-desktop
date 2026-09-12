@@ -93,15 +93,20 @@ class PresenceBuddyMixin:
         )
         self._gnome_helper_lifecycle.start()
 
-    def _on_gnome_helper_available(self) -> None:
+    def _on_gnome_helper_available(self) -> bool:
         if self._presence_shutting_down:
-            return
-        self._typing_monitor.on_gnome_helper_available()
-        self._presence_monitor.start()
-        self._file_activity_monitor.on_gnome_helper_available()
-        self._app_category_monitor.start()
-        # Media focus and the developer shortcut already subscribe by bus name;
-        # they survive owner changes without replacing their subscriptions.
+            return False
+        # Evaluate every adapter before all(): a failed adapter must not prevent
+        # the others from attaching. Each start is idempotent on retry.
+        attached = (
+            self._typing_monitor.on_gnome_helper_available(),
+            self._presence_monitor.start(),
+            self._file_activity_monitor.on_gnome_helper_available(),
+            self._app_category_monitor.start(),
+            self._media_monitor.on_gnome_helper_available(),
+            self._developer_shortcut_monitor.start(),
+        )
+        return all(attached)
 
     def _on_gnome_helper_unavailable(self) -> None:
         if self._presence_shutting_down:

@@ -44,6 +44,12 @@ replays typing pulses or developer shortcuts. Both Mochi and the extension need
 this update for initial state synchronization; replacing extension files may
 still require the logout/login described above.
 
+If attachment fails while the helper remains active, Mochi retries with one
+timer at 1, 2, 4, 8, 16, then 30-second intervals. Ready adapters keep their
+subscriptions. The snapshot request is sent only after all adapters attach;
+successfully sending the request stops retries. Helper loss or shutdown cancels the
+timer. This retry handles failures, rather than polling for helper availability.
+
 ## Developer shortcut
 
 `Ctrl + Alt + Shift + M` opens Mochi's private developer-tuning popover. The shortcut is handled inside GNOME Shell and emits only a zero-payload `DeveloperMenuRequested` signal; no key identity is sent to Mochi.

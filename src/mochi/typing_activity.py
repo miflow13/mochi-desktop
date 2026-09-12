@@ -514,15 +514,19 @@ class TypingActivityMonitor:
         return False
 
     def on_gnome_helper_available(self) -> bool:
-        """Promote the preferred Shell backend without restarting a session."""
+        """Return Shell readiness, not fallback coverage; preserve the session."""
+        if not self._backends:
+            return False
+        preferred = self._backends[0]
         if self._backend is None:
-            return self.start()
-        if not self._backends or self._backend is self._backends[0]:
-            return self.available
+            self.start()
+            return self._backend is preferred
+        if self._backend is preferred:
+            return True
         fallback = self._backend
         if self._start_backends(self._backends[:1]):
             fallback.stop()
-        return self.available
+        return self._backend is preferred
 
     def on_gnome_helper_unavailable(self) -> bool:
         """Restore fallback coverage; the existing inactivity timer still ends typing."""

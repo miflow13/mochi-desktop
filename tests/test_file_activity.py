@@ -118,6 +118,9 @@ class FileActivityMonitorTests(unittest.TestCase):
         monitor.available = True
         monitor._source_id = 42  # Existing Downloads expiry timer.
 
+        self.assertFalse(monitor.on_gnome_helper_available())
+        self.assertTrue(monitor.available)
+
         context.available = True
         self.assertTrue(monitor.on_gnome_helper_available())
         self.assertTrue(monitor.file_context_available)
@@ -132,7 +135,7 @@ class FileActivityMonitorTests(unittest.TestCase):
         monitor._on_file_activity_stopped.assert_called_once_with()
 
         self.assertTrue(monitor.on_gnome_helper_available())
-        self.assertEqual(context.start_calls, 2)
+        self.assertEqual(context.start_calls, 3)
 
 
 class DownloadsActivityPrivacyTests(unittest.TestCase):

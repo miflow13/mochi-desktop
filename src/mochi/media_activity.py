@@ -117,55 +117,40 @@ class MprisMediaBackend:
             return False
         return True
 
-    def _subscribe_focus_signals(self) -> None:
+    def on_gnome_helper_available(self) -> bool:
+        return self._subscribe_focus_signals()
+
+    def _subscribe_focus_signals(self) -> bool:
         connection = self._connection
         if connection is None or not hasattr(connection, "signal_subscribe"):
-            return
+            return False
 
         try:
             Gio, _GLib = self._load_gio()
             flags = Gio.DBusSignalFlags.NONE
-            started_id = connection.signal_subscribe(
-                self.ACTIVITY_BUS_NAME,
-                self.ACTIVITY_INTERFACE_NAME,
-                self.YOUTUBE_FOCUSED_STARTED_SIGNAL,
-                self.ACTIVITY_OBJECT_PATH,
-                None,
-                flags,
-                self._on_youtube_focused_started,
-            )
-            stopped_id = connection.signal_subscribe(
-                self.ACTIVITY_BUS_NAME,
-                self.ACTIVITY_INTERFACE_NAME,
-                self.YOUTUBE_FOCUSED_STOPPED_SIGNAL,
-                self.ACTIVITY_OBJECT_PATH,
-                None,
-                flags,
-                self._on_youtube_focused_stopped,
-            )
-            category_id = connection.signal_subscribe(
-                self.ACTIVITY_BUS_NAME,
-                self.ACTIVITY_INTERFACE_NAME,
-                self.APP_CATEGORY_SIGNAL,
-                self.ACTIVITY_OBJECT_PATH,
-                None,
-                flags,
-                self._on_app_category_changed,
-            )
-            self._youtube_focus_started_subscription_id = (
-                int(started_id) if started_id else None
-            )
-            self._youtube_focus_stopped_subscription_id = (
-                int(stopped_id) if stopped_id else None
-            )
-            self._app_category_subscription_id = (
-                int(category_id) if category_id else None
-            )
-        except Exception:
-            # Metadata-only detection can still operate without the Shell helper.
-            self._youtube_focus_started_subscription_id = None
-            self._youtube_focus_stopped_subscription_id = None
-            self._app_category_subscription_id = None
+            for attribute, signal, callback in (
+                ("_youtube_focus_started_subscription_id",
+                 self.YOUTUBE_FOCUSED_STARTED_SIGNAL, self._on_youtube_focused_started),
+                ("_youtube_focus_stopped_subscription_id",
+                 self.YOUTUBE_FOCUSED_STOPPED_SIGNAL, self._on_youtube_focused_stopped),
+                ("_app_category_subscription_id",
+                 self.APP_CATEGORY_SIGNAL, self._on_app_category_changed),
+            ):
+                if getattr(self, attribute) is not None:
+                    continue
+                subscription_id = connection.signal_subscribe(
+                    self.ACTIVITY_BUS_NAME, self.ACTIVITY_INTERFACE_NAME, signal,
+                    self.ACTIVITY_OBJECT_PATH, None, flags, callback,
+                )
+                if not subscription_id:
+                    return False
+                # Retain each successful subscription immediately, including
+                # when a later subscription fails. Retry only the missing ones.
+                setattr(self, attribute, int(subscription_id))
+            return True
+        except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            return False
 
     def _on_youtube_focused_started(self, *_ignored) -> None:
         changed = not self._youtube_focused
@@ -434,6 +419,11 @@ class MediaActivityMonitor:
         self.available = False
         self.youtube_playing = False
         self._last_playing_at = None
+
+    def on_gnome_helper_available(self) -> bool:
+        if not self.available and not self.start():
+            return False
+        return self._backend.on_gnome_helper_available()
 
     def on_gnome_helper_unavailable(self) -> None:
         self._backend.on_gnome_helper_unavailable()

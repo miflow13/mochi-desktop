@@ -91,6 +91,7 @@ class GnomeShellPresenceBackend:
                 Gio.DBusSignalFlags.NONE,
                 self._on_idle_signal,
             )
+            self._idle_subscription_id = int(idle_id) if idle_id else None
             active_id = connection.signal_subscribe(
                 self.BUS_NAME,
                 self.INTERFACE_NAME,

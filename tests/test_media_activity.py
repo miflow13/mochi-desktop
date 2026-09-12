@@ -66,6 +66,26 @@ class _Connection:
 
 
 class MprisMediaBackendTests(unittest.TestCase):
+    def test_partial_focus_attachment_retries_only_missing_subscriptions(self):
+        backend = MprisMediaBackend()
+        connection = Mock()
+        connection.signal_subscribe.side_effect = [
+            11, RuntimeError("temporary failure"), 12, 13,
+        ]
+        backend._connection = connection
+        backend._load_gio = lambda: (
+            SimpleNamespace(DBusSignalFlags=SimpleNamespace(NONE=0)), None,
+        )
+        self.assertFalse(backend.on_gnome_helper_available())
+        self.assertIs(backend._connection, connection)
+        self.assertTrue(backend.on_gnome_helper_available())
+        self.assertTrue(backend.on_gnome_helper_available())
+        self.assertEqual(connection.signal_subscribe.call_count, 4)
+        backend.stop()
+        self.assertEqual(connection.signal_unsubscribe.call_count, 3)
+        for subscription_id in (11, 12, 13):
+            connection.signal_unsubscribe.assert_any_call(subscription_id)
+
     def _backend(self, players):
         connection = _Connection(players)
         _Gio.connection = connection

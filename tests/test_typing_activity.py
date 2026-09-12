@@ -259,6 +259,19 @@ class TypingActivityMonitorTests(unittest.TestCase):
         self.assertEqual(monitor.backend_name, "text")
         self.assertEqual(fallback.start_calls, 1)
 
+    def test_fallback_availability_does_not_report_shell_attachment_success(self):
+        preferred = _FakeBackend("shell", available=False)
+        fallback = _FakeBackend("text")
+        monitor = TypingActivityMonitor(
+            on_typing_activity=lambda: None, on_typing_stopped=lambda: None,
+            backends=[preferred, fallback],
+        )
+        monitor._glib = _FakeGLib()
+        monitor.start()
+        self.assertFalse(monitor.on_gnome_helper_available())
+        self.assertTrue(monitor.available)
+        self.assertEqual(monitor.backend_name, "text")
+
     def test_reconnecting_preserves_an_active_typing_session_and_timer(self) -> None:
         events = []
         preferred = _FakeBackend("shell", available=False)

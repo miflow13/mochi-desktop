@@ -98,6 +98,7 @@ class GnomeShellFileContextBackend:
                 Gio.DBusSignalFlags.NONE,
                 self._on_started_signal,
             )
+            self._start_subscription_id = int(start_id) if start_id else None
             stop_id = connection.signal_subscribe(
                 self.BUS_NAME,
                 self.INTERFACE_NAME,
@@ -355,7 +356,8 @@ class FileActivityMonitor:
 
     def on_gnome_helper_available(self) -> bool:
         """Retry file context even when Downloads already makes us available."""
-        return self.start()
+        self.start()
+        return self.file_context_available
 
     def on_gnome_helper_unavailable(self) -> None:
         if self.file_context_available:

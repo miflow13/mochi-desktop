@@ -1,5 +1,6 @@
 import logging
 import unittest
+from mochi.file_activity import GnomeShellFileContextBackend
 
 from mochi.presence_activity import GnomeShellPresenceBackend, PresenceActivityMonitor
 
@@ -57,6 +58,28 @@ class _Connection:
 
 
 class PresenceBackendTests(unittest.TestCase):
+    def test_partial_subscription_failure_is_cleaned_up_before_retry(self):
+        for backend_type in (GnomeShellPresenceBackend, GnomeShellFileContextBackend):
+            with self.subTest(backend=backend_type.__name__):
+                connection = _Connection()
+                _Gio.connection = connection
+                subscribe = connection.signal_subscribe
+                calls = 0
+                def fail_second(*args):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 2:
+                        raise RuntimeError("temporary subscription failure")
+                    return subscribe(*args)
+                connection.signal_subscribe = fail_second
+                backend = backend_type()
+                backend._load_gio = lambda: (_Gio, _GLib)
+                self.assertFalse(backend.start(lambda: None, lambda: None))
+                self.assertEqual(connection.unsubscribed, [11])
+                self.assertTrue(backend.start(lambda: None, lambda: None))
+                backend.stop()
+                self.assertEqual(connection.unsubscribed, [11, 12, 13])
+
     def _backend(self, connection):
         backend = GnomeShellPresenceBackend()
         _Gio.connection = connection

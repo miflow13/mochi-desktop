@@ -12,8 +12,10 @@ from unittest.mock import Mock
 import pytest
 
 
-@pytest.mark.parametrize("already_active", [False, True])
-def test_ambient_recovery_on_private_session_bus(already_active):
+@pytest.mark.parametrize("already_active,fail_attachment", [
+    (False, False), (True, False), (False, True),
+])
+def test_ambient_recovery_on_private_session_bus(already_active, fail_attachment):
     pytest.importorskip("gi.repository.Gio")
     launcher = shutil.which("dbus-run-session")
     if launcher is None:
@@ -21,7 +23,7 @@ def test_ambient_recovery_on_private_session_bus(already_active):
     root = Path(__file__).resolve().parents[1]
     result = subprocess.run(
         [launcher, "--", sys.executable, str(Path(__file__).resolve()),
-         "active" if already_active else "absent"],
+         "active" if already_active else "absent", str(int(fail_attachment))],
         env={**os.environ, "PYTHONPATH": str(root / "src"),
              "GSETTINGS_BACKEND": "memory"},
         capture_output=True, text=True, timeout=20,
@@ -29,7 +31,7 @@ def test_ambient_recovery_on_private_session_bus(already_active):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def _exercise(already_active):
+def _exercise(already_active, fail_attachment):
     from gi.repository import Gio, GLib
     from mochi.developer_shortcut import DeveloperShortcutMonitor
     from mochi.file_activity import FileActivityMonitor
@@ -128,6 +130,12 @@ def _exercise(already_active):
     monitors = [typing, presence, files, categories, media, shortcut]
     for monitor in monitors:
         monitor.start()
+    if fail_attachment:
+        real_start = categories.start
+        def retry_start():
+            categories.start = real_start
+            return False
+        categories.start = retry_start
     if not already_active:
         assert typing.backend_name == "test fallback"
         assert files.available and not files.file_context_available
@@ -155,6 +163,11 @@ def _exercise(already_active):
         assert not watcher.available
         assert files.available and media.available and typing.available
         owner_id = acquire()
+
+    if fail_attachment:
+        until(lambda: watcher._retry_source_id is not None)
+        assert syncs == []
+        assert categories.category == "unknown"
 
     for cycle in range(2):
         until(lambda: categories.category == "editor" and media.youtube_playing
@@ -212,4 +225,4 @@ def _exercise(already_active):
 
 
 if __name__ == "__main__":
-    _exercise(sys.argv[1] == "active")
+    _exercise(sys.argv[1] == "active", sys.argv[2] == "1")
