@@ -9,6 +9,7 @@ from gi.repository import GLib
 from mochi.quick_start import QuickStartMixin
 from mochi.sound import SoundEvent
 
+from .bond_meter import BondMeterMixin
 from .clicks import ClickBurstDetector
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
@@ -194,6 +195,7 @@ class PresenceBuddy(
     MusicDanceMixin,
     EdgeRoamMixin,
     FeedMochiMixin,
+    BondMeterMixin,
     NameplateMixin,
     BasePresenceBuddy,
 ):
@@ -209,6 +211,7 @@ class PresenceX11Buddy(
     MusicDanceMixin,
     EdgeRoamMixin,
     FeedMochiMixin,
+    BondMeterMixin,
     NameplateMixin,
     BasePresenceX11Buddy,
 ):
