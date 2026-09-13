@@ -26,6 +26,21 @@ class _Gio:
     class DBusSignalFlags:
         NONE = object()
 
+    class BusNameWatcherFlags:
+        NONE = 0
+
+    @classmethod
+    def bus_watch_name_on_connection(cls, connection, name, flags, appeared, vanished):
+        if connection.has_owner:
+            appeared(connection, name, ":1.42")
+        else:
+            vanished(connection, name)
+        return 1
+
+    @staticmethod
+    def bus_unwatch_name(ident):
+        pass
+
     connection = None
 
     @classmethod
@@ -63,9 +78,9 @@ class PresenceBackendTests(unittest.TestCase):
         backend._load_gio = lambda: (_Gio, _GLib)
         return backend
 
-    def test_extension_owner_is_required(self) -> None:
+    def test_absent_extension_keeps_watching(self) -> None:
         backend = self._backend(_Connection(has_owner=False))
-        self.assertFalse(backend.start(lambda: None, lambda: None))
+        self.assertTrue(backend.start(lambda: None, lambda: None))
         self.assertFalse(backend.active)
 
     def test_subscribes_to_idle_and_active_zero_payload_signals(self) -> None:

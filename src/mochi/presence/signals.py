@@ -7,6 +7,8 @@ from collections.abc import Callable
 import logging
 import time
 
+from mochi.helper_connection import HelperConnection
+
 from .context import TypingIntensity
 
 
@@ -314,8 +316,7 @@ class AppCategorySignalAdapter:
         self._on_category_changed = on_category_changed
         self._logger = logger or logging.getLogger(__name__)
         self._gio_loader = gio_loader or self._load_gio
-        self._connection = None
-        self._subscription_id: int | None = None
+        self._helper = None
         self.available = False
         self.category = "unknown"
         self.last_error: str | None = None
@@ -329,57 +330,20 @@ class AppCategorySignalAdapter:
     def start(self) -> bool:
         if self.available:
             return True
-        try:
-            Gio, GLib = self._gio_loader()
-            connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-            if connection is None:
-                self.last_error = "session D-Bus connection is unavailable"
-                return False
-            reply = connection.call_sync(
-                "org.freedesktop.DBus",
-                "/org/freedesktop/DBus",
-                "org.freedesktop.DBus",
-                "NameHasOwner",
-                GLib.Variant("(s)", (self.BUS_NAME,)),
-                None,
-                Gio.DBusCallFlags.NONE,
-                1_000,
-                None,
-            )
-            has_owner = bool(reply.unpack()[0]) if reply is not None else False
-            if not has_owner:
-                self.last_error = "GNOME Shell activity extension is not active"
-                return False
-            subscription_id = connection.signal_subscribe(
-                self.BUS_NAME,
-                self.INTERFACE,
-                self.SIGNAL_NAME,
-                self.OBJECT_PATH,
-                None,
-                Gio.DBusSignalFlags.NONE,
-                self._on_category_signal,
-            )
-            if not subscription_id:
-                self.last_error = "application-category subscription failed"
-                return False
-            self._connection = connection
-            self._subscription_id = int(subscription_id)
-            self.available = True
-            self.last_error = None
-            return True
-        except Exception as exc:
-            self.last_error = f"{type(exc).__name__}: {exc}"
-            self.stop()
-            return False
+        self._helper = HelperConnection(
+            self._gio_loader,
+            {self.SIGNAL_NAME: self._on_category_signal},
+            on_state=lambda state: self._set_category(state[3]),
+            on_lost=lambda: self._set_category("unknown"),
+        )
+        self.available = self._helper.start()
+        self.last_error = self._helper.last_error
+        return self.available
 
     def stop(self) -> None:
-        if self._connection is not None and self._subscription_id is not None:
-            try:
-                self._connection.signal_unsubscribe(self._subscription_id)
-            except Exception:
-                pass
-        self._subscription_id = None
-        self._connection = None
+        if self._helper is not None:
+            self._helper.stop()
+            self._helper = None
         self.available = False
         self.category = "unknown"
 
@@ -397,6 +361,9 @@ class AppCategorySignalAdapter:
             category = unpacked[0] if isinstance(unpacked, tuple) else unpacked
         except Exception:
             return
+        self._set_category(category)
+
+    def _set_category(self, category) -> None:
         if category not in self.ALLOWED or category == self.category:
             return
         self.category = category
