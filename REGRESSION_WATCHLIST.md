@@ -37,6 +37,11 @@ known failure modes
 ## AmbiSense helper lifecycle (#58)
 
 Automated coverage: `python -m pytest tests/test_helper_lifecycle.py`.
+With GJS installed and session-bus access, run the real D-Bus integration check:
+`MOCHI_RUN_DBUS_TESTS=1 python -m pytest tests/test_helper_dbus_integration.py`.
+It uses a private test name and covers all helper-backed adapters, late startup,
+already-running startup, same-process extension restarts, and process restarts.
+It does not enable, disable, or replace the installed GNOME extension.
 The helper now exports `GetState` (idle, file-browser focus, YouTube focus,
 coarse app category). Update/reload the extension along with Mochi to enable
 initial snapshots. Older extensions still deliver live signals but cannot
