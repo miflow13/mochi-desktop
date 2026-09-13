@@ -30,6 +30,33 @@ class MenuPositionTests(unittest.TestCase):
         x, _ = menu_position_for_anchor(960, 300, 244, 176, monitors)
         self.assertLess(x, 960)
 
+    def test_scaled_x11_coordinates_keep_right_edge_menu_attached(self) -> None:
+        monitors = [geometry(0, 0, 1000, 800)]
+        x, y = menu_position_for_anchor(
+            1900,
+            600,
+            244,
+            176,
+            monitors,
+            coordinate_scale=2.0,
+        )
+        self.assertEqual(x, 1388)
+        self.assertEqual(y, 552)
+        self.assertGreater(x, 1000)
+        self.assertLessEqual(x + 244 * 2, (1000 - 12) * 2)
+
+    def test_scaled_x11_coordinates_preserve_left_edge_behavior(self) -> None:
+        monitors = [geometry(0, 0, 1000, 800)]
+        x, _ = menu_position_for_anchor(
+            100,
+            300,
+            244,
+            176,
+            monitors,
+            coordinate_scale=2.0,
+        )
+        self.assertEqual(x, 124)
+
     def test_menu_window_supports_optional_owner_following(self) -> None:
         source = inspect.getsource(MenuWindow)
         self.assertIn("follow_owner: bool = False", source)
@@ -45,8 +72,18 @@ class MenuPositionTests(unittest.TestCase):
     def test_menu_window_supports_focus_loss_dismissal(self) -> None:
         source = inspect.getsource(MenuWindow)
         self.assertIn("dismiss_on_focus_loss: bool = False", source)
-        self.assertIn('notify::is-active', source)
+        self.assertEqual(source.count('connect("notify::is-active"'), 1)
         self.assertIn("_dismiss_if_still_inactive", source)
+
+    def test_focus_dismiss_callbacks_are_scoped_to_popup_generation(self) -> None:
+        popup_source = inspect.getsource(MenuWindow.popup)
+        arm_source = inspect.getsource(MenuWindow._arm_outside_dismiss)
+        active_source = inspect.getsource(MenuWindow._on_active_changed)
+        dismiss_source = inspect.getsource(MenuWindow._dismiss_if_still_inactive)
+        self.assertIn("self._arm_outside_dismiss, serial", popup_source)
+        self.assertIn("serial == self._position_serial", arm_source)
+        self.assertIn("self._position_serial", active_source)
+        self.assertIn("serial == self._position_serial", dismiss_source)
 
 
 if __name__ == "__main__":
