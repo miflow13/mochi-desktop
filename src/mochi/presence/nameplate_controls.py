@@ -1,17 +1,19 @@
 """Wire Mochi's reusable nameplate/status UI into the existing Buddy lifecycle.
 
-No new timers are introduced. Position updates and temporary-feedback expiry
-piggyback on hooks Mochi already calls every frame or on every meaningful
-change:
+No dedicated timers are introduced. Position updates, temporary-feedback expiry,
+and nameplate fade timing piggyback on hooks Mochi already calls every frame or
+on every meaningful change:
 
 - `_tick()` (already runs at TICK_MS ~60Hz for walking/animation/drag sampling)
 - `_on_drag_update()` (already runs on every pointer drag delta)
 - `_change_size()` (already runs when Mochi's size changes)
+- `_on_enter()` / `_on_leave()` (existing Buddy hover events)
 - `shutdown_presence()` (already runs on application shutdown)
 
-The always-visible surface stays intentionally quiet:
+The persistent surface stays intentionally quiet and gives screen space back
+when it is not useful:
 
-    speech bubble > temporary feedback > name only
+    speech bubble > temporary feedback > hovered name > short-lived name
 
 Mood is still derived from successful Mochi state transitions through
 `MoodModel`, but persistent state/mood cues are shown only inside the existing
@@ -40,10 +42,13 @@ class NameplateMixin:
     """Own Mochi's stable non-interactive UI surface above the sprite."""
 
     DEFAULT_FEEDBACK_SECONDS = 2.4
+    NAMEPLATE_LINGER_SECONDS = 2.5
+    NAMEPLATE_FADE_SECONDS = 0.35
 
     def __init__(self, *args, **kwargs) -> None:
         self._nameplate: Nameplate | None = None
         self._nameplate_shown = False
+        self._nameplate_hide_at: float | None = None
         self._mood_model = MoodModel()
         self._nameplate_name = "Mochi"
         self._nameplate_mood: str | None = self._mood_model.label
@@ -199,6 +204,9 @@ class NameplateMixin:
         self._nameplate_feedback = text
         self._nameplate_feedback_remaining_seconds = duration
         self._nameplate_feedback_active_since = None
+        # Feedback is intentional UI, so it gets a fresh visible window even if
+        # the ordinary name-only plate had already faded away.
+        self._nameplate_hide_at = None
         self._refresh_nameplate_content()
 
     def clear_nameplate_feedback(self) -> None:
@@ -206,6 +214,9 @@ class NameplateMixin:
         self._nameplate_feedback = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since = None
+        # Start a fresh linger period on the next visibility sync instead of
+        # immediately disappearing at the end of useful feedback.
+        self._nameplate_hide_at = None
         self._refresh_nameplate_content()
 
     def _refresh_nameplate_content(self) -> None:
@@ -266,32 +277,79 @@ class NameplateMixin:
                 # `window.present()` in app.py). Showing any child surface
                 # earlier crashes GTK with "widget isn't inside a toplevel".
                 self._nameplate_shown = True
+                self._nameplate_hide_at = None
             if self._nameplate_shown:
                 self._advance_nameplate_feedback_lifetime()
                 self._sync_nameplate_with_speech()
         return result
 
     def _sync_nameplate_with_speech(self) -> None:
-        """Keep the nameplate and speech bubble mutually exclusive.
+        """Arbitrate speech, feedback, hover, and nameplate auto-hide.
 
-        They occupy the same anchor point above Mochi, so only one is ever
-        shown at a time: the speech bubble takes priority while it has
-        something to say, and the nameplate returns as soon as the bubble
-        hides. Checked every tick instead of via a dedicated timer/callback.
+        The plate stays purely visual. Hover state comes from Buddy's existing
+        motion controller; no controller is ever attached to the nameplate
+        itself. Speech remains highest priority, temporary feedback and hover
+        force a full-opacity reveal, and the idle name fades out after a short
+        linger period to preserve desktop space.
         """
         nameplate = self._nameplate
         if nameplate is None:
             return
+
         bubble = getattr(self, "_presence_bubble", None)
         bubble_visible = bool(bubble is not None and bubble.visible)
         if bubble_visible:
             if nameplate.visible:
                 nameplate.hide()
             return
+
+        hovered = bool(getattr(self, "_hovered", False))
+        feedback_visible = bool(getattr(self, "_nameplate_feedback", None))
+        if hovered or feedback_visible:
+            self._nameplate_hide_at = None
+            nameplate.set_opacity(1.0)
+            if not nameplate.visible:
+                nameplate.show()
+            else:
+                nameplate.update_position()
+            return
+
+        now = time.monotonic()
+        hide_at = getattr(self, "_nameplate_hide_at", None)
+        if hide_at is None:
+            hide_at = now + self.NAMEPLATE_LINGER_SECONDS
+            self._nameplate_hide_at = hide_at
+
+        if now < hide_at:
+            opacity = 1.0
+        else:
+            fade_seconds = max(0.0, float(self.NAMEPLATE_FADE_SECONDS))
+            elapsed = now - hide_at
+            if fade_seconds <= 0.0 or elapsed >= fade_seconds:
+                if nameplate.visible:
+                    nameplate.hide()
+                return
+            opacity = max(0.0, min(1.0, 1.0 - elapsed / fade_seconds))
+
+        nameplate.set_opacity(opacity)
         if not nameplate.visible:
             nameplate.show()
         else:
             nameplate.update_position()
+
+    def _on_enter(self, controller, x: float, y: float) -> None:
+        """Reveal the nameplate whenever the pointer returns to Mochi."""
+        super()._on_enter(controller, x, y)
+        self._nameplate_hide_at = None
+        if self._nameplate_shown:
+            self._sync_nameplate_with_speech()
+
+    def _on_leave(self, controller) -> None:
+        """Restart the short linger window after the pointer leaves Mochi."""
+        super()._on_leave(controller)
+        self._nameplate_hide_at = None
+        if self._nameplate_shown:
+            self._sync_nameplate_with_speech()
 
     def _on_drag_update(self, gesture, offset_x: float, offset_y: float) -> None:
         super()._on_drag_update(gesture, offset_x, offset_y)
@@ -307,6 +365,7 @@ class NameplateMixin:
         if self._nameplate is not None:
             self._nameplate.destroy()
             self._nameplate = None
+        self._nameplate_hide_at = None
         self._nameplate_feedback = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since = None

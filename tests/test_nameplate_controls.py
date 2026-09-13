@@ -13,9 +13,11 @@ class _FakeNameplate:
         self.visible = False
         self.name = "Mochi"
         self.status = None
+        self.opacity = 1.0
         self.show_calls = 0
         self.hide_calls = 0
         self.update_position_calls = 0
+        self.set_opacity_calls: list[float] = []
 
     def show(self) -> None:
         self.show_calls += 1
@@ -24,9 +26,14 @@ class _FakeNameplate:
     def hide(self) -> None:
         self.hide_calls += 1
         self.visible = False
+        self.opacity = 1.0
 
     def update_position(self) -> None:
         self.update_position_calls += 1
+
+    def set_opacity(self, opacity: float) -> None:
+        self.opacity = opacity
+        self.set_opacity_calls.append(opacity)
 
     def set_name(self, name: str) -> None:
         self.name = name
@@ -55,6 +62,9 @@ def _make_mixin(
     mixin._nameplate_feedback = None
     mixin._nameplate_feedback_remaining_seconds = 0.0
     mixin._nameplate_feedback_active_since = None
+    mixin._nameplate_hide_at = None
+    mixin._nameplate_shown = True
+    mixin._hovered = False
     return mixin, nameplate
 
 
@@ -123,6 +133,103 @@ class NameplateSpeechExclusivityTests(unittest.TestCase):
         mixin._sync_nameplate_with_speech()
 
 
+class NameplateAutoHideTests(unittest.TestCase):
+    def test_nameplate_lingers_then_fades_then_hides(self) -> None:
+        mixin, nameplate = _make_mixin(
+            nameplate_visible=False, bubble=_FakeBubble(visible=False)
+        )
+
+        with patch(
+            "mochi.presence.nameplate_controls.time.monotonic",
+            side_effect=[10.0, 12.6, 13.0],
+        ):
+            mixin._sync_nameplate_with_speech()
+            self.assertTrue(nameplate.visible)
+            self.assertEqual(nameplate.opacity, 1.0)
+            self.assertAlmostEqual(mixin._nameplate_hide_at, 12.5)
+
+            mixin._sync_nameplate_with_speech()
+            self.assertTrue(nameplate.visible)
+            self.assertGreater(nameplate.opacity, 0.0)
+            self.assertLess(nameplate.opacity, 1.0)
+
+            mixin._sync_nameplate_with_speech()
+
+        self.assertFalse(nameplate.visible)
+        self.assertEqual(nameplate.hide_calls, 1)
+
+    def test_hover_reveals_hidden_nameplate_at_full_opacity(self) -> None:
+        mixin, nameplate = _make_mixin(
+            nameplate_visible=False, bubble=_FakeBubble(visible=False)
+        )
+        mixin._hovered = True
+        mixin._nameplate_hide_at = 1.0
+
+        mixin._sync_nameplate_with_speech()
+
+        self.assertTrue(nameplate.visible)
+        self.assertEqual(nameplate.opacity, 1.0)
+        self.assertIsNone(mixin._nameplate_hide_at)
+
+    def test_hover_keeps_nameplate_visible_without_starting_hide_clock(self) -> None:
+        mixin, nameplate = _make_mixin(
+            nameplate_visible=True, bubble=_FakeBubble(visible=False)
+        )
+        mixin._hovered = True
+
+        with patch("mochi.presence.nameplate_controls.time.monotonic") as monotonic:
+            mixin._sync_nameplate_with_speech()
+
+        monotonic.assert_not_called()
+        self.assertTrue(nameplate.visible)
+        self.assertEqual(nameplate.opacity, 1.0)
+        self.assertIsNone(mixin._nameplate_hide_at)
+
+    def test_hover_leave_state_restarts_full_linger_window(self) -> None:
+        mixin, nameplate = _make_mixin(
+            nameplate_visible=True, bubble=_FakeBubble(visible=False)
+        )
+        mixin._hovered = False
+        mixin._nameplate_hide_at = None
+
+        with patch(
+            "mochi.presence.nameplate_controls.time.monotonic",
+            return_value=20.0,
+        ):
+            mixin._sync_nameplate_with_speech()
+
+        self.assertEqual(
+            mixin._nameplate_hide_at,
+            20.0 + mixin.NAMEPLATE_LINGER_SECONDS,
+        )
+        self.assertTrue(nameplate.visible)
+        self.assertEqual(nameplate.opacity, 1.0)
+
+    def test_feedback_forces_hidden_nameplate_visible(self) -> None:
+        mixin, nameplate = _make_mixin(
+            nameplate_visible=False, bubble=_FakeBubble(visible=False)
+        )
+        mixin._nameplate_feedback = "♥ thank you"
+        mixin._nameplate_hide_at = 1.0
+
+        mixin._sync_nameplate_with_speech()
+
+        self.assertTrue(nameplate.visible)
+        self.assertEqual(nameplate.opacity, 1.0)
+        self.assertIsNone(mixin._nameplate_hide_at)
+
+    def test_speech_bubble_still_wins_over_hover(self) -> None:
+        mixin, nameplate = _make_mixin(
+            nameplate_visible=True, bubble=_FakeBubble(visible=True)
+        )
+        mixin._hovered = True
+
+        mixin._sync_nameplate_with_speech()
+
+        self.assertFalse(nameplate.visible)
+        self.assertEqual(nameplate.hide_calls, 1)
+
+
 class NameplateContentPriorityTests(unittest.TestCase):
     def test_persistent_mood_is_tracked_but_not_rendered_below_name(self) -> None:
         mixin, nameplate = _make_mixin(
@@ -183,6 +290,7 @@ class NameplateContentPriorityTests(unittest.TestCase):
         self.assertEqual(nameplate.status, "second")
         self.assertEqual(mixin._nameplate_feedback_remaining_seconds, 3.0)
         self.assertIsNone(mixin._nameplate_feedback_active_since)
+        self.assertIsNone(mixin._nameplate_hide_at)
 
     def test_non_positive_feedback_duration_clears_override_to_name_only(self) -> None:
         mixin, nameplate = _make_mixin(
@@ -196,6 +304,7 @@ class NameplateContentPriorityTests(unittest.TestCase):
         self.assertIsNone(mixin._nameplate_feedback)
         self.assertIsNone(nameplate.status)
         self.assertEqual(mixin._nameplate_mood, "cozy")
+        self.assertIsNone(mixin._nameplate_hide_at)
 
     def test_feedback_expires_after_visible_time_and_returns_to_name_only(self) -> None:
         mixin, nameplate = _make_mixin(
@@ -216,6 +325,7 @@ class NameplateContentPriorityTests(unittest.TestCase):
         self.assertIsNone(mixin._nameplate_feedback)
         self.assertIsNone(nameplate.status)
         self.assertEqual(mixin._nameplate_mood, "cozy")
+        self.assertIsNone(mixin._nameplate_hide_at)
 
     def test_feedback_clock_pauses_while_speech_bubble_owns_surface(self) -> None:
         bubble = _FakeBubble(visible=False)
@@ -251,6 +361,7 @@ class NameplateContentPriorityTests(unittest.TestCase):
         self.assertIsNone(mixin._nameplate_feedback)
         self.assertIsNone(nameplate.status)
         self.assertEqual(mixin._nameplate_mood, "cozy")
+        self.assertIsNone(mixin._nameplate_hide_at)
 
 
 if __name__ == "__main__":

@@ -9,8 +9,8 @@ remain the single source of truth for clicks, drags, and the context menu.
 A previous status-overlay experiment (`Gtk.Popover` with its own click/hover/
 key controllers, focus grabs, and autohide) fought with Mochi's context menu
 popover for input/focus grabs and caused freezes. This module intentionally
-carries none of that: no gestures, no focus, no autohide, no keyboard
-handling -- just position + text.
+carries none of that: no gestures, no focus, no keyboard handling, and no
+self-owned timers -- just position, text, visibility, and visual opacity.
 """
 
 from __future__ import annotations
@@ -148,7 +148,16 @@ class Nameplate:
             self._window.hide()
         if self._popover.get_visible():
             self._popover.popdown()
+        # Reset while hidden so a future reveal can never inherit a fully
+        # transparent value from a completed fade.
+        self.set_opacity(1.0)
         self._mode = None
+
+    def set_opacity(self, opacity: float) -> None:
+        """Set visual opacity without changing visibility or input behavior."""
+        clamped = max(0.0, min(1.0, float(opacity)))
+        self._window.set_opacity(clamped)
+        self._popover.set_opacity(clamped)
 
     def set_name(self, name: str) -> None:
         self._name = name.strip() or "Mochi"
