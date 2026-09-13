@@ -322,7 +322,7 @@
         "searching/searching_02.png",
         "searching/searching_03.png",
         "searching/searching_04.png",
-        "searchingg/searching_05.png",
+        "searching/searching_05.png",
         "searching/searching_06.png",
         "searching/searching_07.png",
         "searching/searching_08.png",
@@ -340,7 +340,7 @@
         "searching/searching_20.png"
       ],
       "frame_count": 20,
-      "fps": 8.33333333333334,
+      "fps": 8.333333333333334,
       "loop": true
     },
     "sway_idle": {
