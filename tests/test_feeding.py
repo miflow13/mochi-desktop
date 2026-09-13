@@ -29,6 +29,7 @@ class _MenuHarness(FeedMochiMixin, _MenuBase):
 class _FinishBase:
     def _finish_reaction(self, finished_animation) -> None:
         self.base_finish_calls.append(finished_animation)
+        self.finish_order.append("base")
 
 
 class _FinishHarness(FeedMochiMixin, _FinishBase):
@@ -116,31 +117,69 @@ def test_rejected_transition_does_not_start_animation_or_hooks() -> None:
     harness._on_feed_animation_started.assert_not_called()
 
 
-def test_completed_eat_calls_future_care_hook_after_base_finish() -> None:
+def test_completed_eat_forces_heart_before_future_care_hook() -> None:
     harness = object.__new__(_FinishHarness)
     animation = SimpleNamespace(name="eat")
     harness._active_animation = animation
     harness.state = SimpleNamespace(current=MochiState.EATING)
     harness.base_finish_calls = []
-    harness._on_feed_animation_completed = Mock()
+    harness.finish_order = []
+
+    def start_heart(*, ignore_cooldown: bool) -> bool:
+        assert ignore_cooldown is True
+        harness.finish_order.append("heart")
+        return True
+
+    harness._start_heart_emote = Mock(side_effect=start_heart)
+    harness._on_feed_animation_completed = Mock(
+        side_effect=lambda: harness.finish_order.append("care")
+    )
+    harness._logger = Mock()
 
     harness._finish_reaction(animation)
 
     assert harness.base_finish_calls == [animation]
+    assert harness.finish_order == ["base", "heart", "care"]
+    harness._start_heart_emote.assert_called_once_with(ignore_cooldown=True)
+    harness._on_feed_animation_completed.assert_called_once_with()
+    harness._logger.warning.assert_not_called()
+
+
+def test_completed_eat_logs_if_forced_heart_cannot_start() -> None:
+    harness = object.__new__(_FinishHarness)
+    animation = SimpleNamespace(name="eat")
+    harness._active_animation = animation
+    harness.state = SimpleNamespace(current=MochiState.EATING)
+    harness.base_finish_calls = []
+    harness.finish_order = []
+    harness._start_heart_emote = Mock(return_value=False)
+    harness._on_feed_animation_completed = Mock()
+    harness._logger = Mock()
+
+    harness._finish_reaction(animation)
+
+    harness._start_heart_emote.assert_called_once_with(ignore_cooldown=True)
+    harness._logger.warning.assert_called_once_with(
+        "Post-feed heart could not start after eating completed"
+    )
     harness._on_feed_animation_completed.assert_called_once_with()
 
 
-def test_interrupted_eat_does_not_award_completion_hook() -> None:
+def test_interrupted_eat_does_not_award_completion_hook_or_start_heart() -> None:
     harness = object.__new__(_FinishHarness)
     finished = SimpleNamespace(name="eat")
     harness._active_animation = SimpleNamespace(name="pickup")
     harness.state = SimpleNamespace(current=MochiState.PICKUP)
     harness.base_finish_calls = []
+    harness.finish_order = []
+    harness._start_heart_emote = Mock()
     harness._on_feed_animation_completed = Mock()
+    harness._logger = Mock()
 
     harness._finish_reaction(finished)
 
     assert harness.base_finish_calls == [finished]
+    harness._start_heart_emote.assert_not_called()
     harness._on_feed_animation_completed.assert_not_called()
 
 

@@ -16,6 +16,7 @@ class FeedMochiMixin:
 
     - the menu action closes through Buddy's proven deferred-action path;
     - EATING owns the one-shot animation while it is active;
+    - a completed feed immediately chains into the existing heart emote;
     - `_on_feed_animation_started()` is the extension seam for future sound;
     - `_on_feed_animation_completed()` is the extension seam for future
       fullness/XP/progression updates.
@@ -84,7 +85,7 @@ class FeedMochiMixin:
     def _finish_reaction(self, finished_animation) -> None:
         # Capture completion before Buddy clears/replaces the active animation.
         # Stale callbacks from an interrupted feed must never award future care
-        # progress or fire completion sounds.
+        # progress, fire completion sounds, or trigger the post-feed heart.
         completed_feed = (
             finished_animation is getattr(self, "_active_animation", None)
             and getattr(finished_animation, "name", None) == "eat"
@@ -92,6 +93,14 @@ class FeedMochiMixin:
         )
         super()._finish_reaction(finished_animation)
         if completed_feed:
+            # Buddy's normal one-shot completion path has already restored the
+            # idle state/animation here. Reuse the existing heart entry point,
+            # but bypass its hover cooldown so feeding always gets immediate
+            # positive feedback before ambient behavior can resume.
+            if not self._start_heart_emote(ignore_cooldown=True):
+                self._logger.warning(
+                    "Post-feed heart could not start after eating completed"
+                )
             self._on_feed_animation_completed()
 
     def _on_feed_animation_started(self) -> None:
