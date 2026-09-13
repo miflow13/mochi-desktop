@@ -14,6 +14,8 @@ import logging
 import time
 from typing import Protocol
 
+from mochi.helper_connection import HelperConnection
+
 
 # Ignore isolated shortcuts/chords and wait for a brief sustained typing burst.
 DEFAULT_START_EVENT_COUNT = 5
@@ -115,14 +117,14 @@ class GnomeShellTypingPulseBackend:
     SIGNAL_NAME = "Pulse"
 
     def __init__(self) -> None:
-        self._connection = None
-        self._subscription_id: int | None = None
-        self._on_activity: Callable[[], None] | None = None
-        self.last_error: str | None = None
+        self._helper = None
+        self.last_error = None
+        self._on_activity = None
+        self.on_lost = None
 
     @property
     def active(self) -> bool:
-        return self._connection is not None and self._subscription_id is not None
+        return self._helper is not None and self._helper.active
 
     @staticmethod
     def _load_gio():
@@ -133,65 +135,27 @@ class GnomeShellTypingPulseBackend:
         return Gio, GLib
 
     def start(self, on_activity: Callable[[], None]) -> bool:
-        if self.active:
+        if self._helper is not None:
             return True
-
-        self.last_error = None
-        try:
-            Gio, GLib = self._load_gio()
-            connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-            if connection is None:
-                self.last_error = "session D-Bus connection is unavailable"
-                return False
-
-            reply = connection.call_sync(
-                "org.freedesktop.DBus",
-                "/org/freedesktop/DBus",
-                "org.freedesktop.DBus",
-                "NameHasOwner",
-                GLib.Variant("(s)", (self.BUS_NAME,)),
-                None,
-                Gio.DBusCallFlags.NONE,
-                1_000,
-                None,
-            )
-            has_owner = bool(reply.unpack()[0]) if reply is not None else False
-            if not has_owner:
-                self.last_error = "GNOME Shell typing extension is not active"
-                return False
-
-            self._connection = connection
-            self._on_activity = on_activity
-            subscription_id = connection.signal_subscribe(
-                self.BUS_NAME,
-                self.INTERFACE_NAME,
-                self.SIGNAL_NAME,
-                self.OBJECT_PATH,
-                None,
-                Gio.DBusSignalFlags.NONE,
-                self._on_pulse,
-            )
-            if not subscription_id:
-                self.last_error = "typing Pulse signal subscription failed"
-                self.stop()
-                return False
-            self._subscription_id = int(subscription_id)
-        except Exception as exc:
-            self.last_error = f"{type(exc).__name__}: {exc}"
-            self.stop()
-            return False
-
-        return True
+        self._on_activity = on_activity
+        self._helper = HelperConnection(
+            self._load_gio,
+            {
+                self.SIGNAL_NAME: self._on_pulse,
+            },
+            on_lost=lambda: self.on_lost() if self.on_lost else None,
+        )
+        if self._helper.start():
+            self.last_error = None
+            return True
+        self.last_error = self._helper.last_error
+        self.stop()
+        return False
 
     def stop(self) -> None:
-        if self._connection is not None and self._subscription_id is not None:
-            try:
-                self._connection.signal_unsubscribe(self._subscription_id)
-            except Exception:
-                pass
-
-        self._subscription_id = None
-        self._connection = None
+        if self._helper is not None:
+            self._helper.stop()
+            self._helper = None
         self._on_activity = None
 
     def _on_pulse(self, *_ignored) -> None:
@@ -443,6 +407,7 @@ class TypingActivityMonitor:
         )
         self._logger = logger or logging.getLogger(__name__)
 
+        self._fallback: TypingActivityBackend | None = None
         self._backend: TypingActivityBackend | None = None
         self._glib = None
         self._stop_source_id: int | None = None
@@ -504,6 +469,21 @@ class TypingActivityMonitor:
                 continue
 
             self._backend = backend
+            if isinstance(backend, GnomeShellTypingPulseBackend):
+                backend.on_lost = self._helper_lost
+                # Keep a fallback listener ready for helper outages. Its events
+                # are ignored while the helper owns the name, avoiding duplicates.
+                for fallback in self._backends[self._backends.index(backend) + 1:]:
+                    try:
+                        if fallback.start(self._record_fallback_activity):
+                            self._fallback = fallback
+                            break
+                    except Exception:
+                        pass
+                    try:
+                        fallback.stop()
+                    except Exception:
+                        pass
             self._unavailable_logged = False
             self._logger.info(
                 "Typing mirror enabled via %s "
@@ -515,6 +495,15 @@ class TypingActivityMonitor:
 
         self._log_unavailable_once()
         return False
+
+    def _record_fallback_activity(self, now: float | None = None) -> None:
+        if self._backend is not None and not self._backend.active:
+            self._record_anonymous_activity(now)
+
+    def _helper_lost(self) -> None:
+        self._cancel_stop_timer()
+        if self._detector.end_session():
+            self._on_typing_stopped()
 
     def _log_accessibility_coverage_hint(self) -> None:
         """Warn when GNOME accessibility exposure is disabled; never change it."""
@@ -542,6 +531,9 @@ class TypingActivityMonitor:
         self._cancel_stop_timer()
         self._detector.reset()
 
+        if self._fallback is not None:
+            self._fallback.stop()
+            self._fallback = None
         backend = self._backend
         self._backend = None
         if backend is not None:

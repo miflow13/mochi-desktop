@@ -13,6 +13,8 @@ import logging
 import time
 from urllib.parse import unquote, urlparse
 
+from mochi.helper_connection import HelperConnection
+
 VIDEO_FILE_EXTENSIONS = frozenset(
     (
         ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v",
@@ -62,9 +64,7 @@ class MprisMediaBackend:
         self._watching_via_browser_focus = False
         self._on_youtube_focus_changed: Callable[[bool], None] | None = None
         self._on_browser_focus_changed: Callable[[bool], None] | None = None
-        self._youtube_focus_started_subscription_id: int | None = None
-        self._youtube_focus_stopped_subscription_id: int | None = None
-        self._app_category_subscription_id: int | None = None
+        self._helper = None
         self.last_error: str | None = None
 
     @property
@@ -118,54 +118,31 @@ class MprisMediaBackend:
         return True
 
     def _subscribe_focus_signals(self) -> None:
-        connection = self._connection
-        if connection is None or not hasattr(connection, "signal_subscribe"):
-            return
+        self._helper = HelperConnection(
+            self._load_gio,
+            {
+                self.YOUTUBE_FOCUSED_STARTED_SIGNAL: self._on_youtube_focused_started,
+                self.YOUTUBE_FOCUSED_STOPPED_SIGNAL: self._on_youtube_focused_stopped,
+                self.APP_CATEGORY_SIGNAL: self._on_app_category_changed,
+            },
+            on_state=self._sync_helper_state,
+            on_lost=self._clear_helper_state,
+        )
+        # MPRIS stays available even when the optional helper cannot be watched.
+        self._helper.start()
 
-        try:
-            Gio, _GLib = self._load_gio()
-            flags = Gio.DBusSignalFlags.NONE
-            started_id = connection.signal_subscribe(
-                self.ACTIVITY_BUS_NAME,
-                self.ACTIVITY_INTERFACE_NAME,
-                self.YOUTUBE_FOCUSED_STARTED_SIGNAL,
-                self.ACTIVITY_OBJECT_PATH,
-                None,
-                flags,
-                self._on_youtube_focused_started,
-            )
-            stopped_id = connection.signal_subscribe(
-                self.ACTIVITY_BUS_NAME,
-                self.ACTIVITY_INTERFACE_NAME,
-                self.YOUTUBE_FOCUSED_STOPPED_SIGNAL,
-                self.ACTIVITY_OBJECT_PATH,
-                None,
-                flags,
-                self._on_youtube_focused_stopped,
-            )
-            category_id = connection.signal_subscribe(
-                self.ACTIVITY_BUS_NAME,
-                self.ACTIVITY_INTERFACE_NAME,
-                self.APP_CATEGORY_SIGNAL,
-                self.ACTIVITY_OBJECT_PATH,
-                None,
-                flags,
-                self._on_app_category_changed,
-            )
-            self._youtube_focus_started_subscription_id = (
-                int(started_id) if started_id else None
-            )
-            self._youtube_focus_stopped_subscription_id = (
-                int(stopped_id) if stopped_id else None
-            )
-            self._app_category_subscription_id = (
-                int(category_id) if category_id else None
-            )
-        except Exception:
-            # Metadata-only detection can still operate without the Shell helper.
-            self._youtube_focus_started_subscription_id = None
-            self._youtube_focus_stopped_subscription_id = None
-            self._app_category_subscription_id = None
+    def _sync_helper_state(self, state) -> None:
+        if state[2]:
+            self._on_youtube_focused_started()
+        else:
+            self._on_youtube_focused_stopped()
+        self._set_browser_focus(state[3] == "browser")
+
+    def _clear_helper_state(self) -> None:
+        self._on_youtube_focused_stopped()
+        self._set_browser_focus(False)
+        self._watching_via_youtube_focus = False
+        self._watching_via_browser_focus = False
 
     def _on_youtube_focused_started(self, *_ignored) -> None:
         changed = not self._youtube_focused
@@ -193,31 +170,18 @@ class MprisMediaBackend:
             category = unpacked[0] if isinstance(unpacked, tuple) else unpacked
         except Exception:
             return
-        active = category == "browser"
+        self._set_browser_focus(category == "browser")
+
+    def _set_browser_focus(self, active: bool) -> None:
         changed = active != self._focused_browser
         self._focused_browser = active
         if changed and self._on_browser_focus_changed is not None:
             self._on_browser_focus_changed(active)
 
     def stop(self) -> None:
-        if self._connection is not None and hasattr(
-            self._connection, "signal_unsubscribe"
-        ):
-            for subscription_id in (
-                self._youtube_focus_started_subscription_id,
-                self._youtube_focus_stopped_subscription_id,
-                self._app_category_subscription_id,
-            ):
-                if subscription_id is None:
-                    continue
-                try:
-                    self._connection.signal_unsubscribe(subscription_id)
-                except Exception:
-                    pass
-
-        self._youtube_focus_started_subscription_id = None
-        self._youtube_focus_stopped_subscription_id = None
-        self._app_category_subscription_id = None
+        if self._helper is not None:
+            self._helper.stop()
+            self._helper = None
         self._youtube_focused = False
         self._focused_browser = False
         self._watching_via_youtube_focus = False
