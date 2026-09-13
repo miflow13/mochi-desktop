@@ -18,11 +18,11 @@ class FeedMochiMixin:
     - EATING owns the one-shot animation while it is active;
     - a completed feed immediately chains into the existing heart emote;
     - `_on_feed_animation_started()` is the extension seam for future sound;
-    - `_on_feed_animation_completed()` is the extension seam for future
-      fullness/XP/progression updates.
+    - `_on_feed_animation_completed()` is a cooperative extension seam for
+      bond/fullness/XP/progression updates.
 
-    A later care model can override `_can_feed()` and the two hooks without
-    teaching the animation state machine about hunger values or persistence.
+    Later care models can extend `_can_feed()` and the two hooks without teaching
+    the animation state machine about hunger values, bond levels, or persistence.
     """
 
     def _build_context_menu(self):
@@ -107,4 +107,7 @@ class FeedMochiMixin:
         """Extension hook for future eating sound/timing integration."""
 
     def _on_feed_animation_completed(self) -> None:
-        """Extension hook for future fullness, XP, and progression updates."""
+        """Continue the cooperative care/progression completion hook chain."""
+        next_hook = getattr(super(), "_on_feed_animation_completed", None)
+        if callable(next_hook):
+            next_hook()

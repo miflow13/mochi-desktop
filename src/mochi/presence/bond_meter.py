@@ -8,7 +8,7 @@ from gi.repository import Gtk
 
 
 BOND_PHASE_COUNT = 4
-DEFAULT_BOND_PHASES_FILLED = 2
+DEFAULT_BOND_PHASES_FILLED = 0
 
 
 def normalize_bond_pips(filled: int) -> int:
@@ -131,7 +131,22 @@ class BondMeterMixin:
         return row
 
     def set_bond_progress_for_ui(self, filled: int) -> None:
-        """Future care logic seam: update the four-pip display, nothing else."""
+        """Update the four-pip display without owning level-up/persistence policy."""
         self._bond_ui_filled = normalize_bond_pips(filled)
         if self._bond_meter is not None:
             self._bond_meter.set_filled(self._bond_ui_filled)
+
+    def advance_bond_progress_for_ui(self, amount: int = 1) -> None:
+        """Advance this temporary UI-backed bond cycle, clamped at four phases."""
+        try:
+            delta = int(amount)
+        except (TypeError, ValueError):
+            delta = 0
+        self.set_bond_progress_for_ui(self._bond_ui_filled + max(0, delta))
+
+    def _on_feed_animation_completed(self) -> None:
+        """Award one visible bond phase only after a feed fully completes."""
+        self.advance_bond_progress_for_ui()
+        next_hook = getattr(super(), "_on_feed_animation_completed", None)
+        if callable(next_hook):
+            next_hook()

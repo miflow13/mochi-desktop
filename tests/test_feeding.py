@@ -36,6 +36,15 @@ class _FinishHarness(FeedMochiMixin, _FinishBase):
     pass
 
 
+class _CareHookBase:
+    def _on_feed_animation_completed(self) -> None:
+        self.care_hook_calls += 1
+
+
+class _CareHookHarness(FeedMochiMixin, _CareHookBase):
+    pass
+
+
 def _runtime_harness(state: MochiState):
     harness = object.__new__(FeedMochiMixin)
     harness.state = SimpleNamespace(current=state)
@@ -181,6 +190,15 @@ def test_interrupted_eat_does_not_award_completion_hook_or_start_heart() -> None
     assert harness.base_finish_calls == [finished]
     harness._start_heart_emote.assert_not_called()
     harness._on_feed_animation_completed.assert_not_called()
+
+
+def test_feed_completion_hook_delegates_to_later_care_mixins() -> None:
+    harness = object.__new__(_CareHookHarness)
+    harness.care_hook_calls = 0
+
+    FeedMochiMixin._on_feed_animation_completed(harness)
+
+    assert harness.care_hook_calls == 1
 
 
 def test_eating_can_interrupt_ambient_but_not_critical_states() -> None:

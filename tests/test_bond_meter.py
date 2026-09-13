@@ -59,16 +59,25 @@ class _CombinedMenuHarness(_FeedOuterMixin, _BondHarness):
     pass
 
 
+class _CompletionBase:
+    def _on_feed_animation_completed(self) -> None:
+        self.completion_chain_calls += 1
+
+
+class _BondCompletionHarness(BondMeterMixin, _CompletionBase):
+    pass
+
+
 class BondMeterTests(unittest.TestCase):
     def test_meter_has_exactly_four_phases(self) -> None:
         self.assertEqual(BOND_PHASE_COUNT, 4)
         self.assertEqual(len(bond_pip_states(2)), 4)
 
-    def test_default_placeholder_is_two_of_four(self) -> None:
-        self.assertEqual(DEFAULT_BOND_PHASES_FILLED, 2)
+    def test_connected_meter_starts_empty(self) -> None:
+        self.assertEqual(DEFAULT_BOND_PHASES_FILLED, 0)
         self.assertEqual(
             bond_pip_states(DEFAULT_BOND_PHASES_FILLED),
-            (True, True, False, False),
+            (False, False, False, False),
         )
 
     def test_pip_count_clamps_safely(self) -> None:
@@ -96,6 +105,29 @@ class BondMeterTests(unittest.TestCase):
 
         self.assertEqual(harness._bond_ui_filled, 4)
         harness._bond_meter.set_filled.assert_called_once_with(4)
+
+    def test_completed_feed_advances_one_bond_phase_and_chains(self) -> None:
+        harness = object.__new__(_BondCompletionHarness)
+        harness._bond_ui_filled = 1
+        harness._bond_meter = Mock()
+        harness.completion_chain_calls = 0
+
+        harness._on_feed_animation_completed()
+
+        self.assertEqual(harness._bond_ui_filled, 2)
+        harness._bond_meter.set_filled.assert_called_once_with(2)
+        self.assertEqual(harness.completion_chain_calls, 1)
+
+    def test_feed_progress_stops_at_four_until_level_up_logic_exists(self) -> None:
+        harness = object.__new__(BondMeterMixin)
+        harness._bond_ui_filled = 4
+        harness._bond_meter = Mock()
+
+        harness.advance_bond_progress_for_ui()
+        harness.advance_bond_progress_for_ui()
+
+        self.assertEqual(harness._bond_ui_filled, 4)
+        harness._bond_meter.set_filled.assert_called_with(4)
 
     def test_bond_ui_stays_passive_and_reuses_existing_menu(self) -> None:
         source = inspect.getsource(BondMeterMixin._build_context_menu)
