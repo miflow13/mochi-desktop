@@ -218,6 +218,29 @@
       "fps": 8.333333333333334,
       "loop": false
     },
+    "eat": {
+      "frames": [
+        "eat/mochi_eat_0001.png",
+        "eat/mochi_eat_0002.png",
+        "eat/mochi_eat_0003.png",
+        "eat/mochi_eat_0004.png",
+        "eat/mochi_eat_0005.png",
+        "eat/mochi_eat_0006.png",
+        "eat/mochi_eat_0007.png",
+        "eat/mochi_eat_0008.png",
+        "eat/mochi_eat_0009.png",
+        "eat/mochi_eat_0010.png",
+        "eat/mochi_eat_0011.png",
+        "eat/mochi_eat_0012.png",
+        "eat/mochi_eat_0013.png",
+        "eat/mochi_eat_0014.png",
+        "eat/mochi_eat_0015.png",
+        "eat/mochi_eat_0016.png"
+      ],
+      "frame_count": 16,
+      "fps": 8.333333333333334,
+      "loop": false
+    },
     "computer": {
       "frames": [
         "computer/computer_01.png",
@@ -299,7 +322,7 @@
         "searching/searching_02.png",
         "searching/searching_03.png",
         "searching/searching_04.png",
-        "searching/searching_05.png",
+        "searchingg/searching_05.png",
         "searching/searching_06.png",
         "searching/searching_07.png",
         "searching/searching_08.png",
@@ -317,7 +340,7 @@
         "searching/searching_20.png"
       ],
       "frame_count": 20,
-      "fps": 8.333333333333334,
+      "fps": 8.33333333333334,
       "loop": true
     },
     "sway_idle": {
