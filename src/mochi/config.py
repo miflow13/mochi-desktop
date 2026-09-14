@@ -20,6 +20,9 @@ class ConfigStore:
     MIN_SIZE = 64
     MAX_SIZE = 256
     DEFAULT_VOLUME = 0.6
+    DEFAULT_BOND_PHASES = 0
+    MIN_BOND_PHASES = 0
+    MAX_BOND_PHASES = 4
 
     def __init__(self, path: Path | None = None) -> None:
         config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
@@ -112,6 +115,25 @@ class ConfigStore:
         data["edge_roam"] = bool(enabled)
         self._save(data)
         self._logger.debug("Edge roam: %s", bool(enabled))
+
+    def load_bond_phases(self) -> int:
+        """Return persisted, non-decaying v0.3 bond progress."""
+        try:
+            phases = int(self._load()["bond_phases"])
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return self.DEFAULT_BOND_PHASES
+        return max(self.MIN_BOND_PHASES, min(phases, self.MAX_BOND_PHASES))
+
+    def save_bond_phases(self, phases: int) -> None:
+        """Persist bond progress without allowing values outside the current cycle."""
+        phases = max(
+            self.MIN_BOND_PHASES,
+            min(int(phases), self.MAX_BOND_PHASES),
+        )
+        data = self._load_or_empty()
+        data["bond_phases"] = phases
+        self._save(data)
+        self._logger.debug("Bond progress saved: %d/%d", phases, self.MAX_BOND_PHASES)
 
     def reset_position(self) -> None:
         try:
