@@ -65,6 +65,21 @@ class ConfigStoreTests(unittest.TestCase):
             store.save_edge_roam(False)
             self.assertFalse(store.load_edge_roam())
 
+    def test_bond_progress_defaults_round_trips_and_clamps(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertEqual(
+                store.load_bond_phases(),
+                ConfigStore.DEFAULT_BOND_PHASES,
+            )
+            store.save_bond_phases(2)
+            self.assertEqual(store.load_bond_phases(), 2)
+            store.save_bond_phases(99)
+            self.assertEqual(
+                store.load_bond_phases(),
+                ConfigStore.MAX_BOND_PHASES,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
