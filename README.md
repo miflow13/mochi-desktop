@@ -1,4 +1,4 @@
-# Mochi 🌱
+# mochi 🌱
 
 > ⚠️ **First install on GNOME Wayland**
 >
@@ -12,15 +12,15 @@
 
 Mochi is a lightweight Linux desktop companion designed to make the desktop feel a little more alive. He wanders, reacts to clicks and dragging, notices broad desktop activity through **AmbiSense**, sleeps, chats, and mostly keeps to himself.
 
-Mochi is currently an **early public alpha**. Fedora + GNOME on Wayland is the actively tested environment; XWayland is used where GNOME's native Wayland restrictions require it.
+Mochi is currently an **early public alpha**. Fedora + GNOME on Wayland is the actively tested environment **(I plan to test on different setups, this is my first big application please be gentle)** ; XWayland is used where GNOME's native Wayland restrictions require it.
 
-> Mochi is intentionally small. There is no productivity score, streak, nagging assistant, or requirement to interact with him.
+> Please note Mochi as an application is intentionally small feature wise. **There is no productivity score, streak, nagging assistant, or requirement to interact with him.**
 
 ---
 
 ## install
 
-### Fedora + GNOME
+### Fedora + GNOME (Recommended Environment) 
 
 ```bash
 git clone https://github.com/miflow13/mochi-desktop.git
@@ -68,7 +68,7 @@ git pull
 
 Running the installer again refreshes Mochi's private environment, launchers, application entry, icon, and GNOME helper.
 
-### typing / AmbiSense troubleshooting
+## typing / AmbiSense troubleshooting
 
 Mochi's GNOME typing and desktop-awareness reactions depend on the GNOME Shell helper being active.
 
@@ -140,7 +140,7 @@ Still growing:
 
 ---
 
-## known limitations
+## known limitations !!
 
 Mochi is an **alpha**, and the current support boundary is intentionally narrow while the interaction/state system is stabilized.
 
@@ -159,7 +159,17 @@ If something fails quietly rather than crashing, that is still worth reporting. 
 
 ## AmbiSense
 
-**AmbiSense** is Mochi's lightweight local awareness system. It turns privacy-reduced desktop signals into small behavior decisions: say something, react, perform an activity, or simply do nothing.
+"**AmbiSense**" (cool name huh?) is mochi's lightweight local awareness system. It turns privacy-reduced desktop signals into small behavior decisions: say something, react, perform an activity, or simply do nothing. 
+This is achieved by using pulse detection logic within a Gnome Shell extension/plugin.
+Basically:
+```
+GNOME Shell extension
+→ sees keyboard activity
+→ turns it into anonymous "Pulse"
+→ sends Pulse over D-Bus
+→ Mochi's Python side receives it
+→ AmbiSense reacts
+```
 
 Depending on what is available on the system, Mochi can notice broad signals such as:
 
@@ -171,11 +181,11 @@ Depending on what is available on the system, Mochi can notice broad signals suc
 - network connection transitions
 - file-browsing activity
 
-AmbiSense is a **local rule-based behavior engine**, not an LLM and not a cloud AI service.
+> AmbiSense is a **local rule-based behavior engine**, NOT an LLM and not a cloud AI service.
 
 ### privacy
 
-Typing awareness is content-blind. Mochi does **not** store characters, inspect typed text, reconstruct words, log key values, or persist typing history. It uses anonymous activity timing and frequency only.
+privacy comes first, so typing awareness is content-blind. Mochi does **NOT** store characters, inspect typed text, reconstruct words, log key values, or persist typing history. It uses **anonymous** activity timing and frequency only.
 
 Application awareness is reduced to broad semantic categories before Mochi reacts. The goal is to notice the *shape* of desktop activity without reading your work.
 
@@ -197,7 +207,7 @@ Nothing requires a response. You can ignore Mochi completely and let him do his 
 
 ## why Mochi?
 
-Desktop pets already exist. Mochi is an experiment in making one feel **native to the Linux desktop, expressive, context-aware, and pleasant to actually leave running**.
+Desktop pets already exist. i built mochi as an experiment in making one feel **native to the Linux desktop, expressive, context-aware, and pleasant to actually leave running** while being cute, polished and easy to use
 
 Most of the work is in the small details: animation timing, squash and stretch, cursor reactions, movement, persistence, speech pacing, state transitions, and knowing when not to interrupt.
 
@@ -205,13 +215,14 @@ Most of the work is in the small details: animation timing, squash and stretch, 
 
 ## art
 
-All Mochi pixel art, animations, and audio are created by me.
+ALL Mochi pixel art, animations, and audio are created by me.
 
-The sprites are handcrafted frame by frame with attention to silhouette, timing, squash and stretch, and the tiny expressions that make Mochi feel alive.
+The sprites are handcrafted frame by frame using [Pixelorama](https://github.com/orama-interactive/pixelorama) with attention to silhouette, timing, squash and stretch, and the tiny expressions that make Mochi feel alive.
 
 Runtime artwork lives under `assets/mochi/` and is defined by `assets/mochi/manifest.json`.
 
 See [`assets/mochi/README.md`](assets/mochi/README.md) for frame, naming, looping, export, and validation rules.
+
 
 ---
 
