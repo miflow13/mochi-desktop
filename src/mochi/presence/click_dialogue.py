@@ -38,6 +38,8 @@ FIRST_STARTUP_GREETING = (
     "I'll try not to get in the way. ♡"
 )
 FIRST_STARTUP_GREETING_SECONDS = 12.0
+STARTUP_GREETING_RETRY_MS = 600
+STARTUP_GREETING_MAX_ATTEMPTS = 10
 
 
 class ClickDialogueMixin:
@@ -54,6 +56,7 @@ class ClickDialogueMixin:
         )
         self._last_click_burst_phrase: str | None = None
         self._preserve_presence_bubble_for_press = False
+        self._startup_greeting_attempts = 0
         super().__init__(*args, **kwargs)
 
     def _on_pressed(self, *args) -> None:
@@ -128,22 +131,49 @@ class ClickDialogueMixin:
             self._logger.debug("[presence] triple-click dialogue text=%r", text)
         return shown
 
+    def _schedule_startup_greeting_retry(self, reason: str) -> bool:
+        """Retry a startup greeting that lost a temporary presentation race."""
+        self._startup_greeting_attempts += 1
+        if self._startup_greeting_attempts >= STARTUP_GREETING_MAX_ATTEMPTS:
+            self._logger.debug(
+                "[presence] startup greeting abandoned after %d attempts reason=%s",
+                self._startup_greeting_attempts,
+                reason,
+            )
+            return GLib.SOURCE_REMOVE
+
+        self._presence_startup_source_id = GLib.timeout_add(
+            STARTUP_GREETING_RETRY_MS,
+            self._show_startup_greeting,
+        )
+        self._logger.debug(
+            "[presence] startup greeting deferred attempt=%d reason=%s",
+            self._startup_greeting_attempts,
+            reason,
+        )
+        return GLib.SOURCE_REMOVE
+
     def _show_startup_greeting(self) -> bool:
-        """Show first-run onboarding once, then use the normal session greeting."""
+        """Show first-run onboarding once, then greet every later app launch."""
         self._presence_startup_source_id = None
         if self._presence_shutting_down or self._preview_mode:
             return GLib.SOURCE_REMOVE
 
         tuning = self._ambient_presence_engine.tuning
-        bubble = self._presence_bubble
         if (
             not tuning.speech_enabled
             or not tuning.ambient_reactions_enabled
             or tuning.quiet_mode
-            or self._user_idle
-            or bubble is None
         ):
             return GLib.SOURCE_REMOVE
+
+        bubble = self._presence_bubble
+        if bubble is None:
+            return self._schedule_startup_greeting_retry("bubble-not-ready")
+        if self._user_idle:
+            return self._schedule_startup_greeting_retry("user-idle")
+        if bubble.visible:
+            return self._schedule_startup_greeting_retry("bubble-busy")
 
         first_startup = not self._config.load_first_startup_dialogue_seen()
         if first_startup:
@@ -157,22 +187,24 @@ class ClickDialogueMixin:
             duration_seconds = speech_display_seconds(text)
 
         presentation = SpeechText(text, typing_preview=True)
-        if bubble.show(
+        if not bubble.show(
             presentation,
             duration_seconds=duration_seconds,
         ):
-            if first_startup:
-                # Persist only after the bubble is actually visible. If startup
-                # was suppressed or another bubble won the race, try again on a
-                # later launch rather than silently consuming the introduction.
-                self._config.save_first_startup_dialogue_seen(True)
-                self._logger.info("[presence] first-startup introduction shown")
-            else:
-                self._ambient_presence_engine.phrases.remember(text)
-                self._logger.debug(
-                    "[presence] startup greeting typing-preview text=%r",
-                    text,
-                )
+            return self._schedule_startup_greeting_retry("bubble-rejected")
+
+        self._startup_greeting_attempts = 0
+        if first_startup:
+            # Persist only after the bubble is actually visible. A temporary
+            # startup race now retries in-session instead of consuming the intro.
+            self._config.save_first_startup_dialogue_seen(True)
+            self._logger.info("[presence] first-startup introduction shown")
+        else:
+            self._ambient_presence_engine.phrases.remember(text)
+            self._logger.debug(
+                "[presence] session startup greeting typing-preview text=%r",
+                text,
+            )
         return GLib.SOURCE_REMOVE
 
     def _preview_presence_category(self, category: str) -> None:
