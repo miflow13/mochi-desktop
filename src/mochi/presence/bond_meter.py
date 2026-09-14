@@ -1,4 +1,4 @@
-"""Compact, display-only bond progress UI for Mochi's context menu."""
+"""Compact bond progress UI for Mochi's context menu."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ DEFAULT_BOND_PHASES_FILLED = 0
 
 
 def normalize_bond_pips(filled: int) -> int:
-    """Clamp a display-only bond phase count to Mochi's four-pip meter."""
+    """Clamp a bond phase count to Mochi's four-pip meter."""
     try:
         value = int(filled)
     except (TypeError, ValueError):
@@ -98,12 +98,19 @@ class BondMeter(Gtk.Box):
 
 
 class BondMeterMixin:
-    """Add Mochi's passive bond meter to the existing context-menu layout."""
+    """Add Mochi's passive, persistent bond meter to the existing context menu.
+
+    Bond progress is intentionally non-punishing in this v0.3 slice: completed
+    care can move the meter forward, but time away from Mochi never moves it
+    backward. The current four-pip cycle is persisted through ConfigStore so
+    restarting the application does not erase relationship progress.
+    """
 
     def __init__(self, *args, **kwargs) -> None:
         self._bond_ui_filled = DEFAULT_BOND_PHASES_FILLED
         self._bond_meter: BondMeter | None = None
         super().__init__(*args, **kwargs)
+        self._restore_bond_progress()
 
     def _build_context_menu(self):
         popover = super()._build_context_menu()
@@ -131,22 +138,37 @@ class BondMeterMixin:
         return row
 
     def set_bond_progress_for_ui(self, filled: int) -> None:
-        """Update the four-pip display without owning level-up/persistence policy."""
+        """Update the four-pip display without owning level-up policy."""
         self._bond_ui_filled = normalize_bond_pips(filled)
         if self._bond_meter is not None:
             self._bond_meter.set_filled(self._bond_ui_filled)
 
     def advance_bond_progress_for_ui(self, amount: int = 1) -> None:
-        """Advance this temporary UI-backed bond cycle, clamped at four phases."""
+        """Advance the current bond cycle, clamped until level-up logic exists."""
         try:
             delta = int(amount)
         except (TypeError, ValueError):
             delta = 0
         self.set_bond_progress_for_ui(self._bond_ui_filled + max(0, delta))
 
+    def _restore_bond_progress(self) -> None:
+        """Restore persisted progress after the Buddy core has initialized."""
+        config = getattr(self, "_config", None)
+        if config is None:
+            return
+        self.set_bond_progress_for_ui(config.load_bond_phases())
+
+    def _persist_bond_progress(self) -> None:
+        """Persist the current cycle without coupling storage to the widget."""
+        config = getattr(self, "_config", None)
+        if config is None:
+            return
+        config.save_bond_phases(self._bond_ui_filled)
+
     def _on_feed_animation_completed(self) -> None:
-        """Award one visible bond phase only after a feed fully completes."""
+        """Award and persist one bond phase only after a feed fully completes."""
         self.advance_bond_progress_for_ui()
+        self._persist_bond_progress()
         next_hook = getattr(super(), "_on_feed_animation_completed", None)
         if callable(next_hook):
             next_hook()
