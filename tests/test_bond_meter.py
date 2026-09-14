@@ -106,16 +106,31 @@ class BondMeterTests(unittest.TestCase):
         self.assertEqual(harness._bond_ui_filled, 4)
         harness._bond_meter.set_filled.assert_called_once_with(4)
 
-    def test_completed_feed_advances_one_bond_phase_and_chains(self) -> None:
+    def test_restore_loads_persisted_bond_progress_into_meter(self) -> None:
+        harness = object.__new__(BondMeterMixin)
+        harness._bond_ui_filled = DEFAULT_BOND_PHASES_FILLED
+        harness._bond_meter = Mock()
+        harness._config = Mock()
+        harness._config.load_bond_phases.return_value = 3
+
+        harness._restore_bond_progress()
+
+        self.assertEqual(harness._bond_ui_filled, 3)
+        harness._bond_meter.set_filled.assert_called_once_with(3)
+        harness._config.load_bond_phases.assert_called_once_with()
+
+    def test_completed_feed_advances_persists_and_chains(self) -> None:
         harness = object.__new__(_BondCompletionHarness)
         harness._bond_ui_filled = 1
         harness._bond_meter = Mock()
+        harness._config = Mock()
         harness.completion_chain_calls = 0
 
         harness._on_feed_animation_completed()
 
         self.assertEqual(harness._bond_ui_filled, 2)
         harness._bond_meter.set_filled.assert_called_once_with(2)
+        harness._config.save_bond_phases.assert_called_once_with(2)
         self.assertEqual(harness.completion_chain_calls, 1)
 
     def test_feed_progress_stops_at_four_until_level_up_logic_exists(self) -> None:
@@ -128,6 +143,16 @@ class BondMeterTests(unittest.TestCase):
 
         self.assertEqual(harness._bond_ui_filled, 4)
         harness._bond_meter.set_filled.assert_called_with(4)
+
+    def test_persistence_is_optional_for_isolated_ui_harnesses(self) -> None:
+        harness = object.__new__(BondMeterMixin)
+        harness._bond_ui_filled = 2
+        harness._bond_meter = Mock()
+
+        harness._restore_bond_progress()
+        harness._persist_bond_progress()
+
+        self.assertEqual(harness._bond_ui_filled, 2)
 
     def test_bond_ui_stays_passive_and_reuses_existing_menu(self) -> None:
         source = inspect.getsource(BondMeterMixin._build_context_menu)
