@@ -9,14 +9,20 @@
 *A tiny Deskling companion for Linux.*
 
 [website](https://miflow13.github.io/mochi-desktop/) · [issues](https://github.com/miflow13/mochi-desktop/issues) · [animation guide](assets/mochi/README.md)
+## why/what is mochi?
 
-Mochi is a lightweight Linux desktop companion designed to make the desktop feel a little more alive. He wanders, reacts to clicks and dragging, notices broad desktop activity through **AmbiSense**, sleeps, chats, and mostly keeps to himself.
+Desktop pets already exist. i built mochi as an experiment in making one feel **native to the Linux desktop, expressive, context-aware, and pleasant to actually leave running** while being cute, polished and easy to use
 
-Mochi is currently an **early public alpha**. Fedora + GNOME on Wayland is the actively tested environment **(I plan to test on different setups, this is my first big application please be gentle)** ; XWayland is used where GNOME's native Wayland restrictions require it.
+Most of the work is in the small details: animation timing, squash and stretch, cursor reactions, movement, persistence, speech pacing, state transitions, and knowing when not to interrupt.
+Mochi is designed to make the desktop feel a little more alive. He wanders, reacts to clicks and dragging, notices broad desktop activity through **AmbiSense** (cool name huh?), sleeps, chats, and mostly keeps to himself.
+
+Mochi is currently an **early public alpha**. Fedora + GNOME on Wayland is the actively tested environment
+**(I plan to test on different setups, this is my first big application please be gentle)**
 
 > Please note Mochi as an application is intentionally small feature wise. **There is no productivity score, streak, nagging assistant, or requirement to interact with him.**
 
 ---
+
 
 ## install
 
@@ -202,14 +208,6 @@ Application awareness is reduced to broad semantic categories before Mochi react
 - **Mochi Lab** — developer controls for animations and AmbiSense tuning
 
 Nothing requires a response. You can ignore Mochi completely and let him do his little thing.
-
----
-
-## why Mochi?
-
-Desktop pets already exist. i built mochi as an experiment in making one feel **native to the Linux desktop, expressive, context-aware, and pleasant to actually leave running** while being cute, polished and easy to use
-
-Most of the work is in the small details: animation timing, squash and stretch, cursor reactions, movement, persistence, speech pacing, state transitions, and knowing when not to interrupt.
 
 ---
 
