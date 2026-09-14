@@ -1,9 +1,11 @@
 # Mochi 🌱
->⚠️ **First install on GNOME Wayland**
+
+> ⚠️ **First install on GNOME Wayland**
 >
 > **Log out and back in once after installing Mochi.**
 >
 > This activates Mochi’s desktop-awareness helper for typing, app, file, and focused media reactions. Mochi will finish enabling it automatically after you sign back in.
+
 *A tiny Deskling companion for Linux.*
 
 [website](https://miflow13.github.io/mochi-desktop/) · [issues](https://github.com/miflow13/mochi-desktop/issues) · [animation guide](assets/mochi/README.md)
@@ -26,10 +28,10 @@ cd mochi-desktop
 ./install.sh
 ```
 
-The installer handles Fedora dependencies, creates Mochi's private Python environment, installs the GNOME helper, and adds Mochi to the application grid.
+The installer handles Fedora dependencies, creates Mochi's private Python environment, installs the GNOME helper, adds Mochi to the application grid, and installs `mochi` / `mochi-uninstall` launchers under `~/.local/bin`.
 
 > [!NOTE]
-> GNOME Wayland may require one logout/login after the first install before Mochi's desktop-awareness helper becomes active.
+> GNOME Wayland may require one logout/login after the first install before Mochi's desktop-awareness helper becomes active. You do not need to reinstall afterward.
 
 ### Fedora + Niri
 
@@ -38,6 +40,8 @@ The installer includes Fedora's `gtk4-layer-shell` package for Niri. After updat
 ```bash
 mochi --reset-position
 ```
+
+Niri support is still less extensively tested than Fedora + GNOME.
 
 ### run
 
@@ -52,31 +56,48 @@ If `~/.local/bin` is not on your PATH:
 ```bash
 ~/.local/bin/mochi
 ```
-## Why isn't Mochi typing when I type?
 
-Mochi's typing reactions depend on the GNOME Shell helper being enabled.
+### update
 
-If typing reactions are not working, try enabling the extension manually:
+From the repository checkout:
+
+```bash
+git pull
+./install.sh
+```
+
+Running the installer again refreshes Mochi's private environment, launchers, application entry, icon, and GNOME helper.
+
+### typing / AmbiSense troubleshooting
+
+Mochi's GNOME typing and desktop-awareness reactions depend on the GNOME Shell helper being active.
+
+Check it with:
+
+```bash
+gnome-extensions info mochi-typing@miflow13 | grep State
+```
+
+You should see:
+
+```text
+State: ACTIVE
+```
+
+If the helper is installed but inactive, first **log out of GNOME and log back in once**. On a fresh GNOME Wayland install this is normally the only extra step required.
+
+If it is still inactive afterward, try:
 
 ```bash
 gnome-extensions enable mochi-typing@miflow13
 ```
 
-```
+Then launch Mochi again. If you recently updated the repository, also rerun:
+
+```bash
 git pull
 ./install.sh
 ```
-Then verify that it is active:
-
-`gnome-extensions info mochi-typing@miflow13 | grep State`
-
-You should see:
-
-`State: ACTIVE`
-
-> 💡 On a fresh GNOME Wayland install, you may need to log out and back in once before the extension can be enabled.
-
----
 
 ### uninstall
 
@@ -116,6 +137,23 @@ Still growing:
 - broader Linux compatibility
 - installation testing outside the dev machines
 - more AmbiSense contexts
+
+---
+
+## known limitations
+
+Mochi is an **alpha**, and the current support boundary is intentionally narrow while the interaction/state system is stabilized.
+
+- **Fedora + GNOME + Wayland is the primary tested target.** Other Linux distributions may work, but automatic dependency installation currently supports Fedora only.
+- **GNOME gets the fullest AmbiSense experience.** Typing, focused-app, file-browsing, and focused-media awareness rely on Mochi's GNOME Shell helper. On other desktops, Mochi can still run but desktop-awareness features may be reduced or unavailable.
+- **A one-time GNOME logout/login may be required after first install.** GNOME may not load a newly installed Shell helper into the current session immediately.
+- **Mochi uses XWayland for parts of desktop positioning and interaction on GNOME Wayland.** Compositor, monitor-layout, scaling, and workspace behavior can expose edge cases that do not appear on the primary development setup.
+- **Workspace-switch reliability is still being watched.** An intermittent XWayland/workspace freeze was reported in [issue #45](https://github.com/miflow13/mochi-desktop/issues/45), but it has not been reproducible in the latest deliberate stress testing.
+- **Niri support is experimental compared with GNOME.** The installer includes the required Fedora layer-shell package, but Niri does not yet receive the same breadth of regression testing.
+- **Multi-monitor and fractional-scaling combinations are not exhaustively tested.** Please report the monitor layout and scale factors if placement, menus, bubbles, or dragging behave incorrectly.
+- **No stable compatibility promise yet.** Alpha configuration, behavior, or installation details may change between prereleases.
+
+If something fails quietly rather than crashing, that is still worth reporting. Ambient-awareness failures are intended to degrade gracefully, so missing reactions can be useful debugging information too.
 
 ---
 
@@ -210,6 +248,38 @@ The actively tested target is **Fedora Linux + GNOME + Wayland**. Other distribu
 | **v0.5 — Lives on your desktop** | deeper Linux desktop interactions and broader environment support |
 
 The roadmap is directional rather than a promise. Interaction quality comes first.
+
+---
+
+## reporting bugs
+
+Bug reports are especially useful during the alpha. Open an issue at [GitHub Issues](https://github.com/miflow13/mochi-desktop/issues) and include as much of the following as you can:
+
+- what you were doing immediately before the problem
+- what you expected Mochi to do
+- what Mochi actually did
+- whether the problem is reproducible and the shortest sequence that reproduces it
+- Fedora / distribution version
+- desktop environment and session type
+- number of monitors, layout, and scale factors if positioning is involved
+- whether Mochi had just been clicked, dragged, put to sleep, switched between workspaces, or entered an AmbiSense state
+- relevant terminal output or traceback
+
+Useful environment checks:
+
+```bash
+echo "$XDG_CURRENT_DESKTOP"
+echo "$XDG_SESSION_TYPE"
+gnome-extensions info mochi-typing@miflow13 | grep State
+```
+
+For runtime debugging, launch Mochi from a terminal with:
+
+```bash
+mochi --debug
+```
+
+For intermittent interaction bugs, please capture the exact sequence immediately before the failure. A short reproducible sequence is more useful than a large log with no surrounding context.
 
 ---
 
