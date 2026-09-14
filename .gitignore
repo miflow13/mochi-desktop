@@ -9,3 +9,6 @@ dist/
 # Local checkpoints and editor backups belong in Git history, not the tree.
 *.pre-*
 *.save
+
+# Local personal/work-in-progress folders
+/i have adhd/
