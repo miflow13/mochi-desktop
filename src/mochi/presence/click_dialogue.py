@@ -31,6 +31,14 @@ CLICK_BURST_PHRASES = (
     "tiny creature here!",
 )
 
+FIRST_STARTUP_GREETING = (
+    "Hi! I'm Mochi 🌱\n"
+    "I'll hang out while you work and react to little things you do.\n"
+    'Right-click me anytime and choose "What can Mochi do?" to learn more.\n'
+    "I'll try not to get in the way. ♡"
+)
+FIRST_STARTUP_GREETING_SECONDS = 12.0
+
 
 class ClickDialogueMixin:
     """Add immediate click audio and a playful three-click response."""
@@ -121,7 +129,7 @@ class ClickDialogueMixin:
         return shown
 
     def _show_startup_greeting(self) -> bool:
-        """Show startup speech with the same visible typing beat as ambient lines."""
+        """Show first-run onboarding once, then use the normal session greeting."""
         self._presence_startup_source_id = None
         if self._presence_shutting_down or self._preview_mode:
             return GLib.SOURCE_REMOVE
@@ -137,17 +145,34 @@ class ClickDialogueMixin:
         ):
             return GLib.SOURCE_REMOVE
 
-        text = self._ambient_presence_engine.phrases.choose(
-            "startup",
-            exclude_recent=True,
-        )
+        first_startup = not self._config.load_first_startup_dialogue_seen()
+        if first_startup:
+            text = FIRST_STARTUP_GREETING
+            duration_seconds = FIRST_STARTUP_GREETING_SECONDS
+        else:
+            text = self._ambient_presence_engine.phrases.choose(
+                "startup",
+                exclude_recent=True,
+            )
+            duration_seconds = speech_display_seconds(text)
+
         presentation = SpeechText(text, typing_preview=True)
         if bubble.show(
             presentation,
-            duration_seconds=speech_display_seconds(text),
+            duration_seconds=duration_seconds,
         ):
-            self._ambient_presence_engine.phrases.remember(text)
-            self._logger.debug("[presence] startup greeting typing-preview text=%r", text)
+            if first_startup:
+                # Persist only after the bubble is actually visible. If startup
+                # was suppressed or another bubble won the race, try again on a
+                # later launch rather than silently consuming the introduction.
+                self._config.save_first_startup_dialogue_seen(True)
+                self._logger.info("[presence] first-startup introduction shown")
+            else:
+                self._ambient_presence_engine.phrases.remember(text)
+                self._logger.debug(
+                    "[presence] startup greeting typing-preview text=%r",
+                    text,
+                )
         return GLib.SOURCE_REMOVE
 
     def _preview_presence_category(self, category: str) -> None:

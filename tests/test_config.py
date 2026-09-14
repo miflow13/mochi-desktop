@@ -65,6 +65,15 @@ class ConfigStoreTests(unittest.TestCase):
             store.save_edge_roam(False)
             self.assertFalse(store.load_edge_roam())
 
+    def test_first_startup_dialogue_seen_defaults_off_and_round_trips(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertFalse(store.load_first_startup_dialogue_seen())
+            store.save_first_startup_dialogue_seen(True)
+            self.assertTrue(store.load_first_startup_dialogue_seen())
+            store.save_first_startup_dialogue_seen(False)
+            self.assertFalse(store.load_first_startup_dialogue_seen())
+
 
 if __name__ == "__main__":
     unittest.main()

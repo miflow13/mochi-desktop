@@ -113,6 +113,20 @@ class ConfigStore:
         self._save(data)
         self._logger.debug("Edge roam: %s", bool(enabled))
 
+    def load_first_startup_dialogue_seen(self) -> bool:
+        """Return whether the one-time first-startup introduction has been shown."""
+        try:
+            seen = self._load()["first_startup_dialogue_seen"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return seen if isinstance(seen, bool) else False
+
+    def save_first_startup_dialogue_seen(self, seen: bool) -> None:
+        data = self._load_or_empty()
+        data["first_startup_dialogue_seen"] = bool(seen)
+        self._save(data)
+        self._logger.debug("First-startup dialogue seen: %s", bool(seen))
+
     def reset_position(self) -> None:
         try:
             data = self._load()
