@@ -94,6 +94,7 @@ class Buddy(Gtk.DrawingArea):
         on_click: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
+        self._shutting_down = False
         self._window = window
         self._placement = placement
         self._config = config
@@ -193,7 +194,7 @@ class Buddy(Gtk.DrawingArea):
         self._developer_menu = self._build_developer_menu()
         self._developer_menu.connect("closed", self._on_developer_menu_closed)
 
-        GLib.timeout_add(self.TICK_MS, self._tick)
+        self._tick_source_id = GLib.timeout_add(self.TICK_MS, self._tick)
         if not self._preview_mode:
             self._typing_monitor = TypingActivityMonitor(
                 on_typing_activity=self._on_typing_activity,
@@ -227,6 +228,34 @@ class Buddy(Gtk.DrawingArea):
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
+
+    def shutdown(self) -> None:
+        """Release the core resources owned by this Buddy exactly once."""
+        if self._shutting_down:
+            return
+        self._shutting_down = True
+        self._pending_context_action = None
+        self._pending_developer_action = None
+        self._menu_animation_serial += 1
+        for name in (
+            "_typing_monitor", "_presence_monitor", "_media_monitor",
+            "_file_activity_monitor", "_developer_shortcut_monitor",
+        ):
+            monitor = getattr(self, name)
+            if monitor is not None:
+                monitor.stop()
+                setattr(self, name, None)
+        for name in (
+            "_tick_source_id", "_idle_action_source_id", "_blink_source_id",
+            "_computer_idle_source_id", "_hover_heart_source_id",
+        ):
+            source_id = getattr(self, name)
+            if source_id is not None:
+                GLib.source_remove(source_id)
+                setattr(self, name, None)
+        self.player.stop()
+        self._context_menu.destroy()
+        self._developer_menu.destroy()
 
     def _initialize_context_menu_layout(
         self,
@@ -805,7 +834,8 @@ class Buddy(Gtk.DrawingArea):
             GLib.idle_add(self._dispatch_context_action, action)
 
     def _dispatch_context_action(self, action: Callable[[], None]) -> bool:
-        action()
+        if not self._shutting_down:
+            action()
         return GLib.SOURCE_REMOVE
 
     def _quit_application(self) -> None:

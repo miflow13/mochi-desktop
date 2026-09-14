@@ -46,7 +46,7 @@ QUICK_START_SECTIONS = (
         "You do not have to interact with Mochi, but he does notice when you do.",
         (
             "Hover over Mochi — he may answer with a little heart.",
-            "Left-click — a tactile bounce or squish with a tiny chirp.",
+            "Left-click — a tactile bounce with a tiny chirp.",
             "Double-click — a heart emote.",
             "Drag — pick Mochi up and move him around the desktop.",
             "Right-click — open Mochi's user menu.",

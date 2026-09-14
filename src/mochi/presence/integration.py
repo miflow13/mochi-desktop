@@ -317,6 +317,8 @@ class PresenceBuddyMixin:
         GLib.idle_add(self._dispatch_presence_developer_action, action)
 
     def _dispatch_presence_developer_action(self, action) -> bool:
+        if self._presence_shutting_down:
+            return GLib.SOURCE_REMOVE
         self._context_menu_open = False
         try:
             action()
@@ -741,7 +743,7 @@ class PresenceBuddyMixin:
         if self._app_category_monitor is not None:
             self._app_category_monitor.stop()
         if self._presence_bubble is not None:
-            self._presence_bubble.hide()
+            self._presence_bubble.destroy()
 
 
 class PresenceBuddy(PresenceBuddyMixin, Buddy):

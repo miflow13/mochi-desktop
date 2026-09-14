@@ -196,6 +196,11 @@ class SpeechBubble:
         self._cancel_sources()
         self._finish_hide()
 
+    def destroy(self) -> None:
+        self.hide()
+        self._window.destroy()
+        self._popover.unparent()
+
     def _set_text(self, text: str, *, typing: bool) -> None:
         self._label.set_text(text)
         self._popover_label.set_text(text)

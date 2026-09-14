@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import logging
+import math
 import os
 from pathlib import Path
 
@@ -25,29 +26,34 @@ class ConfigStore:
         config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
         self.path = path or config_home / "mochi" / "config.json"
         self._logger = logging.getLogger(__name__)
+        self._reported_errors: set[str] = set()
 
     def load_position(self) -> Position | None:
         try:
             data = self._load()
             if "x" not in data and "y" not in data:
                 return None
-            return Position(x=int(data["x"]), y=int(data["y"]))
+            x = self._integer(data["x"])
+            y = self._integer(data["y"])
+            if not all(-(2**31) <= value < 2**31 for value in (x, y)):
+                raise ValueError("position exceeds desktop coordinate range")
+            return Position(x=x, y=y)
         except FileNotFoundError:
             return None
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-            self._logger.warning("Ignoring invalid config %s: %s", self.path, error)
+        except (KeyError, TypeError, ValueError, OverflowError, json.JSONDecodeError) as error:
+            self._report_error("read", error)
             return None
 
     def save_position(self, position: Position) -> None:
         data = self._load_or_empty()
         data.update({"x": position.x, "y": position.y})
         self._save(data)
-        self._logger.debug("Position saved: %d, %d", position.x, position.y)
+        self._logger.debug("Position save requested: %d, %d", position.x, position.y)
 
     def load_size(self) -> int:
         try:
-            size = int(self._load()["size"])
-        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            size = self._integer(self._load()["size"])
+        except (FileNotFoundError, KeyError, TypeError, ValueError, OverflowError, json.JSONDecodeError):
             return self.DEFAULT_SIZE
         return max(self.MIN_SIZE, min(size, self.MAX_SIZE))
 
@@ -56,12 +62,17 @@ class ConfigStore:
         data = self._load_or_empty()
         data["size"] = size
         self._save(data)
-        self._logger.debug("Size saved: %d", size)
+        self._logger.debug("Size save requested: %d", size)
 
     def load_volume(self) -> float:
         try:
-            volume = float(self._load()["volume"])
-        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            value = self._load()["volume"]
+            if isinstance(value, bool):
+                raise ValueError("volume must be numeric")
+            volume = float(value)
+            if not math.isfinite(volume):
+                raise ValueError("volume must be finite")
+        except (FileNotFoundError, KeyError, TypeError, ValueError, OverflowError, json.JSONDecodeError):
             return self.DEFAULT_VOLUME
         return max(0.0, min(volume, 1.0))
 
@@ -75,7 +86,7 @@ class ConfigStore:
     def load_muted(self) -> bool:
         try:
             muted = self._load()["muted"]
-        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (FileNotFoundError, KeyError, TypeError, ValueError, OverflowError, json.JSONDecodeError):
             return False
         return muted if isinstance(muted, bool) else False
 
@@ -89,7 +100,7 @@ class ConfigStore:
         """Return whether autonomous walking is disabled."""
         try:
             stay_put = self._load()["stay_put"]
-        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (FileNotFoundError, KeyError, TypeError, ValueError, OverflowError, json.JSONDecodeError):
             return False
         return stay_put if isinstance(stay_put, bool) else False
 
@@ -103,7 +114,7 @@ class ConfigStore:
         """Return whether autonomous wandering should stay on screen edges."""
         try:
             edge_roam = self._load()["edge_roam"]
-        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (FileNotFoundError, KeyError, TypeError, ValueError, OverflowError, json.JSONDecodeError):
             return False
         return edge_roam if isinstance(edge_roam, bool) else False
 
@@ -114,36 +125,54 @@ class ConfigStore:
         self._logger.debug("Edge roam: %s", bool(enabled))
 
     def reset_position(self) -> None:
-        try:
-            data = self._load()
-            data.pop("x", None)
-            data.pop("y", None)
-            if data:
-                self._save(data)
-            else:
-                self.path.unlink()
-            self._logger.info("Saved Mochi position reset")
-        except FileNotFoundError:
-            pass
-        except (TypeError, ValueError, json.JSONDecodeError):
-            self.path.unlink(missing_ok=True)
+        data = self._load_or_empty()
+        data.pop("x", None)
+        data.pop("y", None)
+        if data:
+            self._save(data)
+        else:
+            try:
+                self.path.unlink(missing_ok=True)
+            except OSError as error:
+                self._report_error("write", error)
+
+    @staticmethod
+    def _integer(value: object) -> int:
+        if isinstance(value, bool):
+            raise ValueError("expected an integer, not a boolean")
+        return int(value)
+
+    def _report_error(self, operation: str, error: Exception) -> None:
+        # Saving can happen after each walk. Report an unavailable config once
+        # per operation rather than filling logs throughout the session.
+        if operation not in self._reported_errors:
+            self._reported_errors.add(operation)
+            self._logger.warning("Could not %s config %s: %s", operation, self.path, error)
 
     def _load(self) -> dict[str, object]:
-        data = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            raise TypeError("configuration root must be an object")
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise TypeError("configuration root must be an object")
+        except FileNotFoundError:
+            return {}
+        except (OSError, TypeError, ValueError) as error:
+            self._report_error("read", error)
+            return {}
         return data
 
     def _load_or_empty(self) -> dict[str, object]:
-        try:
-            return self._load()
-        except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError):
-            return {}
+        return self._load()
 
     def _save(self, data: dict[str, object]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.path.with_suffix(".tmp")
-        temporary_path.write_text(
-            json.dumps(data, indent=2) + "\n", encoding="utf-8"
-        )
-        temporary_path.replace(self.path)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = self.path.with_suffix(".tmp")
+            temporary_path.write_text(
+                json.dumps(data, indent=2) + "\n", encoding="utf-8"
+            )
+            temporary_path.replace(self.path)
+        except OSError as error:
+            # Persistence must never abort an animation completion/input callback.
+            # The previous config remains intact if the atomic replace fails.
+            self._report_error("write", error)

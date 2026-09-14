@@ -123,7 +123,8 @@ Remove saved settings too:
 
 ## current status
 
-**Version:** `0.2.0-alpha`  
+**Release candidate target:** `v0.2.0-alpha.1` (Python package: `0.2.0a1`)
+
 **Stage:** Phase 2 — *Make Mochi Feel Alive*
 
 Working now:
@@ -201,13 +202,13 @@ Application awareness is reduced to broad semantic categories before Mochi react
 
 ## interactions
 
-- **Left-click** — tactile bounce / squish + chirp
+- **Left-click** — tactile bounce + chirp
 - **Three quick clicks** — occasional tiny dialogue
 - **Double-click** — heart emote
 - **Drag** — pick Mochi up and move him around
-- **Right-click** — size, audio, sleep/wake, **Stay put**, and Quit
+- **Right-click** — Quick Start, sleep/wake, **Stay put**, **Edge roam**, and Quit
 - **Stay put** — disables autonomous wandering without freezing other behavior
-- **Mochi Lab** — developer controls for animations and AmbiSense tuning
+- **Mochi Lab** — size, audio, animation previews, and AmbiSense tuning (`Ctrl + Alt + Shift + M` with the GNOME helper active)
 
 Nothing requires a response. You can ignore Mochi completely and let him do his little thing.
 

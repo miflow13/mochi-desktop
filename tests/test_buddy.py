@@ -278,6 +278,7 @@ class BuddyContextMenuTests(unittest.TestCase):
     def test_menu_action_waits_for_closed_and_one_idle_turn(self) -> None:
         action = Mock()
         buddy = SimpleNamespace(
+            _shutting_down=False,
             _pending_context_action=None,
             _context_menu_open=True,
             _context_menu=SimpleNamespace(popdown=Mock()),

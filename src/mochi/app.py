@@ -231,6 +231,7 @@ class MochiApplication(Gtk.Application):
     def do_shutdown(self) -> None:
         if self._buddy is not None:
             self._buddy.shutdown_presence()
+            self._buddy.shutdown()
             self._buddy = None
         if not self.preview_animations:
             self.sound.play(SoundEvent.EXIT)

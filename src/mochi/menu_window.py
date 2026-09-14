@@ -216,6 +216,12 @@ class MenuWindow:
         for callback in tuple(self._closed_callbacks):
             callback(self)
 
+    def destroy(self) -> None:
+        self._position_serial += 1
+        self._dismiss_armed = False
+        self._stop_following_owner()
+        self.window.destroy()
+
     def _follow_owner_tick(self) -> bool:
         if not self._follow_owner or not self.window.get_visible():
             self._follow_source_id = None
