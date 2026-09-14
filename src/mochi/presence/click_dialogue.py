@@ -39,7 +39,7 @@ FIRST_STARTUP_GREETING = (
 )
 FIRST_STARTUP_GREETING_SECONDS = 12.0
 STARTUP_GREETING_RETRY_MS = 600
-STARTUP_GREETING_MAX_ATTEMPTS = 10
+STARTUP_GREETING_MAX_ATTEMPTS = 20
 
 
 class ClickDialogueMixin:
@@ -160,18 +160,15 @@ class ClickDialogueMixin:
             return GLib.SOURCE_REMOVE
 
         tuning = self._ambient_presence_engine.tuning
-        if (
-            not tuning.speech_enabled
-            or not tuning.ambient_reactions_enabled
-            or tuning.quiet_mode
-        ):
+        # Session greetings are lifecycle speech, not ambient chatter. A stale
+        # idle flag or disabled ambient reactions must not swallow them. Respect
+        # only the explicit speech/quiet controls.
+        if not tuning.speech_enabled or tuning.quiet_mode:
             return GLib.SOURCE_REMOVE
 
         bubble = self._presence_bubble
         if bubble is None:
             return self._schedule_startup_greeting_retry("bubble-not-ready")
-        if self._user_idle:
-            return self._schedule_startup_greeting_retry("user-idle")
         if bubble.visible:
             return self._schedule_startup_greeting_retry("bubble-busy")
 
@@ -180,8 +177,10 @@ class ClickDialogueMixin:
             text = FIRST_STARTUP_GREETING
             duration_seconds = FIRST_STARTUP_GREETING_SECONDS
         else:
+            # Reopening Mochi is a true session return, so use the dedicated
+            # welcome-back bank rather than generic startup/status phrases.
             text = self._ambient_presence_engine.phrases.choose(
-                "startup",
+                "return_from_idle",
                 exclude_recent=True,
             )
             duration_seconds = speech_display_seconds(text)
@@ -202,7 +201,7 @@ class ClickDialogueMixin:
         else:
             self._ambient_presence_engine.phrases.remember(text)
             self._logger.debug(
-                "[presence] session startup greeting typing-preview text=%r",
+                "[presence] session welcome-back greeting typing-preview text=%r",
                 text,
             )
         return GLib.SOURCE_REMOVE
