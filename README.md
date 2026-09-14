@@ -1,4 +1,6 @@
 # mochi 🌱
+<img width="800" height="475" alt="648764645-d64b6900-3120-4174-9ec6-a40688fe921a" src="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e" />
+
 
 > ⚠️ **First install on GNOME Wayland**
 >
