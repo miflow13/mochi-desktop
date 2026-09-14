@@ -19,7 +19,7 @@ class FakeLogger:
 
 
 class FakePhrases:
-    def __init__(self, text: str = "hello again") -> None:
+    def __init__(self, text: str = "welcome back") -> None:
         self.text = text
         self.choose_calls: list[tuple[str, bool]] = []
         self.remembered: list[str] = []
@@ -70,18 +70,25 @@ class StartupHarness:
         ClickDialogueMixin._schedule_startup_greeting_retry
     )
 
-    def __init__(self, *, seen: bool, bubble_visible: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        seen: bool,
+        bubble_visible: bool = False,
+        user_idle: bool = False,
+        ambient_reactions_enabled: bool = True,
+    ) -> None:
         self._presence_startup_source_id = 99
         self._presence_shutting_down = False
         self._preview_mode = False
-        self._user_idle = False
+        self._user_idle = user_idle
         self._startup_greeting_attempts = 0
         self._config = FakeConfig(seen=seen)
         self._presence_bubble = FakeBubble(visible=bubble_visible)
         self._ambient_presence_engine = SimpleNamespace(
             tuning=SimpleNamespace(
                 speech_enabled=True,
-                ambient_reactions_enabled=True,
+                ambient_reactions_enabled=ambient_reactions_enabled,
                 quiet_mode=False,
             ),
             phrases=FakePhrases(),
@@ -89,16 +96,31 @@ class StartupHarness:
         self._logger = FakeLogger()
 
 
-def test_later_launch_uses_normal_startup_phrase() -> None:
+def test_later_launch_uses_welcome_back_phrase_bank() -> None:
     buddy = StartupHarness(seen=True)
 
     result = buddy._show_startup_greeting()
 
     assert result == dialogue.GLib.SOURCE_REMOVE
-    assert buddy._ambient_presence_engine.phrases.choose_calls == [("startup", True)]
-    assert buddy._presence_bubble.calls == [("hello again", 3.5, True)]
-    assert buddy._ambient_presence_engine.phrases.remembered == ["hello again"]
+    assert buddy._ambient_presence_engine.phrases.choose_calls == [
+        ("return_from_idle", True)
+    ]
+    assert buddy._presence_bubble.calls == [("welcome back", 3.5, True)]
+    assert buddy._ambient_presence_engine.phrases.remembered == ["welcome back"]
     assert buddy._config.saved == []
+
+
+def test_session_greeting_ignores_stale_idle_and_ambient_reaction_gate() -> None:
+    buddy = StartupHarness(
+        seen=True,
+        user_idle=True,
+        ambient_reactions_enabled=False,
+    )
+
+    buddy._show_startup_greeting()
+
+    assert buddy._presence_bubble.calls == [("welcome back", 3.5, True)]
+    assert buddy._startup_greeting_attempts == 0
 
 
 def test_busy_startup_bubble_retries_then_delivers_session_greeting(monkeypatch) -> None:
@@ -123,8 +145,8 @@ def test_busy_startup_bubble_retries_then_delivers_session_greeting(monkeypatch)
     retry_callback = scheduled[0][1]
     retry_callback()
 
-    assert buddy._presence_bubble.calls == [("hello again", 3.5, True)]
-    assert buddy._ambient_presence_engine.phrases.remembered == ["hello again"]
+    assert buddy._presence_bubble.calls == [("welcome back", 3.5, True)]
+    assert buddy._ambient_presence_engine.phrases.remembered == ["welcome back"]
     assert buddy._startup_greeting_attempts == 0
 
 
