@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#fbfbfe" />
   <meta
     name="description"
-    content="Mochi is a tiny handcrafted Linux desktop companion with privacy-first ambient awareness. Early public alpha available now for Fedora GNOME."
+    content="Mochi is a handcrafted Linux desktop companion with privacy-first AmbiSense awareness. Early public alpha, actively tested on Fedora GNOME Wayland."
   />
   <title>Mochi — Tiny desktop companion</title>
   <link rel="stylesheet" href="styles.css" />
@@ -30,11 +30,12 @@
 
   <main id="top">
     <section class="hero">
-      <p class="eyebrow">Early public alpha · Fedora + GNOME</p>
+      <p class="eyebrow">Early public alpha · Fedora + GNOME + Wayland</p>
       <h1>Soft, playful, and quietly alive.</h1>
       <p class="hero-copy">
-        Meet Mochi — a handcrafted pixel companion who wanders, reacts, chats,
-        sleeps, and notices the shape of activity around your Linux desktop.
+        Meet Mochi — a handcrafted Linux desktop companion who wanders, reacts,
+        chats, sleeps, and notices the broad shape of activity around your desktop
+        through privacy-first AmbiSense.
       </p>
 
       <div class="hero-actions">
@@ -44,34 +45,72 @@
 
       <div class="hero-visual">
         <div class="hero-frame">
-          <img src="https://github.com/user-attachments/assets/d64b6900-3120-4174-9ec6-a40688fe921a" alt="Mochi desktop preview" class="hero-gif" />
+          <img src="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e" alt="Mochi desktop preview" class="hero-gif" />
         </div>
       </div>
     </section>
 
     <section class="overview" id="about">
       <div class="section-intro">
-        <p class="eyebrow">Designed with care</p>
+        <p class="eyebrow">Why Mochi?</p>
         <h2>A little creature, not another dashboard.</h2>
         <p>
-          Mochi is made to feel at home on your desktop: expressive enough to have
-          personality, lightweight enough to leave running, and easy to ignore when
-          you're busy.
+          Desktop pets already exist. Mochi is an experiment in making one feel native
+          to Linux: expressive, context-aware, polished, easy to use, and pleasant to
+          leave running. There are no productivity scores, streaks, nagging prompts, or
+          requirements to interact with him.
         </p>
       </div>
 
       <div class="feature-grid">
         <article class="feature-card">
           <h3>Handcrafted</h3>
-          <p>Original pixel-art sprites and animations made frame by frame with love.</p>
+          <p>
+            Original pixel art and animation drawn frame by frame in
+            <a href="https://github.com/orama-interactive/pixelorama" target="_blank" rel="noreferrer"><strong>Pixelorama</strong></a>.
+          </p>
         </article>
         <article class="feature-card">
-          <h3>Mochi Sense</h3>
-          <p>Privacy-first local awareness lets Mochi react to broad activity without reading what you type.</p>
+          <h3>AmbiSense</h3>
+          <p>
+            A local rule-based awareness system that reacts to broad desktop activity
+            without reading or storing what you type.
+          </p>
         </article>
         <article class="feature-card">
           <h3>Linux-native spirit</h3>
-          <p>Built around GTK4, GNOME, Wayland/XWayland, and the tiny details of a real Linux desktop.</p>
+          <p>
+            Built with Python, GTK4/PyGObject, Cairo, a GNOME Shell helper, D-Bus,
+            Wayland, and XWayland integration.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="overview" id="ambisense">
+      <div class="section-intro">
+        <p class="eyebrow">Privacy first</p>
+        <h2>Awareness without reading your work.</h2>
+        <p>
+          On GNOME, Mochi's Shell helper reduces desktop activity to small semantic
+          signals before they reach Mochi. Keyboard activity becomes an anonymous
+          <strong>Pulse</strong> over D-Bus — no key symbols, characters, words, or typed
+          content are sent to the app.
+        </p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card">
+          <h3>Typing</h3>
+          <p>Anonymous activity timing and intensity only. Typed content is never stored or reconstructed.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Context</h3>
+          <p>Applications are reduced to broad categories such as editor, terminal, browser, media, or pixel-art software.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Local behavior</h3>
+          <p>AmbiSense is not an LLM or cloud AI service. It is a lightweight local rule-based behavior engine.</p>
         </article>
       </div>
     </section>
@@ -81,9 +120,10 @@
         <p class="eyebrow">Early public alpha</p>
         <h2>Bring Mochi home.</h2>
         <p>
-          Fedora + GNOME on Wayland is the actively tested environment. The installer
-          handles Fedora dependencies, Mochi's private Python environment, the GNOME
-          helper, and an app-grid launcher.
+          Fedora + GNOME on Wayland is the recommended and actively tested environment.
+          The installer handles Fedora dependencies, Mochi's private Python environment,
+          the GNOME helper, app-grid entry, and local launchers. Other Linux setups may
+          work, but support is still broader than the current test matrix.
         </p>
       </div>
 
@@ -107,15 +147,51 @@
         <div class="step">
           <span class="step-number">03</span>
           <div>
+            <h3>Log out and back in once</h3>
+            <p>On first install under GNOME Wayland, this lets GNOME load Mochi's desktop-awareness helper. You do not need to reinstall afterward.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-number">04</span>
+          <div>
             <h3>Open Mochi</h3>
-            <p>Launch <strong>Mochi</strong> from the GNOME app grid. Right-click him and choose <strong>Quit Mochi</strong> whenever you want him to go away.</p>
+            <p>Launch <strong>Mochi</strong> from the GNOME app grid, or run <code>mochi</code> from a terminal.</p>
           </div>
         </div>
 
         <div class="download-actions">
-          <a class="button button-primary" href="https://github.com/miflow13/mochi-desktop#install-mochi" target="_blank" rel="noreferrer">Installation guide</a>
+          <a class="button button-primary" href="https://github.com/miflow13/mochi-desktop#install" target="_blank" rel="noreferrer">Installation guide</a>
           <a class="text-link" href="https://github.com/miflow13/mochi-desktop/issues" target="_blank" rel="noreferrer">Report an alpha bug</a>
         </div>
+      </div>
+    </section>
+
+    <section class="overview" id="limitations">
+      <div class="section-intro">
+        <p class="eyebrow">Alpha notes</p>
+        <h2>Small support boundary. Useful bug reports.</h2>
+        <p>
+          Mochi is still an alpha. GNOME gets the fullest AmbiSense experience, Niri
+          support is experimental, and mixed monitor layouts, scaling, workspaces, and
+          XWayland behavior can still expose edge cases. If something fails quietly,
+          that is worth reporting too.
+        </p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card">
+          <h3>Primary target</h3>
+          <p>Fedora Linux + GNOME + Wayland is the main tested environment today.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Still expanding</h3>
+          <p>Broader Linux compatibility, more AmbiSense contexts, and more environment testing are ongoing.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Found something odd?</h3>
+          <p>Open a GitHub issue with your desktop/session, monitor setup, reproduction steps, and any useful terminal output.</p>
+        </article>
       </div>
     </section>
 
