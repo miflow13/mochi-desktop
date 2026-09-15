@@ -29,7 +29,6 @@ CLICK_BURST_PHRASES = (
     "tiny creature here!",
 )
 
-
 class ClickDialogueMixin:
     """Add immediate click audio and a playful three-click response."""
 

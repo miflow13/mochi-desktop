@@ -72,6 +72,13 @@ class ConfigStoreTests(unittest.TestCase):
             store.mark_started()
             self.assertTrue(store.has_started_before())
 
+    def test_intro_marker_is_persisted_separately_from_startup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertFalse(store.has_seen_intro())
+            store.mark_intro_seen()
+            self.assertTrue(store.has_seen_intro())
+
 
 if __name__ == "__main__":
     unittest.main()
