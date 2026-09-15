@@ -71,6 +71,47 @@ class X11Buddy(Buddy):
             if logger is not None:
                 logger.debug("Drag dialogue: wheee!")
 
+    def _sample_x11_drag(self, render: bool = True) -> None:
+        """Drive drag visuals from the pointer-owned target, not X11 readback.
+
+        ``_move_with_x11_pointer`` updates ``WindowPlacement.position`` from the
+        root pointer before every drag tick. Reading the X11 window position back
+        immediately afterwards adds an avoidable compositor/server round trip and
+        can leave the visual pose one or more samples behind a direction reversal.
+        The target position is already the authoritative motion input while held,
+        so use it directly for velocity and pose selection.
+        """
+        position = self._placement.position
+        timestamp = time.monotonic()
+        previous_position = self._drag_sample_position
+        previous_time = self._drag_sample_time
+
+        if previous_position is None or previous_time is None:
+            self._drag_motion.begin(position.x, position.y, timestamp)
+            elapsed = 0.0
+        else:
+            elapsed = timestamp - previous_time
+            self._drag_motion.update(position.x, position.y, timestamp)
+
+        self._drag_sample_position = (position.x, position.y)
+        self._drag_sample_time = timestamp
+        self._last_drag_update_time = timestamp
+
+        if render:
+            self._play_drag_pose()
+
+        frame = self.player.frame
+        self._logger.debug(
+            "X11 drag target=(%d,%d) dt=%.3f filtered_velocity_x=%.1f intensity=%.3f frame_index=%d sprite=%s",
+            position.x,
+            position.y,
+            elapsed,
+            self._drag_motion.filtered_velocity_x,
+            self._drag_motion.horizontal_intensity,
+            self._drag_frame_index,
+            frame.sprite if frame is not None else "none",
+        )
+
     def _tick(self) -> bool:
         # Keep the window attached to the root pointer at Mochi's normal 60-ish
         # Hz tick rate as well as on gesture updates. This avoids event-coalescing
