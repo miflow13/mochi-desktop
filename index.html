@@ -3,12 +3,117 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#ffffff" />
+  <title>Mochi — Handcrafted Linux Desktop Companion</title>
   <meta
     name="description"
-    content="mochi is a tiny handcrafted Linux desktop companion for linux. Developed on Fedora."
+    content="Mochi is a handcrafted Linux desktop companion for Fedora, GNOME, and Wayland—a privacy-first pixel-art pet that reacts locally to your activity."
   />
-  <title>Mochi 🌱</title>
+  <meta
+    name="robots"
+    content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+  />
+  <meta name="author" content="Mika Flowers" />
+  <meta name="theme-color" content="#ffffff" />
+
+  <link rel="canonical" href="https://miflow13.github.io/mochi-desktop/" />
+  <link rel="icon" type="image/png" sizes="256x256" href="assets/mochi/idle/idle_01.png" />
+  <link rel="apple-touch-icon" href="assets/mochi_original_set/mochi_default.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Mochi" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:url" content="https://miflow13.github.io/mochi-desktop/" />
+  <meta property="og:title" content="Mochi — Handcrafted Linux Desktop Companion" />
+  <meta
+    property="og:description"
+    content="A privacy-first pixel-art companion for Fedora, GNOME, and Wayland that reacts locally to your desktop activity."
+  />
+  <meta
+    property="og:image"
+    content="https://miflow13.github.io/mochi-desktop/assets/mochi_original_set/mochi_default.png"
+  />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1254" />
+  <meta property="og:image:height" content="1254" />
+  <meta property="og:image:alt" content="Mochi, a handcrafted green pixel-art Linux desktop companion" />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Mochi — Handcrafted Linux Desktop Companion" />
+  <meta
+    name="twitter:description"
+    content="A privacy-first pixel-art companion for Fedora, GNOME, and Wayland."
+  />
+  <meta
+    name="twitter:image"
+    content="https://miflow13.github.io/mochi-desktop/assets/mochi_original_set/mochi_default.png"
+  />
+  <meta name="twitter:image:alt" content="Mochi, a handcrafted green pixel-art Linux desktop companion" />
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://miflow13.github.io/mochi-desktop/#website",
+          "url": "https://miflow13.github.io/mochi-desktop/",
+          "name": "Mochi",
+          "alternateName": "Mochi Desktop Companion",
+          "description": "A handcrafted, privacy-first pixel-art companion for the Linux desktop.",
+          "inLanguage": "en-US"
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://miflow13.github.io/mochi-desktop/#webpage",
+          "url": "https://miflow13.github.io/mochi-desktop/",
+          "name": "Mochi — Handcrafted Linux Desktop Companion",
+          "description": "Mochi is a handcrafted Linux desktop companion for Fedora, GNOME, and Wayland—a privacy-first pixel-art pet that reacts locally to your activity.",
+          "inLanguage": "en-US",
+          "isPartOf": {
+            "@id": "https://miflow13.github.io/mochi-desktop/#website"
+          },
+          "about": {
+            "@id": "https://miflow13.github.io/mochi-desktop/#project"
+          },
+          "author": {
+            "@id": "https://github.com/miflow13#person"
+          },
+          "primaryImageOfPage": {
+            "@id": "https://miflow13.github.io/mochi-desktop/#primaryimage"
+          }
+        },
+        {
+          "@type": "ImageObject",
+          "@id": "https://miflow13.github.io/mochi-desktop/#primaryimage",
+          "url": "https://miflow13.github.io/mochi-desktop/assets/mochi_original_set/mochi_default.png",
+          "contentUrl": "https://miflow13.github.io/mochi-desktop/assets/mochi_original_set/mochi_default.png",
+          "width": 1254,
+          "height": 1254,
+          "caption": "Mochi, a handcrafted green pixel-art Linux desktop companion"
+        },
+        {
+          "@type": "SoftwareSourceCode",
+          "@id": "https://miflow13.github.io/mochi-desktop/#project",
+          "name": "Mochi",
+          "description": "A handcrafted, privacy-first Linux desktop companion built with Python and GTK4.",
+          "codeRepository": "https://github.com/miflow13/mochi-desktop",
+          "license": "https://github.com/miflow13/mochi-desktop/blob/main/LICENSE",
+          "programmingLanguage": "Python",
+          "runtimePlatform": "Fedora Linux, GNOME, Wayland and XWayland",
+          "author": {
+            "@id": "https://github.com/miflow13#person"
+          }
+        },
+        {
+          "@type": "Person",
+          "@id": "https://github.com/miflow13#person",
+          "name": "Mika Flowers",
+          "url": "https://github.com/miflow13"
+        }
+      ]
+    }
+  </script>
+
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -29,19 +134,23 @@
   <hr />
 
   <main>
-    <section class="intro">
+    <div class="intro">
       <p><strong>Early public alpha.</strong> Fedora + GNOME on Wayland is the main tested setup.</p>
       <p>
-        mochi is a small pixel creature that lives on your desktop. he has personality. he wonders, talks to you as you code. 
+        mochi is a small pixel creature that lives on your desktop. he has personality. he wanders and talks to you as you code.
       </p>
 
       <p class="preview">
         <img
           src="https://github.com/user-attachments/assets/d64b6900-3120-4174-9ec6-a40688fe921a"
-          alt="Mochi desktop preview"
+          alt="Mochi, a green pixel-art desktop companion, running on Fedora Linux"
+          width="800"
+          height="475"
+          decoding="async"
+          fetchpriority="high"
         />
       </p>
-    </section>
+    </div>
 
     <hr />
 
