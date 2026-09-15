@@ -13,10 +13,6 @@ react to broad local desktop activity without reading its contents.
 > tested configuration. Mochi uses XWayland for its window on GNOME Wayland,
 > where native positioning restrictions require it.
 
-Public-alpha readiness is tracked in [issue #37](https://github.com/miflow13/mochi-desktop/issues/37).
-The workspace/Overview freeze (#45) and drag-direction latency (#68) remain
-open; see [known issues](#known-issues). Package/runtime metadata is `0.2.0a0`;
-published release labels differ, as explained in the [changelog](CHANGELOG.md#release-metadata-note).
 
 ## Install
 
