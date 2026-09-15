@@ -19,6 +19,7 @@ from .integration import (
 )
 from .music_dance import MusicDanceMixin
 from .nameplate_controls import NameplateMixin
+from .now_playing import NowPlayingMixin
 from .terminal_cowork import TerminalCoworkMixin
 
 
@@ -29,6 +30,7 @@ CLICK_BURST_PHRASES = (
     "eep!",
     "tiny creature here!",
 )
+
 
 class ClickDialogueMixin:
     """Add immediate click audio and a playful three-click response."""
@@ -161,6 +163,7 @@ class PresenceBuddy(
     MusicDanceMixin,
     EdgeRoamMixin,
     FeedMochiMixin,
+    NowPlayingMixin,
     NameplateMixin,
     BasePresenceBuddy,
 ):
@@ -176,6 +179,7 @@ class PresenceX11Buddy(
     MusicDanceMixin,
     EdgeRoamMixin,
     FeedMochiMixin,
+    NowPlayingMixin,
     NameplateMixin,
     BasePresenceX11Buddy,
 ):
