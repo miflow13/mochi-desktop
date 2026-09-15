@@ -67,6 +67,42 @@ class DragMotionModelTests(unittest.TestCase):
                 expected_direction = "right" if direction > 0 else "left"
                 self.assertIn(f"drag_{expected_direction}_", sprite)
 
+    def test_deliberate_direction_reversal_changes_pose_on_next_sample(self) -> None:
+        for direction in (-1, 1):
+            with self.subTest(direction=direction):
+                motion = DragMotionModel()
+                x = timestamp = 0.0
+                motion.begin(x, 0, timestamp)
+
+                timestamp += 0.016
+                x += direction * 600 * 0.016
+                motion.update(x, 0, timestamp)
+                before = motion.pose_sprite()
+
+                timestamp += 0.016
+                x += -direction * 300 * 0.016
+                motion.update(x, 0, timestamp)
+                after = motion.pose_sprite()
+
+                old_pose_direction = "left" if direction > 0 else "right"
+                new_pose_direction = "right" if direction > 0 else "left"
+                self.assertIn(f"drag_{old_pose_direction}_", before)
+                self.assertIn(f"drag_{new_pose_direction}_", after)
+
+    def test_tiny_opposite_jitter_does_not_snap_drag_direction(self) -> None:
+        motion = DragMotionModel()
+        motion.begin(0, 0, 0.0)
+        motion.update(9.6, 0, 0.016)  # 600 px/s rightward.
+        before = motion.filtered_velocity_x
+
+        # 30 px/s is below the soft-pose threshold, so this should be treated
+        # as jitter and allowed through the normal low-pass filter.
+        motion.update(9.12, 0, 0.032)
+
+        self.assertGreater(before, 0.0)
+        self.assertGreater(motion.filtered_velocity_x, 0.0)
+        self.assertIn("drag_left_", motion.pose_sprite())
+
     def test_drag_pose_uses_the_remaining_soft_and_medium_frames(self) -> None:
         selector = DragPoseSelector()
         self.assertEqual(selector.select(0.0, 0.0), "drag/drag_neutral.png")
