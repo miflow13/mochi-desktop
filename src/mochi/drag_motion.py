@@ -104,9 +104,23 @@ class DragMotionModel:
         # input before smoothing so a fast sweep cannot store excess momentum
         # that keeps the old pose visible when the pointer reverses direction.
         velocity_x = _clamp(velocity_x, -self.max_velocity, self.max_velocity)
-        self.filtered_velocity_x += self.smoothing * (
-            velocity_x - self.filtered_velocity_x
+
+        # A deliberate reversal should read as an immediate change of pull,
+        # not as momentum that has to decay through zero over several samples.
+        # Snap only once the new raw movement is strong enough to enter a drag
+        # pose; tiny opposite-sign pointer jitter keeps the normal smoothing.
+        reversing_direction = (
+            self.filtered_velocity_x * velocity_x < 0
+            and abs(velocity_x)
+            >= self.pose_selector.soft_enter_threshold * self.max_velocity
         )
+        if reversing_direction:
+            self.filtered_velocity_x = velocity_x
+        else:
+            self.filtered_velocity_x += self.smoothing * (
+                velocity_x - self.filtered_velocity_x
+            )
+
         self.filtered_velocity_y += self.smoothing * (
             velocity_y - self.filtered_velocity_y
         )
