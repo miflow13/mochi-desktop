@@ -57,6 +57,8 @@ class DragPoseSelector:
 
         if self.strength == "neutral":
             return "drag/drag_neutral.png"
+        # Asset names describe the pose's trailing lean, not pointer travel:
+        # moving right (+x) uses left-lean art, and moving left uses right-lean art.
         direction = "left" if horizontal_intensity > 0 else "right"
         return f"drag/drag_{direction}_{self.strength}.png"
 
@@ -66,7 +68,7 @@ class DragPoseSelector:
 
 
 def drag_settle_sprite(pose_sprite: str) -> str:
-    """Choose the release pose that corresponds to the current drag pose."""
+    """Match a lean to its named settle pose; Buddy releases via the drop animation."""
     if pose_sprite.startswith("drag/drag_left_"):
         return "drag/drag_settle_left.png"
     if pose_sprite.startswith("drag/drag_right_"):
