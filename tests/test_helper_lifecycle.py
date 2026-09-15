@@ -120,7 +120,9 @@ def test_app_category_owner_replacement_clears_and_resyncs():
     bus.change_owner(":1.1")
     bus.state = (False, False, False, "browser")
     bus.change_owner(":1.2")
-    assert events == ["terminal", "unknown", "browser"]
+    # The first helper snapshot establishes a baseline. A reconnect after
+    # losing the helper is a real state change and still reaches consumers.
+    assert events == ["unknown", "browser"]
     assert len(bus.subscriptions) == 1
     adapter.stop()
     assert events[-1] == "unknown"

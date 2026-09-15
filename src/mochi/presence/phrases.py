@@ -4,10 +4,33 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Iterable
+from html import escape
 import random
 
 
+INTRO_LINES = (
+    "Hi! I’m Mochi 🌱",
+    "I’ll hang out while you work and react to little things you do.",
+    "Right-click me anytime to see what I can do.",
+    "I’ll try not to get in the way. ♡",
+)
+INTRO_TEXT = "\n".join(INTRO_LINES)
+INTRO_MARKUP = "\n".join(
+    f"<b>{escape(line)}</b>" if index in (0, 2) else escape(line)
+    for index, line in enumerate(INTRO_LINES)
+)
+
+
 PHRASES: dict[str, tuple[str, ...]] = {
+    "intro": (INTRO_TEXT,),
+    "welcome_back": (
+        "welcome back!",
+        "you're back 🌱",
+        "hi again!",
+        "there you are!",
+        "welcome back. i missed your desktop.",
+        "oh! you're back.",
+    ),
     "startup": (
         'oh, hi',
         'hello again',
