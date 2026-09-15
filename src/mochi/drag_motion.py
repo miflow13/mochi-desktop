@@ -7,6 +7,7 @@ import math
 
 from mochi.interaction_tuning import (
     DRAG_HEAVY_VELOCITY_PX_PER_SECOND,
+    DRAG_DIRECTION_MIN_DELTA_PX,
     DRAG_MEDIUM_ENTER_THRESHOLD,
     DRAG_MEDIUM_EXIT_THRESHOLD,
     DRAG_SOFT_ENTER_THRESHOLD,
@@ -98,7 +99,8 @@ class DragMotionModel:
         elapsed = timestamp - self._previous_time
         if elapsed <= 0:
             return
-        velocity_x = (x - self._previous_x) / elapsed
+        delta_x = x - self._previous_x
+        velocity_x = delta_x / elapsed
         velocity_y = (y - self._previous_y) / elapsed
         # Speeds above full lean have no additional visual meaning. Bound the
         # input before smoothing so a fast sweep cannot store excess momentum
@@ -108,9 +110,11 @@ class DragMotionModel:
         # A deliberate reversal should read as an immediate change of pull,
         # not as momentum that has to decay through zero over several samples.
         # Snap only once the new raw movement is strong enough to enter a drag
-        # pose; tiny opposite-sign pointer jitter keeps the normal smoothing.
+        # pose and spans more than one pixel. At a 16 ms tick, even one pixel
+        # exceeds the speed threshold; keep that jitter on normal smoothing.
         reversing_direction = (
             self.filtered_velocity_x * velocity_x < 0
+            and abs(delta_x) >= DRAG_DIRECTION_MIN_DELTA_PX
             and abs(velocity_x)
             >= self.pose_selector.soft_enter_threshold * self.max_velocity
         )

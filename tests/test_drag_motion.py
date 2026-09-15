@@ -59,7 +59,7 @@ class DragMotionModelTests(unittest.TestCase):
                 motion.begin(x, 0, timestamp)
                 # Sample a fast sweep, then a deliberate slower reversal at
                 # the same 16 ms cadence used by the desktop animation tick.
-                for velocity in [direction * 6000] * 20 + [-direction * 300] * 6:
+                for velocity in [direction * 6000] * 20 + [-direction * 300]:
                     timestamp += 0.016
                     x += velocity * 0.016
                     motion.update(x, 0, timestamp)
@@ -89,6 +89,17 @@ class DragMotionModelTests(unittest.TestCase):
                 self.assertIn(f"drag_{old_pose_direction}_", before)
                 self.assertIn(f"drag_{new_pose_direction}_", after)
 
+    def test_repeated_reversals_bypass_strength_dwell(self) -> None:
+        motion = DragMotionModel()
+        motion.pose_selector.dwell_ms = 100
+        motion.begin(0, 0, 0.0)
+        x = 0.0
+        for tick, delta in enumerate([10, -2, 2, -10, 10, -2], start=1):
+            x += delta
+            motion.update(x, 0, tick * 0.016)
+            expected = "drag_left_" if delta > 0 else "drag_right_"
+            self.assertIn(expected, motion.pose_sprite())
+
     def test_tiny_opposite_jitter_does_not_snap_drag_direction(self) -> None:
         motion = DragMotionModel()
         motion.begin(0, 0, 0.0)
@@ -102,6 +113,23 @@ class DragMotionModelTests(unittest.TestCase):
         self.assertGreater(before, 0.0)
         self.assertGreater(motion.filtered_velocity_x, 0.0)
         self.assertIn("drag_left_", motion.pose_sprite())
+
+    def test_single_pixel_jitter_does_not_reverse_pose_at_tick_cadence(self) -> None:
+        for direction in (-1, 1):
+            with self.subTest(direction=direction):
+                motion = DragMotionModel()
+                motion.begin(0, 0, 0.0)
+                x = direction * 10.0
+                motion.update(x, 0, 0.016)
+                expected = "drag_left_" if direction > 0 else "drag_right_"
+                for tick in range(2, 12):
+                    x += -direction if tick % 2 == 0 else direction
+                    motion.update(x, 0, tick * 0.016)
+                    sprite = motion.pose_sprite()
+                    self.assertTrue(
+                        expected in sprite or sprite == "drag/drag_neutral.png",
+                        sprite,
+                    )
 
     def test_drag_pose_uses_the_remaining_soft_and_medium_frames(self) -> None:
         selector = DragPoseSelector()
