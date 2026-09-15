@@ -7,6 +7,7 @@ import math
 
 from mochi.interaction_tuning import (
     DRAG_HEAVY_VELOCITY_PX_PER_SECOND,
+    DRAG_DIRECTION_MIN_DELTA_PX,
     DRAG_MEDIUM_ENTER_THRESHOLD,
     DRAG_MEDIUM_EXIT_THRESHOLD,
     DRAG_SOFT_ENTER_THRESHOLD,
@@ -56,6 +57,8 @@ class DragPoseSelector:
 
         if self.strength == "neutral":
             return "drag/drag_neutral.png"
+        # Asset names describe the pose's trailing lean, not pointer travel:
+        # moving right (+x) uses left-lean art, and moving left uses right-lean art.
         direction = "left" if horizontal_intensity > 0 else "right"
         return f"drag/drag_{direction}_{self.strength}.png"
 
@@ -65,7 +68,7 @@ class DragPoseSelector:
 
 
 def drag_settle_sprite(pose_sprite: str) -> str:
-    """Choose the release pose that corresponds to the current drag pose."""
+    """Match a lean to its named settle pose; Buddy releases via the drop animation."""
     if pose_sprite.startswith("drag/drag_left_"):
         return "drag/drag_settle_left.png"
     if pose_sprite.startswith("drag/drag_right_"):
@@ -98,11 +101,32 @@ class DragMotionModel:
         elapsed = timestamp - self._previous_time
         if elapsed <= 0:
             return
-        velocity_x = (x - self._previous_x) / elapsed
+        delta_x = x - self._previous_x
+        velocity_x = delta_x / elapsed
         velocity_y = (y - self._previous_y) / elapsed
-        self.filtered_velocity_x += self.smoothing * (
-            velocity_x - self.filtered_velocity_x
+        # Speeds above full lean have no additional visual meaning. Bound the
+        # input before smoothing so a fast sweep cannot store excess momentum
+        # that keeps the old pose visible when the pointer reverses direction.
+        velocity_x = _clamp(velocity_x, -self.max_velocity, self.max_velocity)
+
+        # A deliberate reversal should read as an immediate change of pull,
+        # not as momentum that has to decay through zero over several samples.
+        # Snap only once the new raw movement is strong enough to enter a drag
+        # pose and spans more than one pixel. At a 16 ms tick, even one pixel
+        # exceeds the speed threshold; keep that jitter on normal smoothing.
+        reversing_direction = (
+            self.filtered_velocity_x * velocity_x < 0
+            and abs(delta_x) >= DRAG_DIRECTION_MIN_DELTA_PX
+            and abs(velocity_x)
+            >= self.pose_selector.soft_enter_threshold * self.max_velocity
         )
+        if reversing_direction:
+            self.filtered_velocity_x = velocity_x
+        else:
+            self.filtered_velocity_x += self.smoothing * (
+                velocity_x - self.filtered_velocity_x
+            )
+
         self.filtered_velocity_y += self.smoothing * (
             velocity_y - self.filtered_velocity_y
         )

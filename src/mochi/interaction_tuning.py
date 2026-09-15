@@ -15,6 +15,8 @@ DRAG_MEDIUM_ENTER_THRESHOLD = 0.22
 DRAG_MEDIUM_EXIT_THRESHOLD = 0.16
 DRAG_HEAVY_VELOCITY_PX_PER_SECOND = 600.0
 DRAG_VELOCITY_SMOOTHING = 0.28
+# Minimum per-sample travel for bypassing smoothing on direction reversal.
+DRAG_DIRECTION_MIN_DELTA_PX = 2.0
 DRAG_STATE_DWELL_MS = 25
 
 # Animation timing is in milliseconds per frame and intentionally overrides

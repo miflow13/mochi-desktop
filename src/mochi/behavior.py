@@ -17,6 +17,7 @@ REACTION_STATES = CLICK_REACTION_STATES | frozenset(
     (
         MochiState.EXCITED,
         MochiState.HEART,
+        MochiState.EATING,
         MochiState.COMPUTER,
         MochiState.TYPING,
         MochiState.WATCHING,
@@ -65,6 +66,18 @@ def can_transition(current: MochiState, requested: MochiState) -> bool:
             MochiState.PICKUP,
             MochiState.DRAGGED,
             MochiState.DROPPING,
+        )
+    if requested is MochiState.EATING:
+        # Feeding is a direct user action, so it may interrupt lower-priority
+        # ambient/reaction states while leaving held/sleep/Fedora ownership
+        # untouched. Future fullness/cooldown policy lives outside this guard.
+        return current not in (
+            MochiState.SLEEPING,
+            MochiState.WAKING,
+            MochiState.PICKUP,
+            MochiState.DRAGGED,
+            MochiState.DROPPING,
+            MochiState.FEDORA,
         )
     if current is MochiState.WAKING:
         return False

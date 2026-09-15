@@ -1,3 +1,4 @@
+import hashlib
 import unittest
 
 import cairo
@@ -119,6 +120,31 @@ class SpriteDefinitionsTests(unittest.TestCase):
                 "drag/drag_settle_neutral.png",
             ),
         )
+
+    def test_directional_drag_art_has_distinct_loaded_pixels(self) -> None:
+        frames = ASSET_SET.load_frames("dragged")
+        for left, right in (
+            ("drag_left_soft", "drag_right_soft"),
+            ("drag_left_medium", "drag_right_medium"),
+            ("drag_settle_left", "drag_settle_right"),
+        ):
+            with self.subTest(pair=(left, right)):
+                self.assertTrue(
+                    bytes(frames[f"drag/{left}.png"].get_data())
+                    != bytes(frames[f"drag/{right}.png"].get_data()),
+                    f"{left} and {right} must display different artwork",
+                )
+
+    def test_soft_drag_assets_preserve_the_last_distinct_authored_pair(self) -> None:
+        # Exact 256px files from d9d3db7, before 493788b duplicated the pair.
+        # The 128px mochi_original_set drag files predate this hand-drawn art.
+        expected = {
+            "left": "30a84a149e456b801049d69e554bf98925f5933501df0c13fb440913e4372a27",
+            "right": "232f7101dac99ccf3e90b410bf0661bc6b6bd442a4a9de0819470604b0a54a09",
+        }
+        for direction, digest in expected.items():
+            path = ASSET_SET.root / f"drag/drag_{direction}_soft.png"
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest)
 
     def test_walk_uses_the_manifest_directional_frames(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)
