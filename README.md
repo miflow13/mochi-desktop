@@ -2,16 +2,21 @@
 
 [![Tests](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml/badge.svg)](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml)
 
-<img width="800" height="475" alt="Mochi desktop companion" src="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e" />
+<img width="800" height="475" alt="Recorded demo of Mochi beside a terminal window" src="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e" />
 
 A Linux desktop companion that idles, walks, responds to interaction, and can
 react to broad local desktop activity without reading its contents.
 
-[Website](https://miflow13.github.io/mochi-desktop/) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/miflow13/mochi-desktop/issues) · [Asset guide](assets/mochi/README.md)
+[Website](https://miflow13.github.io/mochi-desktop/) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Report a bug](#reporting-bugs) · [Asset guide](assets/mochi/README.md)
 
 > **Status:** early public alpha. Fedora with GNOME on Wayland is the primary
 > tested configuration. Mochi uses XWayland for its window on GNOME Wayland,
 > where native positioning restrictions require it.
+
+Public-alpha readiness is tracked in [issue #37](https://github.com/miflow13/mochi-desktop/issues/37).
+The workspace/Overview freeze (#45) and drag-direction latency (#68) remain
+open; see [known issues](#known-issues). Package/runtime metadata is `0.2.0a0`;
+published release labels differ, as explained in the [changelog](CHANGELOG.md#release-metadata-note).
 
 ## Install
 
@@ -25,10 +30,26 @@ cd mochi-desktop
 ./install.sh
 ```
 
+This installs the checked-out source (by default, current `main`), not a pinned
+release. The installer may use `sudo dnf` for missing Fedora packages.
+
 After the first GNOME Wayland installation, log out and back in once. This lets
 GNOME load Mochi's optional desktop-awareness helper. Without it, Mochi still
 runs, but typing, app-category, file-browsing, and focused-media reactions may
 be unavailable.
+
+### Update an installed copy
+
+Quit Mochi, then run these commands from your clean `main` checkout:
+
+```bash
+git pull --ff-only
+./install.sh
+```
+
+Relaunch Mochi afterward. The installer copies the checkout into a private
+environment; `git pull` alone does not update the app-grid installation, and
+an already-running process keeps its loaded code.
 
 ### Fedora with Niri
 
@@ -77,6 +98,19 @@ for its event flow and privacy model.
 - Niri, fractional scaling, and multi-monitor configurations receive less
   regression coverage.
 
+### Known issues
+
+- **Workspace/Overview freeze — [#45](https://github.com/miflow13/mochi-desktop/issues/45):**
+  on GNOME Wayland/XWayland, entering Overview or switching workspaces during
+  an emote can leave Mochi visually frozen. This remains an open alpha blocker.
+- **Drag-direction latency — [#68](https://github.com/miflow13/mochi-desktop/issues/68):**
+  the left/right pose can lag after reversing the pointer. Investigation is
+  ongoing; this is not resolved.
+- Alpha behavior and compatibility may change. Passing automated tests does
+  not establish reliability across desktop sessions, monitors, or scaling setups.
+
+### Helper and placement checks
+
 If typing reactions do not work, check the helper and log out/in once:
 
 ```bash
@@ -87,6 +121,19 @@ gnome-extensions enable mochi-typing@miflow13
 Use `mochi --reset-position` to forget saved placement and `mochi --debug` for
 diagnostic logging. Detailed setup and recovery steps are in [Getting Started](docs/wiki/Getting-Started.md)
 and [Troubleshooting and Regressions](docs/wiki/Troubleshooting-and-Regressions.md).
+
+## Reporting bugs
+
+[Open a bug report](https://github.com/miflow13/mochi-desktop/issues/new?template=bug_report.md)
+with the shortest reproduction steps, expected and actual behavior, Linux and
+GNOME/compositor versions, Wayland/X11 session type, and monitor layout/scaling.
+Include the tested branch/commit or release tag, how you installed/launched Mochi,
+and whether you reinstalled and restarted after updating.
+
+For logs, quit Mochi and launch `mochi --debug` in a terminal. Include relevant
+output and whether dragging, a menu, an emote, Overview, or a workspace switch
+preceded the problem. Check [existing issues](https://github.com/miflow13/mochi-desktop/issues)
+first; reports for #45 and #68 are still useful.
 
 ## Uninstall
 
@@ -102,12 +149,16 @@ mochi-uninstall --purge
 
 ## Development
 
+Complete the [Fedora runtime/helper installation](#install) first, then use a
+separate editable environment:
+
 ```bash
 git clone https://github.com/miflow13/mochi-desktop.git
 cd mochi-desktop
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 python -m pip install -e .
+python -m pip install pytest
 python -m pytest
 mochi --debug
 ```
@@ -118,13 +169,11 @@ guidance.
 
 ## Roadmap
 
-| Version | Focus |
+| Direction | Focus |
 | --- | --- |
-| v0.1 | Core desktop companion behavior |
-| v0.2 | Animation polish, AmbiSense, contextual reactions, and reliability |
-| v0.3 | Lightweight care and progression |
-| v0.4 | More behaviors, expressions, and personalization |
-| v0.5 | Broader Linux desktop integration |
+| Current alpha | Core interactions, AmbiSense, and reliability |
+| Future possibilities | Care/progression, more expressions, and personalization |
+| Longer term | Broader Linux desktop integration |
 
-The roadmap is directional, not a release schedule. Mochi is released under
+Future ideas are not a list of shipped features or a release schedule. Mochi is released under
 the [MIT License](LICENSE).

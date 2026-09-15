@@ -2,6 +2,14 @@
 
 Mochi's roadmap is intentionally staged. The public alpha should prove that the creature core is dependable before adding deeper care/progression systems.
 
+> **Current release gate:** [issue #37](https://github.com/miflow13/mochi-desktop/issues/37)
+> owns QA results. The older checklist and phase roadmap below are design
+> guidance, not a second readiness tracker or a list of shipped features.
+> GNOME Overview/workspace freezing ([#45](https://github.com/miflow13/mochi-desktop/issues/45))
+> remains an alpha blocker; drag-direction latency
+> ([#68](https://github.com/miflow13/mochi-desktop/issues/68)) remains under investigation.
+> See the [changelog](../../CHANGELOG.md#release-metadata-note) for version discrepancies.
+
 ## Current phase
 
 **Phase 2 — Make Mochi Feel Alive**
@@ -129,7 +137,9 @@ Do not call the build public-alpha ready while any of these are reproducible:
 
 ## Version roadmap
 
-The repository's existing conceptual roadmap is:
+The original conceptual phase labels below are not package versions or promises
+about the contents of similarly named GitHub tags. Care/progression remains
+outside the public-alpha polish pass.
 
 ### v0.1 — Exists
 
@@ -173,7 +183,7 @@ These later versions are direction, not a promise of exact implementation.
 
 ## Near-term work order
 
-Recommended order from the current development state:
+Historical interaction-integration plan (use issue #37 for current work order):
 
 1. finish/validate pickup and put-down
 2. verify all new transition art
