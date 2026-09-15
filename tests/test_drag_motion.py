@@ -51,6 +51,22 @@ class DragMotionModelTests(unittest.TestCase):
         motion.update(100, 0, 0.2)
         self.assertEqual(motion.leg_sway, 0.0)
 
+    def test_fast_sweep_does_not_delay_slower_direction_reversal(self) -> None:
+        for direction in (-1, 1):
+            with self.subTest(direction=direction):
+                motion = DragMotionModel()
+                x = timestamp = 0.0
+                motion.begin(x, 0, timestamp)
+                # Sample a fast sweep, then a deliberate slower reversal at
+                # the same 16 ms cadence used by the desktop animation tick.
+                for velocity in [direction * 6000] * 20 + [-direction * 300] * 6:
+                    timestamp += 0.016
+                    x += velocity * 0.016
+                    motion.update(x, 0, timestamp)
+                    sprite = motion.pose_sprite()
+                expected_direction = "right" if direction > 0 else "left"
+                self.assertIn(f"drag_{expected_direction}_", sprite)
+
     def test_drag_pose_uses_the_remaining_soft_and_medium_frames(self) -> None:
         selector = DragPoseSelector()
         self.assertEqual(selector.select(0.0, 0.0), "drag/drag_neutral.png")

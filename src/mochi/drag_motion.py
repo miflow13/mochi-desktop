@@ -100,6 +100,10 @@ class DragMotionModel:
             return
         velocity_x = (x - self._previous_x) / elapsed
         velocity_y = (y - self._previous_y) / elapsed
+        # Speeds above full lean have no additional visual meaning. Bound the
+        # input before smoothing so a fast sweep cannot store excess momentum
+        # that keeps the old pose visible when the pointer reverses direction.
+        velocity_x = _clamp(velocity_x, -self.max_velocity, self.max_velocity)
         self.filtered_velocity_x += self.smoothing * (
             velocity_x - self.filtered_velocity_x
         )
