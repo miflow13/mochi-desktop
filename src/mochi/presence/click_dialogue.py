@@ -17,7 +17,7 @@ from .integration import (
     PresenceBuddy as BasePresenceBuddy,
     PresenceX11Buddy as BasePresenceX11Buddy,
 )
-from .music_dance import MusicDanceMixin
+from .music_awareness import MusicAwarenessMixin
 from .nameplate_controls import NameplateMixin
 from .now_playing import NowPlayingMixin
 from .terminal_cowork import TerminalCoworkMixin
@@ -160,7 +160,7 @@ class PresenceBuddy(
     QuickStartMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
-    MusicDanceMixin,
+    MusicAwarenessMixin,
     EdgeRoamMixin,
     FeedMochiMixin,
     NowPlayingMixin,
@@ -176,7 +176,7 @@ class PresenceX11Buddy(
     QuickStartMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
-    MusicDanceMixin,
+    MusicAwarenessMixin,
     EdgeRoamMixin,
     FeedMochiMixin,
     NowPlayingMixin,
