@@ -1,4 +1,4 @@
-"""Decision engine for Mochi Sense ambient awareness."""
+"""Decision engine for AmbiSense ambient awareness."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ class PresenceAction:
     display_seconds: float = 3.5
 
     def __post_init__(self) -> None:
-        # Normal ambient/contextual Mochi Sense speech gets the small fake
+        # Normal ambient/contextual AmbiSense speech gets the small fake
         # typing beat. Critical system reactions stay immediate. Startup,
         # direct click reactions, drag dialogue, and developer previews do not
         # use PresenceAction and therefore remain immediate automatically.
@@ -111,6 +111,14 @@ _EVENT_CATEGORY = {
     "network_restored": "network",
     "build_failed": "frustration",
     "build_succeeded": "developer",
+}
+
+# These events describe a momentary external fact, rather than a request from
+# the user.  A newer observation can therefore make an older queued reaction
+# meaningless before it gets a chance to speak.
+_TRANSIENT_EVENT_STATES = {
+    "network_lost": ("network", False),
+    "network_restored": ("network", True),
 }
 
 
@@ -157,6 +165,34 @@ class PresenceEngine:
         # the sustained-typing clock.
         self._typing_session_started_at: float | None = None
         self._typing_comment_attempted = False
+        self._welcome_back_pending = False
+        self._intro_pending = False
+
+    @property
+    def intro_pending(self) -> bool:
+        return self._intro_pending
+
+    def request_intro(self) -> None:
+        self._intro_pending = True
+
+    def note_session_away(self) -> None:
+        """Expire observations at a desktop boundary, preserving user requests."""
+        environmental = {
+            "network_lost", "network_restored", "battery_low",
+            "charging_started", "media_started", "user_returned",
+        }
+        self._events = deque(
+            (event for event in self._events if event.name not in environmental),
+            maxlen=16,
+        )
+        self._welcome_back_pending = False
+        self._user_idle_since = None
+        self.record_typing_stopped()
+
+    def note_session_returned(self) -> None:
+        """Keep one greeting pending until normal dialogue ownership permits it."""
+        self.note_session_away()
+        self._welcome_back_pending = True
 
     def set_quiet_mode(self, enabled: bool) -> None:
         self.tuning.quiet_mode = bool(enabled)
@@ -172,10 +208,18 @@ class PresenceEngine:
             self._logger.debug("[presence] ignored unknown event=%s", name)
             return False
         timestamp = self._clock() if now is None else now
+        transient_state = _TRANSIENT_EVENT_STATES.get(name)
+        if transient_state is not None:
+            source, state = transient_state
+            self._invalidate_transient_events(source, except_state=state)
         if not any(event.name == name for event in self._events):
             self._events.append(_QueuedEvent(name, timestamp))
             self._logger.debug("[presence] event=%s queued", name)
         return True
+
+    def has_pending_event_at_least(self, priority: int) -> bool:
+        """Whether a queued event should take precedence over a small greeting."""
+        return any(_EVENT_PRIORITY[event.name] >= priority for event in self._events)
 
     def force_ambient(self) -> None:
         self.emit("force_ambient")
@@ -208,7 +252,11 @@ class PresenceEngine:
         timestamp = self._clock() if now is None else now
         idle_since = self._user_idle_since
         self._user_idle_since = None
-        if idle_since is not None and timestamp - idle_since >= 10 * 60.0:
+        if (
+            not self._welcome_back_pending
+            and idle_since is not None
+            and timestamp - idle_since >= 10 * 60.0
+        ):
             self.emit("user_returned", now=timestamp)
 
     def note_bubble_dismissed(self, *, now: float | None = None) -> None:
@@ -241,9 +289,23 @@ class PresenceEngine:
                 self._logger.debug("[presence] suppressed: %s", reason)
                 return None
 
-        action = self._evaluate_events(timestamp)
+        action = self._evaluate_events(context, timestamp)
         if action is not None:
             return action
+        if self._intro_pending:
+            # Show the actual introduction immediately, without a typing
+            # placeholder, so a successful show can safely mark it seen.
+            return PresenceAction(
+                "intro", "intro", self.phrases.choose("intro"), 30, "intro", 18.0,
+            )
+        if self._welcome_back_pending:
+            # Lifecycle greetings survive the ordinary event queue's TTL and
+            # collisions, so an error/animation/cooldown can safely finish first.
+            text = self.phrases.choose("welcome_back", exclude_recent=True)
+            return PresenceAction(
+                "speech", "welcome_back", text, 30, "welcome_back",
+                speech_display_seconds(text),
+            )
         action = self._evaluate_typing(context, timestamp)
         if action is not None:
             return action
@@ -270,6 +332,11 @@ class PresenceEngine:
         self, action: PresenceAction, *, now: float | None = None
     ) -> None:
         timestamp = self._clock() if now is None else now
+        if action.event == "intro":
+            self._intro_pending = False
+            self._welcome_back_pending = False
+        if action.event == "welcome_back":
+            self._welcome_back_pending = False
         self.phrases.remember(action.text)
         self.cooldowns.record(
             action.category,
@@ -283,7 +350,9 @@ class PresenceEngine:
             action.text,
         )
 
-    def _evaluate_events(self, now: float) -> PresenceAction | None:
+    def _evaluate_events(
+        self, context: AmbientContext, now: float
+    ) -> PresenceAction | None:
         if not self._events:
             return None
         ordered = sorted(
@@ -293,6 +362,9 @@ class PresenceEngine:
         )
         for event in ordered:
             self._events.remove(event)
+            if not self._event_is_current(event.name, context):
+                self._logger.debug("[presence] dropped stale event=%s", event.name)
+                continue
             if event.name == "force_ambient":
                 text = self.phrases.choose("ambient", exclude_recent=True)
                 self._events.clear()
@@ -329,6 +401,38 @@ class PresenceEngine:
                 speech_display_seconds(text),
             )
         return None
+
+    def _invalidate_transient_events(self, source: str, *, except_state: bool) -> None:
+        stale = [
+            event
+            for event in self._events
+            if (event_state := _TRANSIENT_EVENT_STATES.get(event.name)) is not None
+            and event_state[0] == source
+            and event_state[1] != except_state
+        ]
+        for event in stale:
+            self._events.remove(event)
+            self._logger.debug(
+                "[presence] invalidated event=%s because %s changed",
+                event.name,
+                source,
+            )
+
+    @staticmethod
+    def _event_is_current(name: str, context: AmbientContext) -> bool:
+        transient_state = _TRANSIENT_EVENT_STATES.get(name)
+        if transient_state is None:
+            return True
+        source, expected = transient_state
+        if source == "network":
+            # An unavailable monitor cannot establish truth either way. Keep
+            # the normal event behavior in that case, but never show a queued
+            # observation once the current baseline contradicts it.
+            return (
+                context.network_connected is None
+                or context.network_connected is expected
+            )
+        return True
 
     def _evaluate_typing(self, context: AmbientContext, now: float) -> PresenceAction | None:
         intensity = context.typing_intensity

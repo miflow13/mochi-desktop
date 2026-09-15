@@ -130,8 +130,12 @@ class SpeechBubble:
     def visible(self) -> bool:
         return bool(self._window.get_visible() or self._popover.get_visible())
 
-    def show(self, text: str, *, duration_seconds: float) -> bool:
-        typing_preview = bool(getattr(text, "typing_preview", False))
+    def show(
+        self, text: str, *, duration_seconds: float, markup: str | None = None
+    ) -> bool:
+        # Rich introductory text is revealed immediately; ordinary speech
+        # retains its typing beat. Markup is supplied only by trusted app copy.
+        typing_preview = markup is None and bool(getattr(text, "typing_preview", False))
         final_text = str(text).strip()
         if self.visible or not final_text:
             return False
@@ -143,7 +147,7 @@ class SpeechBubble:
             self._typing_step = 0
             self._set_text("Mochi is typing", typing=True)
         else:
-            self._set_text(final_text, typing=False)
+            self._set_text(final_text, typing=False, markup=markup)
 
         if get_window_position(self._owner) is not None:
             self._mode = "x11"
@@ -196,10 +200,12 @@ class SpeechBubble:
         self._cancel_sources()
         self._finish_hide()
 
-    def _set_text(self, text: str, *, typing: bool) -> None:
-        self._label.set_text(text)
-        self._popover_label.set_text(text)
+    def _set_text(self, text: str, *, typing: bool, markup: str | None = None) -> None:
         for label in (self._label, self._popover_label):
+            if markup is None:
+                label.set_text(text)
+            else:
+                label.set_markup(markup)
             if typing:
                 label.add_css_class("mochi-speech-typing")
             else:

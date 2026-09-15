@@ -1,8 +1,13 @@
-# Current Development Status
+# Historical Development Snapshot — 2026-09-08
 
 > Snapshot date: **2026-09-08**
 >
-> This page is a development handoff snapshot, not a permanent release contract. Update it after the next known-good checkpoint.
+> Historical handoff only: the WIP, asset paths, test counts, and next-session
+> instructions below describe 2026-09-08, not current `main`.
+> For current status, use the [changelog](../../CHANGELOG.md) and
+> [alpha QA gate #37](https://github.com/miflow13/mochi-desktop/issues/37).
+> [#45](https://github.com/miflow13/mochi-desktop/issues/45) and
+> [#68](https://github.com/miflow13/mochi-desktop/issues/68) remain unresolved.
 
 ## Project phase
 

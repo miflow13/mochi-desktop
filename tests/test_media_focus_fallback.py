@@ -13,7 +13,7 @@ class _Parameters:
 
 
 class MediaFocusFallbackTests(unittest.TestCase):
-    def test_sparse_chromium_mpris_is_media_when_browser_is_focused(self) -> None:
+    def test_sparse_chromium_mpris_is_not_media_from_browser_focus_alone(self) -> None:
         backend = MprisMediaBackend()
         backend.set_focused_browser(True)
         properties = {
@@ -27,14 +27,14 @@ class MediaFocusFallbackTests(unittest.TestCase):
             lambda _bus_name, property_name, _gio, _glib: properties[property_name]
         )
 
-        self.assertTrue(
+        self.assertFalse(
             backend._player_is_youtube_playing(
                 "org.mpris.MediaPlayer2.chromium.instance387598",
                 object(),
                 object(),
             )
         )
-        self.assertTrue(backend.watching_via_browser_focus)
+        self.assertFalse(backend.watching_via_browser_focus)
 
     def test_sparse_chromium_mpris_is_ignored_when_browser_is_not_focused(self) -> None:
         backend = MprisMediaBackend()

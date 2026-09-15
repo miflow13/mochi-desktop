@@ -31,24 +31,14 @@ class EdgeRoamMixin:
         self._edge_roam = self._config.load_edge_roam()
 
         edge_row, self._edge_roam_switch = self._make_edge_roam_row()
-        card = self._context_menu_content
         # PresenceBuddyMixin already places Stay put immediately after Sleep.
         # Insert Edge roam first so the movement controls read naturally:
         # Sleep -> Edge roam -> Stay put -> Close.
-        card.insert_child_after(edge_row, self._sleep_button)
-
-        existing_rows = list(self._context_menu_animated_rows)
-        if existing_rows:
-            self._context_menu_animated_rows = (
-                existing_rows[0],
-                edge_row,
-                *existing_rows[1:],
-            )
-        else:
-            self._context_menu_animated_rows = (edge_row,)
-
-        popover._preferred_height = max(popover._preferred_height, 268)
-        popover.window.set_default_size(popover._preferred_width, popover._preferred_height)
+        self._register_context_menu_row(
+            "edge-roam",
+            edge_row,
+            after="sleep",
+        )
         return popover
 
     def _make_edge_roam_row(self) -> tuple[Gtk.Button, Gtk.Switch]:

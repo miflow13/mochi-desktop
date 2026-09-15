@@ -27,6 +27,33 @@ def _distance_to_geometry(x: float, y: float, geometry) -> float:
     return (x - nearest_x) ** 2 + (y - nearest_y) ** 2
 
 
+def _window_coordinate_scale(window: Gtk.Window) -> float:
+    """Return the application-pixel to X11 device-pixel scale for a window."""
+    surface = window.get_surface()
+    if surface is None:
+        return 1.0
+
+    get_scale = getattr(surface, "get_scale", None)
+    if callable(get_scale):
+        try:
+            scale = float(get_scale())
+        except (TypeError, ValueError):
+            scale = 1.0
+        if scale > 0:
+            return scale
+
+    get_scale_factor = getattr(surface, "get_scale_factor", None)
+    if callable(get_scale_factor):
+        try:
+            scale = float(get_scale_factor())
+        except (TypeError, ValueError):
+            scale = 1.0
+        if scale > 0:
+            return scale
+
+    return 1.0
+
+
 def menu_position_for_anchor(
     anchor_x: int,
     anchor_y: int,
@@ -36,33 +63,51 @@ def menu_position_for_anchor(
     *,
     gap: int = 12,
     padding: int = 12,
+    coordinate_scale: float = 1.0,
 ) -> tuple[int, int]:
-    """Place a menu beside its anchor and clamp it to the nearest monitor."""
-    if not geometries:
-        return (anchor_x + gap, anchor_y)
+    """Place a menu beside an X11-root anchor and clamp it to the nearest monitor.
 
+    ``anchor_x``/``anchor_y`` and the returned coordinates are X11 device pixels.
+    Menu sizes, monitor geometries, gap, and padding are GTK application pixels.
+    """
+    scale = coordinate_scale if coordinate_scale > 0 else 1.0
+    if not geometries:
+        return (anchor_x + round(gap * scale), anchor_y)
+
+    application_anchor_x = anchor_x / scale
+    application_anchor_y = anchor_y / scale
     monitor = min(
         geometries,
-        key=lambda geometry: _distance_to_geometry(anchor_x, anchor_y, geometry),
+        key=lambda geometry: _distance_to_geometry(
+            application_anchor_x,
+            application_anchor_y,
+            geometry,
+        ),
     )
-    left = monitor.x + padding
-    top = monitor.y + padding
-    right = monitor.x + monitor.width - padding
-    bottom = monitor.y + monitor.height - padding
+    left = round((monitor.x + padding) * scale)
+    top = round((monitor.y + padding) * scale)
+    right = round((monitor.x + monitor.width - padding) * scale)
+    bottom = round((monitor.y + monitor.height - padding) * scale)
 
-    preferred_right = anchor_x + gap
-    preferred_left = anchor_x - gap - menu_width
-    if preferred_right + menu_width <= right:
+    device_menu_width = max(1, round(menu_width * scale))
+    device_menu_height = max(1, round(menu_height * scale))
+    device_gap = round(gap * scale)
+    preferred_right = anchor_x + device_gap
+    preferred_left = anchor_x - device_gap - device_menu_width
+    if preferred_right + device_menu_width <= right:
         x = preferred_right
     elif preferred_left >= left:
         x = preferred_left
     else:
-        x = anchor_x - menu_width // 2
+        x = anchor_x - device_menu_width // 2
 
-    max_x = max(left, right - menu_width)
-    max_y = max(top, bottom - menu_height)
+    max_x = max(left, right - device_menu_width)
+    max_y = max(top, bottom - device_menu_height)
     x = max(left, min(round(x), max_x))
-    y = max(top, min(round(anchor_y - 24), max_y))
+    y = max(
+        top,
+        min(round(anchor_y - 24 * scale), max_y),
+    )
     return (x, y)
 
 
@@ -105,7 +150,6 @@ class MenuWindow:
         self.window.connect("map", self._on_map)
         self.window.connect("close-request", self._on_close_request)
         self.window.connect("notify::is-active", self._on_active_changed)
-        self.window.connect("notify::is-active", self._on_active_changed)
 
         keys = Gtk.EventControllerKey.new()
         keys.connect("key-pressed", self._on_key_pressed)
@@ -116,6 +160,12 @@ class MenuWindow:
 
     def set_child(self, child: Gtk.Widget) -> None:
         self.window.set_child(child)
+
+    def set_preferred_size(self, width: int, height: int) -> None:
+        """Update the fallback size used before GTK allocation settles."""
+        self._preferred_width = width
+        self._preferred_height = height
+        self.window.set_default_size(width, height)
 
     def set_drag_handle(self, widget: Gtk.Widget) -> None:
         """Use the compositor/window manager for a smooth titlebar-style move."""
@@ -154,13 +204,12 @@ class MenuWindow:
         if self._dismiss_on_focus_loss:
             # Let present()/focus settle before treating an inactive window as
             # an outside click. This avoids self-dismiss during mapping.
-            GLib.timeout_add(90, self._arm_outside_dismiss)
+            GLib.timeout_add(90, self._arm_outside_dismiss, serial)
 
     def popdown(self) -> None:
         if not self.window.get_visible():
             return
         self._position_serial += 1
-        self._dismiss_armed = False
         self._dismiss_armed = False
         self._stop_following_owner()
         self.window.hide()
@@ -213,8 +262,8 @@ class MenuWindow:
         )
         self._logger.debug("Developer menu native move started")
 
-    def _arm_outside_dismiss(self) -> bool:
-        if self.window.get_visible():
+    def _arm_outside_dismiss(self, serial: int) -> bool:
+        if serial == self._position_serial and self.window.get_visible():
             self._dismiss_armed = True
         return GLib.SOURCE_REMOVE
 
@@ -226,12 +275,18 @@ class MenuWindow:
             and not window.is_active()
         ):
             # Defer one loop turn so focus can move between child controls
-            # without being mistaken for a click outside the toplevel.
-            GLib.idle_add(self._dismiss_if_still_inactive)
+            # without being mistaken for a click outside the toplevel. Tie the
+            # callback to this popup generation so a stale close cannot dismiss
+            # a newly opened menu.
+            GLib.idle_add(
+                self._dismiss_if_still_inactive,
+                self._position_serial,
+            )
 
-    def _dismiss_if_still_inactive(self) -> bool:
+    def _dismiss_if_still_inactive(self, serial: int) -> bool:
         if (
-            self._dismiss_on_focus_loss
+            serial == self._position_serial
+            and self._dismiss_on_focus_loss
             and self._dismiss_armed
             and self.window.get_visible()
             and not self.window.is_active()
@@ -272,8 +327,9 @@ class MenuWindow:
             return GLib.SOURCE_REMOVE
 
         owner_x, owner_y = owner_position
-        anchor_x = owner_x + self._anchor_x
-        anchor_y = owner_y + self._anchor_y
+        scale = _window_coordinate_scale(self._owner)
+        anchor_x = owner_x + round(self._anchor_x * scale)
+        anchor_y = owner_y + round(self._anchor_y * scale)
 
         width = self.window.get_width()
         height = self.window.get_height()
@@ -293,18 +349,20 @@ class MenuWindow:
             width,
             height,
             geometries,
+            coordinate_scale=scale,
         )
         moved = move_window(self.window, x, y)
         if not quiet:
             self._logger.debug(
                 "Menu surface position anchor=(%d,%d) target=(%d,%d) "
-                "size=(%d,%d) moved=%s",
+                "size=(%d,%d) scale=%.2f moved=%s",
                 anchor_x,
                 anchor_y,
                 x,
                 y,
                 width,
                 height,
+                scale,
                 moved,
             )
         return GLib.SOURCE_REMOVE

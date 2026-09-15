@@ -143,11 +143,7 @@
       <p class="preview">
         <img
           src="https://github.com/user-attachments/assets/d64b6900-3120-4174-9ec6-a40688fe921a"
-          alt="Mochi, a green pixel-art desktop companion, running on Fedora Linux"
-          width="800"
-          height="475"
-          decoding="async"
-          fetchpriority="high"
+          alt="Recorded demo of Mochi beside a terminal window"
         />
       </p>
     </div>
@@ -173,7 +169,7 @@
 
     <section id="install">
       <h2>Install</h2>
-      <p>Clone the repository:</p>
+      <p>On Fedora, clone the repository (this installs current main, not a pinned release):</p>
       <pre><code>git clone https://github.com/miflow13/mochi-desktop.git</code></pre>
 
       <p>Then run:</p>
@@ -182,12 +178,22 @@
 
       <p>
         After installation, open <strong>Mochi</strong> from the GNOME app grid.
+        You can also run <code>~/.local/bin/mochi</code>.
+      </p>
+      <p>
+        The installer may use <code>sudo dnf</code> for missing Fedora packages.
+        On first GNOME Wayland installation, log out and back in once so the
+        desktop-awareness helper can load. Without it, some reactions may be unavailable.
+      </p>
+      <p>
+        To update, quit Mochi, run <code>git pull --ff-only</code> from your clean
+        main checkout, rerun <code>./install.sh</code>, then relaunch Mochi.
       </p>
 
       <p>
-        <a href="https://github.com/miflow13/mochi-desktop#install-mochi">full install notes</a>
+        <a href="https://github.com/miflow13/mochi-desktop#install">full install notes</a>
         ·
-        <a href="https://github.com/miflow13/mochi-desktop/issues">report a bug</a>
+        <a href="https://github.com/miflow13/mochi-desktop#reporting-bugs">how to report a bug</a>
       </p>
     </section>
 
@@ -197,6 +203,18 @@
       <h2>Status</h2>
       <p><strong>Stage:</strong> early public alpha</p>
       <p><strong>Platform:</strong> Fedora + GNOME + Wayland/XWayland</p>
+      <p>Niri is experimental. Other desktops, multi-monitor layouts, and fractional scaling receive less testing.</p>
+      <p>
+        Known issues remain open: a GNOME Overview/workspace freeze during emotes
+        (<a href="https://github.com/miflow13/mochi-desktop/issues/45">#45, alpha blocker</a>)
+        and delayed drag-direction poses
+        (<a href="https://github.com/miflow13/mochi-desktop/issues/68">#68, under investigation</a>).
+      </p>
+      <p>
+        See the <a href="https://github.com/miflow13/mochi-desktop/issues/37">alpha QA checklist</a>
+        and <a href="https://github.com/miflow13/mochi-desktop/blob/main/CHANGELOG.md#release-metadata-note">release/version notes</a>.
+        This is not a stable release.
+      </p>
       <p><strong>Source:</strong> <a href="https://github.com/miflow13/mochi-desktop">github.com/miflow13/mochi-desktop</a></p>
     </section>
   </main>

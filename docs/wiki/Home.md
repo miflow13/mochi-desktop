@@ -4,7 +4,10 @@
 
 Mochi is a small pixel-art Linux desktop companion built to feel like a quiet little creature living on the desktop rather than a dashboard, widget, or chatbot.
 
-The project is currently in **Phase 2 — Make Mochi Feel Alive**. The focus is interaction quality, animation continuity, input reliability, and preparing a stable public alpha.
+Mochi is in early alpha. The focus is interaction quality, input reliability,
+and public-alpha readiness, tracked in [issue #37](https://github.com/miflow13/mochi-desktop/issues/37).
+The [current known issues](../../README.md#known-issues) include unresolved
+workspace/Overview freezing (#45) and drag-direction latency (#68).
 
 ## What Mochi is
 
@@ -20,8 +23,8 @@ The project intentionally keeps the creature core small. Systems such as health,
 
 ## Wiki map
 
-- [Getting Started](Getting-Started.md) — install the development checkout, launch Mochi, run tests, and understand Wayland expectations
-- [Current Development Status](Current-Development-Status.md) — dated handoff snapshot, current WIP, checkpoint history, and next-session priorities
+- [Getting Started](Getting-Started.md) — alpha installation guidance, editable development setup, and Wayland expectations
+- [Development snapshot (2026-09-08)](Current-Development-Status.md) — historical WIP and checkpoint history
 - [Architecture and Tech Stack](Architecture-and-Tech-Stack.md) — runtime, modules, rendering, packaging, and platform assumptions
 - [Interaction Core](Interaction-Core.md) — the behaviors that define the public-alpha creature experience
 - [Animation and Art Pipeline](Animation-and-Art-Pipeline.md) — assets, manifests, spritesheets, timing, and PixelLab/Pixelorama workflow
@@ -76,7 +79,10 @@ Mochi's runtime art uses a fixed pixel-art presentation:
 
 Mochi is under active development, and local development work may temporarily be ahead of the default branch. Treat the current branch, issue tracker, test results, and explicit checkpoint commits as the authoritative source when debugging an in-progress feature.
 
-The repository README currently identifies the project as `0.2.0-alpha`, while package metadata may still report an earlier package version. Reconcile release metadata before the public alpha rather than assuming either string alone is authoritative.
+Package/runtime metadata is `0.2.0a0`. Published release labels have
+[documented discrepancies](../../CHANGELOG.md#release-metadata-note); use the
+tested commit to identify a build. This wiki's dated handoffs and conceptual
+roadmaps are not evidence that a feature shipped or a release gate passed.
 
 ## Development discipline
 

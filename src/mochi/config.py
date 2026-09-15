@@ -113,6 +113,32 @@ class ConfigStore:
         self._save(data)
         self._logger.debug("Edge roam: %s", bool(enabled))
 
+    def has_started_before(self) -> bool:
+        """Whether Mochi has completed at least one non-preview startup."""
+        try:
+            started = self._load()["has_started_before"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return started if isinstance(started, bool) else False
+
+    def mark_started(self) -> None:
+        """Persist the first-launch boundary without retaining session events."""
+        data = self._load_or_empty()
+        data["has_started_before"] = True
+        self._save(data)
+
+    def has_seen_intro(self) -> bool:
+        """Only a successfully displayed introduction counts as seen."""
+        try:
+            return self._load().get("has_seen_intro") is True
+        except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+    def mark_intro_seen(self) -> None:
+        data = self._load_or_empty()
+        data["has_seen_intro"] = True
+        self._save(data)
+
     def reset_position(self) -> None:
         try:
             data = self._load()

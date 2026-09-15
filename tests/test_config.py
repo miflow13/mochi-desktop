@@ -65,6 +65,20 @@ class ConfigStoreTests(unittest.TestCase):
             store.save_edge_roam(False)
             self.assertFalse(store.load_edge_roam())
 
+    def test_startup_marker_distinguishes_first_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertFalse(store.has_started_before())
+            store.mark_started()
+            self.assertTrue(store.has_started_before())
+
+    def test_intro_marker_is_persisted_separately_from_startup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertFalse(store.has_seen_intro())
+            store.mark_intro_seen()
+            self.assertTrue(store.has_seen_intro())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,3 +5,10 @@ build/
 dist/
 .pytest_cache/
 .venv/
+
+# Local checkpoints and editor backups belong in Git history, not the tree.
+*.pre-*
+*.save
+
+# Local personal/work-in-progress folders
+.agents/skills/i-have-adhd/

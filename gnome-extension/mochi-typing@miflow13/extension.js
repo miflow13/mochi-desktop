@@ -189,6 +189,21 @@ export default class MochiTypingActivityExtension extends Extension {
             },
         );
 
+        // Export before acquiring the name so late clients can subscribe and
+        // obtain one privacy-reduced snapshot without waiting for a transition.
+        this._dbusObject = Gio.DBusExportedObject.wrapJSObject(
+            `<node><interface name="${INTERFACE_NAME}">
+                <method name="GetState">
+                    <arg type="b" direction="out" name="idle"/>
+                    <arg type="b" direction="out" name="fileBrowsing"/>
+                    <arg type="b" direction="out" name="youtubeFocused"/>
+                    <arg type="s" direction="out" name="appCategory"/>
+                </method>
+            </interface></node>`,
+            this,
+        );
+        this._dbusObject.export(this._connection, OBJECT_PATH);
+
         this._nameOwnerId = Gio.bus_own_name_on_connection(
             this._connection,
             BUS_NAME,
@@ -227,6 +242,11 @@ export default class MochiTypingActivityExtension extends Extension {
         );
 
         this._armPresenceIdleWatch();
+    }
+
+    GetState() {
+        return [this._presenceIsIdle, this._fileBrowsingActive,
+            this._youtubeFocusedActive, this._appCategory];
     }
 
     _emitSignal(signalName) {
@@ -551,6 +571,11 @@ export default class MochiTypingActivityExtension extends Extension {
         this._youtubeFocusedActive = false;
         this._appCategory = 'unknown';
         this._nameReady = false;
+
+        if (this._dbusObject) {
+            this._dbusObject.unexport();
+            this._dbusObject = null;
+        }
 
         if (this._nameOwnerId) {
             Gio.bus_unown_name(this._nameOwnerId);

@@ -18,6 +18,8 @@ import logging
 from pathlib import Path
 import time
 
+from mochi.helper_connection import HelperConnection
+
 
 class GnomeShellFileContextBackend:
     """Receive semantic file-browser focus state from the Mochi Shell extension."""
@@ -30,20 +32,14 @@ class GnomeShellFileContextBackend:
     STOP_SIGNAL_NAME = "FileBrowsingStopped"
 
     def __init__(self) -> None:
-        self._connection = None
-        self._start_subscription_id: int | None = None
-        self._stop_subscription_id: int | None = None
-        self._on_started: Callable[[], None] | None = None
-        self._on_stopped: Callable[[], None] | None = None
-        self.last_error: str | None = None
+        self._helper = None
+        self.last_error = None
+        self._on_started = None
+        self._on_stopped = None
 
     @property
     def active(self) -> bool:
-        return (
-            self._connection is not None
-            and self._start_subscription_id is not None
-            and self._stop_subscription_id is not None
-        )
+        return self._helper is not None and self._helper.active
 
     @staticmethod
     def _load_gio():
@@ -54,93 +50,34 @@ class GnomeShellFileContextBackend:
         return Gio, GLib
 
     def start(
-        self,
-        on_started: Callable[[], None],
-        on_stopped: Callable[[], None],
+        self, on_started: Callable[[], None], on_stopped: Callable[[], None]
     ) -> bool:
-        if self.active:
+        if self._helper is not None:
             return True
-
-        self.last_error = None
-        try:
-            Gio, GLib = self._load_gio()
-            connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-            if connection is None:
-                self.last_error = "session D-Bus connection is unavailable"
-                return False
-
-            reply = connection.call_sync(
-                "org.freedesktop.DBus",
-                "/org/freedesktop/DBus",
-                "org.freedesktop.DBus",
-                "NameHasOwner",
-                GLib.Variant("(s)", (self.BUS_NAME,)),
-                None,
-                Gio.DBusCallFlags.NONE,
-                1_000,
-                None,
-            )
-            has_owner = bool(reply.unpack()[0]) if reply is not None else False
-            if not has_owner:
-                self.last_error = "GNOME Shell activity extension is not active"
-                return False
-
-            self._connection = connection
-            self._on_started = on_started
-            self._on_stopped = on_stopped
-
-            start_id = connection.signal_subscribe(
-                self.BUS_NAME,
-                self.INTERFACE_NAME,
-                self.START_SIGNAL_NAME,
-                self.OBJECT_PATH,
-                None,
-                Gio.DBusSignalFlags.NONE,
-                self._on_started_signal,
-            )
-            stop_id = connection.signal_subscribe(
-                self.BUS_NAME,
-                self.INTERFACE_NAME,
-                self.STOP_SIGNAL_NAME,
-                self.OBJECT_PATH,
-                None,
-                Gio.DBusSignalFlags.NONE,
-                self._on_stopped_signal,
-            )
-            if not start_id or not stop_id:
-                self.last_error = "file-browsing signal subscription failed"
-                if start_id:
-                    self._start_subscription_id = int(start_id)
-                if stop_id:
-                    self._stop_subscription_id = int(stop_id)
-                self.stop()
-                return False
-
-            self._start_subscription_id = int(start_id)
-            self._stop_subscription_id = int(stop_id)
-        except Exception as exc:
-            self.last_error = f"{type(exc).__name__}: {exc}"
-            self.stop()
-            return False
-
-        return True
+        self._on_started = on_started
+        self._on_stopped = on_stopped
+        self._helper = HelperConnection(
+            self._load_gio,
+            {
+                self.START_SIGNAL_NAME: self._on_started_signal,
+                self.STOP_SIGNAL_NAME: self._on_stopped_signal,
+            },
+            on_state=lambda state: (
+                self._on_started_signal() if state[1] else self._on_stopped_signal()
+            ),
+            on_lost=self._on_stopped_signal,
+        )
+        if self._helper.start():
+            self.last_error = None
+            return True
+        self.last_error = self._helper.last_error
+        self.stop()
+        return False
 
     def stop(self) -> None:
-        if self._connection is not None:
-            for subscription_id in (
-                self._start_subscription_id,
-                self._stop_subscription_id,
-            ):
-                if subscription_id is None:
-                    continue
-                try:
-                    self._connection.signal_unsubscribe(subscription_id)
-                except Exception:
-                    pass
-
-        self._start_subscription_id = None
-        self._stop_subscription_id = None
-        self._connection = None
+        if self._helper is not None:
+            self._helper.stop()
+            self._helper = None
         self._on_started = None
         self._on_stopped = None
 

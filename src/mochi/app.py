@@ -197,6 +197,27 @@ class MochiApplication(Gtk.Application):
                 background-color: alpha(@theme_fg_color, 0.09);
                 min-height: 1px;
             }
+
+            /* Speech bubbles live on transparent toplevels, so the capsule
+             * must paint its own theme-safe surface and foreground. */
+            .mochi-speech-bubble {
+                background-color: @theme_bg_color;
+                color: @theme_fg_color;
+                border-color: alpha(#79c98b, 0.42);
+            }
+
+            .mochi-speech-text {
+                color: @theme_fg_color;
+            }
+
+            .mochi-speech-text.mochi-speech-typing {
+                color: alpha(@theme_fg_color, 0.78);
+            }
+
+            popover.mochi-speech-popover > arrow {
+                background-color: @theme_bg_color;
+                border-color: alpha(#79c98b, 0.42);
+            }
             """
         )
         Gtk.StyleContext.add_provider_for_display(

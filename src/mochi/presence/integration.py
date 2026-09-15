@@ -1,4 +1,4 @@
-"""Thin integration layer between Buddy and Mochi Sense ambient awareness."""
+"""Thin integration layer between Buddy and AmbiSense ambient awareness."""
 
 from __future__ import annotations
 
@@ -14,12 +14,14 @@ from mochi.x11_buddy import X11Buddy
 
 from .bubble import SpeechBubble
 from .context import AmbientContext
-from .engine import PresenceEngine, PresenceTuning, speech_display_seconds
+from .engine import PresenceEngine, PresenceTuning, SpeechText, speech_display_seconds
+from .phrases import INTRO_MARKUP
 from .signals import AppCategorySignalAdapter, SystemSignalMonitor
+from .session import SessionSignalMonitor
 
 
 class PresenceBuddyMixin:
-    """Add Mochi Sense without changing Buddy's proven interaction code."""
+    """Add AmbiSense without changing Buddy's proven interaction code."""
 
     PRESENCE_EVALUATION_SECONDS = 5
     STARTUP_GREETING_DELAY_MS = 1_100
@@ -27,7 +29,7 @@ class PresenceBuddyMixin:
 
     def __init__(self, *args, **kwargs) -> None:
         self._ambient_presence_engine = PresenceEngine()
-        # Mochi Sense is lively by default. Extra-chatty remains an optional
+        # AmbiSense is lively by default. Extra-chatty remains an optional
         # developer stress-test profile rather than defining normal behavior.
         self._presence_chatty_test_mode = False
         self._presence_chatty_switch: Gtk.Switch | None = None
@@ -38,10 +40,12 @@ class PresenceBuddyMixin:
         self._presence_bubble: SpeechBubble | None = None
         self._system_signal_monitor: SystemSignalMonitor | None = None
         self._app_category_monitor: AppCategorySignalAdapter | None = None
+        self._session_signal_monitor: SessionSignalMonitor | None = None
         self._presence_app_category = "unknown"
         self._presence_source_id: int | None = None
         self._presence_startup_source_id: int | None = None
         self._presence_shutting_down = False
+        self._presence_is_returning_session = False
         self._vscode_cowork_source_id: int | None = None
         self._vscode_coworking_active = False
         super().__init__(*args, **kwargs)
@@ -49,12 +53,27 @@ class PresenceBuddyMixin:
         if self._preview_mode:
             return
 
+        # First launch keeps the existing onboarding/startup voice. Later
+        # process starts (including a new desktop login) get a small return
+        # greeting instead. This marker deliberately stores no observations or
+        # queued dialogue from a prior session.
+        self._presence_is_returning_session = self._config.has_started_before()
+        self._config.mark_started()
+        if not self._config.has_seen_intro():
+            self._ambient_presence_engine.request_intro()
+
         self._ambient_presence_engine._logger = self._logger
         self._presence_bubble = SpeechBubble(
             owner=self._window,
             anchor_widget=self,
             logger=self._logger,
         )
+        self._session_signal_monitor = SessionSignalMonitor(
+            on_away=self._on_presence_session_away,
+            on_returned=self._on_presence_session_returned,
+            logger=self._logger,
+        )
+        self._session_signal_monitor.start()
         self._system_signal_monitor = SystemSignalMonitor(
             on_battery_low=self._on_presence_battery_low,
             on_charging_started=self._on_presence_charging_started,
@@ -74,6 +93,7 @@ class PresenceBuddyMixin:
                 "Ambient app-category awareness unavailable: %s",
                 self._app_category_monitor.last_error,
             )
+        self._logger.debug("[session] startup baselines initialized")
         self._presence_source_id = GLib.timeout_add_seconds(
             self.PRESENCE_EVALUATION_SECONDS,
             self._evaluate_ambient_presence,
@@ -85,7 +105,7 @@ class PresenceBuddyMixin:
 
     @property
     def presence_engine(self) -> PresenceEngine:
-        """Developer/test access to the Mochi Sense decision engine."""
+        """Developer/test access to the AmbiSense decision engine."""
         return self._ambient_presence_engine
 
     def _build_context_menu(self):
@@ -94,21 +114,11 @@ class PresenceBuddyMixin:
         self._stay_put = self._config.load_stay_put()
 
         stay_row, self._stay_put_switch = self._make_stay_put_row()
-        card = self._context_menu_content
-        card.insert_child_after(stay_row, self._sleep_button)
-
-        existing_rows = list(self._context_menu_animated_rows)
-        if existing_rows:
-            self._context_menu_animated_rows = (
-                existing_rows[0],
-                stay_row,
-                *existing_rows[1:],
-            )
-        else:
-            self._context_menu_animated_rows = (stay_row,)
-
-        popover._preferred_height = max(popover._preferred_height, 224)
-        popover.window.set_default_size(popover._preferred_width, popover._preferred_height)
+        self._register_context_menu_row(
+            "stay-put",
+            stay_row,
+            after="sleep",
+        )
         return popover
 
     def _make_stay_put_row(self) -> tuple[Gtk.Button, Gtk.Switch]:
@@ -176,9 +186,9 @@ class PresenceBuddyMixin:
             self._schedule_idle_action()
 
     def _build_developer_menu(self):
-        """Extend Mochi Lab with isolated Mochi Sense controls.
+        """Extend Mochi Lab with isolated AmbiSense controls.
 
-        Buddy still owns the developer surface and lifecycle. Mochi Sense appends
+        Buddy still owns the developer surface and lifecycle. AmbiSense appends
         its widgets without changing the user menu lifecycle, then promotes the
         Lab surface into a conventional resizable, scrollable GTK window.
         """
@@ -188,7 +198,7 @@ class PresenceBuddyMixin:
 
         card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        presence_label = Gtk.Label(label="Mochi Sense")
+        presence_label = Gtk.Label(label="AmbiSense")
         presence_label.set_xalign(0)
         presence_label.add_css_class("mochi-menu-section")
         card.append(presence_label)
@@ -217,7 +227,7 @@ class PresenceBuddyMixin:
         card.append(quiet_row)
         animated_rows.append(quiet_row)
 
-        # Extra-chatty is intentionally button-backed. The normal Mochi Sense
+        # Extra-chatty is intentionally button-backed. The normal AmbiSense
         # profile is already lively; this control exists only for stress testing.
         chatty_row, self._presence_chatty_switch = self._make_presence_chatty_row()
         card.append(chatty_row)
@@ -295,7 +305,7 @@ class PresenceBuddyMixin:
         button = Gtk.Button()
         button.add_css_class("mochi-menu-row")
         button.set_tooltip_text(
-            "Stress-test Mochi Sense with much faster ambient speech"
+            "Stress-test AmbiSense with much faster ambient speech"
         )
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -364,7 +374,7 @@ class PresenceBuddyMixin:
     def _apply_presence_chatty_test_mode(
         self, enabled: bool, *, clear_cooldowns: bool = True
     ) -> None:
-        """Swap between normal Mochi Sense and an aggressive stress-test profile."""
+        """Swap between normal AmbiSense and an aggressive stress-test profile."""
         self._presence_chatty_test_mode = bool(enabled)
         engine = self._ambient_presence_engine
         tuning = engine.tuning
@@ -415,7 +425,7 @@ class PresenceBuddyMixin:
         logger = getattr(self, "_logger", None)
         if logger is not None:
             logger.info(
-                "Mochi Sense extra-chatty mode %s",
+                "AmbiSense extra-chatty mode %s",
                 "enabled" if enabled else "disabled",
             )
 
@@ -475,7 +485,12 @@ class PresenceBuddyMixin:
     def _show_startup_greeting(self) -> bool:
         """Give Mochi one tiny hello shortly after the desktop buddy appears."""
         self._presence_startup_source_id = None
-        if self._presence_shutting_down or self._preview_mode:
+        if self._presence_shutting_down or self._preview_mode or self._session_blocked():
+            return GLib.SOURCE_REMOVE
+        if self._ambient_presence_engine.intro_pending:
+            # The periodic evaluator retries if ownership/cooldowns prevent
+            # showing the introduction now. Starting alone never marks it seen.
+            self._evaluate_ambient_presence()
             return GLib.SOURCE_REMOVE
         tuning = self._ambient_presence_engine.tuning
         if (
@@ -487,18 +502,21 @@ class PresenceBuddyMixin:
         ):
             return GLib.SOURCE_REMOVE
 
+        if self._ambient_presence_engine.has_pending_event_at_least(40):
+            return GLib.SOURCE_REMOVE
+        category = "welcome_back" if self._presence_is_returning_session else "startup"
         text = self._ambient_presence_engine.phrases.choose(
-            "startup",
+            category,
             exclude_recent=True,
         )
         if self._presence_bubble.show(
-            text,
+            SpeechText(text, typing_preview=True),
             duration_seconds=speech_display_seconds(text),
         ):
             # Startup is a greeting, not an ambient interruption. Remember the
             # phrase for variety but do not spend the normal cooldown budget.
             self._ambient_presence_engine.phrases.remember(text)
-            self._logger.debug("[presence] startup greeting text=%r", text)
+            self._logger.debug("[session] %s greeting text=%r", category, text)
         return GLib.SOURCE_REMOVE
 
     def set_presence_quiet_mode(self, enabled: bool) -> None:
@@ -562,16 +580,45 @@ class PresenceBuddyMixin:
         super()._quit_application()
 
     def _on_presence_battery_low(self, _percent: float) -> None:
+        if self._presence_shutting_down or self._session_blocked():
+            return
         self._ambient_presence_engine.emit("battery_low")
 
     def _on_presence_charging_started(self, _percent: float | None) -> None:
+        if self._presence_shutting_down or self._session_blocked():
+            return
         self._ambient_presence_engine.emit("charging_started")
 
     def _on_presence_network_lost(self) -> None:
+        if self._presence_shutting_down or self._session_blocked():
+            return
         self._ambient_presence_engine.emit("network_lost")
 
     def _on_presence_network_restored(self) -> None:
+        if self._presence_shutting_down or self._session_blocked():
+            return
         self._ambient_presence_engine.emit("network_restored")
+
+    def _session_blocked(self) -> bool:
+        monitor = self._session_signal_monitor
+        return monitor is not None and monitor.blocked
+
+    def _on_presence_session_away(self) -> None:
+        if self._presence_shutting_down or self._preview_mode:
+            return
+        self._ambient_presence_engine.note_session_away()
+        self._dismiss_presence_bubble(user_initiated=False)
+
+    def _on_presence_session_returned(self) -> None:
+        if self._presence_shutting_down or self._preview_mode:
+            return
+        # A lock/resume cycle can happen before the startup timeout fires.
+        # Replace that pending hello with the single lifecycle greeting.
+        if self._presence_startup_source_id is not None:
+            GLib.source_remove(self._presence_startup_source_id)
+            self._presence_startup_source_id = None
+        self._ambient_presence_engine.note_session_returned()
+        self._on_user_active()
 
     def _on_presence_app_category_changed(self, category: str) -> None:
         previous = self._presence_app_category
@@ -678,7 +725,7 @@ class PresenceBuddyMixin:
             network_connected = self._system_signal_monitor.network.connected
 
         context = AmbientContext(
-            user_active=not self._user_idle,
+            user_active=not self._user_idle and not self._session_blocked(),
             typing_intensity=typing_intensity,
             typing_sustained_seconds=typing_sustained,
             idle_seconds=0.0,
@@ -707,12 +754,23 @@ class PresenceBuddyMixin:
         action = self._ambient_presence_engine.evaluate(context, now=now)
         if action is None or self._presence_bubble is None:
             return GLib.SOURCE_CONTINUE
-        if self._presence_bubble.show(
-            action.text,
-            duration_seconds=action.display_seconds,
-        ):
+        if self._show_presence_action(action):
             self._ambient_presence_engine.record_delivered(action, now=now)
         return GLib.SOURCE_CONTINUE
+
+    def _show_presence_action(self, action) -> bool:
+        options = {"markup": INTRO_MARKUP} if action.event == "intro" else {}
+        shown = self._presence_bubble.show(
+            action.text, duration_seconds=action.display_seconds, **options,
+        )
+        if shown and action.event == "intro":
+            try:
+                self._config.mark_intro_seen()
+            except OSError as exc:
+                # Keep Mochi usable if the config cannot be written. A later
+                # launch will offer the introduction again rather than lose it.
+                self._logger.warning("Could not save introduction status: %s", exc)
+        return shown
 
     def _dismiss_presence_bubble(self, *, user_initiated: bool) -> None:
         bubble = self._presence_bubble
@@ -748,6 +806,8 @@ class PresenceBuddyMixin:
                 pass
         if self._system_signal_monitor is not None:
             self._system_signal_monitor.stop()
+        if self._session_signal_monitor is not None:
+            self._session_signal_monitor.stop()
         if self._app_category_monitor is not None:
             self._app_category_monitor.stop()
         if self._presence_bubble is not None:
@@ -755,8 +815,8 @@ class PresenceBuddyMixin:
 
 
 class PresenceBuddy(PresenceBuddyMixin, Buddy):
-    """Wayland/layer-shell Buddy with Mochi Sense."""
+    """Wayland/layer-shell Buddy with AmbiSense."""
 
 
 class PresenceX11Buddy(PresenceBuddyMixin, X11Buddy):
-    """X11/XWayland Buddy with Mochi Sense and unchanged drag behavior."""
+    """X11/XWayland Buddy with AmbiSense and unchanged drag behavior."""
