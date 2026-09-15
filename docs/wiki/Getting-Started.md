@@ -2,7 +2,13 @@
 
 Mochi is currently an experimental Linux desktop companion under active development.
 
-This guide covers development checkout setup rather than a polished end-user installer.
+For alpha testing, use the [README installer and update instructions](../../README.md#install).
+The primary tested configuration is Fedora + GNOME + Wayland/XWayland; Niri is
+experimental. On first GNOME Wayland installation, log out/in once so the helper
+can load. See [current known issues](../../README.md#known-issues) before testing.
+
+The steps below are for an editable development checkout. Unlike the app-grid
+installation, editable installs pick up source edits after restarting Mochi.
 
 ## Supported development target
 
@@ -17,13 +23,9 @@ Mochi may use XWayland for behavior that native GNOME Wayland restrictions make 
 
 ## System packages
 
-On Fedora:
-
-```bash
-sudo dnf install python3 python3-gobject gtk4 gtk4-layer-shell
-```
-
-Package names may differ on other distributions.
+On Fedora, the [installer](../../install.sh) handles the full runtime dependency
+list and GNOME helper setup. Complete the README installation first, then use a
+separate development environment below. Other distributions need manual dependency setup.
 
 ## Clone the repository
 
@@ -35,7 +37,10 @@ cd mochi-desktop
 ## Install development checkout
 
 ```bash
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
 python3 -m pip install -e .
+python3 -m pip install pytest
 ```
 
 This installs the Python package in editable mode so source changes are reflected without rebuilding the package after every edit.
@@ -146,4 +151,7 @@ Then consult [Troubleshooting and Regressions](Troubleshooting-and-Regressions.m
 
 Mochi is not yet presented as a stable public release. The project is currently focused on interaction-core stability and public-alpha readiness.
 
-Do not assume package metadata, README status text, and local development branches always advance at the same moment; verify the branch/commit you are testing.
+Package/runtime metadata is `0.2.0a0`. Published GitHub release labels have
+[documented discrepancies](../../CHANGELOG.md#release-metadata-note), so include
+the tested branch/commit in bug reports. Pulling source alone does not refresh
+the app-grid copy: quit Mochi, rerun `./install.sh`, and relaunch it.

@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a Mochi alpha bug with reproduction steps and Linux environment details
 title: ''
 labels: ''
 assignees: ''
@@ -11,11 +11,11 @@ assignees: ''
 A clear and concise description of what the bug is.
 
 **To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+Check existing issues first, especially #45 (Overview/workspace freeze) and
+#68 (drag-direction latency). Both remain under investigation.
+
+List the shortest sequence that reproduces the problem, starting from launch.
+Mention any dragging, menu use, emote, sleep/wake, Overview, or workspace switch.
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.
@@ -23,16 +23,26 @@ A clear and concise description of what you expected to happen.
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+**Actual behavior**
+What happened? Does it happen every time or intermittently?
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+**Linux environment**
+
+- Distribution and version:
+- Desktop environment/compositor and version:
+- Session type (Wayland or X11):
+- Monitor layout and scale factors:
+- GNOME helper state, if applicable (`gnome-extensions info mochi-typing@miflow13`):
+
+**Build and launch**
+
+- Release tag or checkout branch and commit (`git branch --show-current`, `git rev-parse --short HEAD`):
+- Install method and launch method (app grid, `mochi`, or source command):
+- After updating, did you rerun `./install.sh` and quit/relaunch Mochi?
+
+**Debug output**
+Quit Mochi, run `mochi --debug`, and include relevant terminal output or a
+traceback if available. Review logs/screenshots for personal information before posting.
 
 **Additional context**
 Add any other context about the problem here.

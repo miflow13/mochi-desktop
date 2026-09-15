@@ -11,7 +11,7 @@ Mochi's root README is intentionally kept as the project front door. Deeper impl
 - [Animation and Art Pipeline](wiki/Animation-and-Art-Pipeline.md) — sprite and animation workflow
 - [Development and Testing](wiki/Development-and-Testing.md) — development workflow and verification
 - [Troubleshooting and Regressions](wiki/Troubleshooting-and-Regressions.md) — known failure modes and debugging notes
-- [Current Development Status](wiki/Current-Development-Status.md) — current implementation status
+- [Development snapshot (2026-09-08)](wiki/Current-Development-Status.md) — historical handoff; use the changelog and issue #37 for current status
 - [Roadmap and Public Alpha](wiki/Roadmap-and-Public-Alpha.md) — project direction and alpha expectations
 - [Project Philosophy](wiki/Project-Philosophy.md) — product and character-design principles
 
@@ -20,6 +20,7 @@ Mochi's root README is intentionally kept as the project front door. Deeper impl
 - [Contributing](../CONTRIBUTING.md)
 - [Regression Watchlist](../REGRESSION_WATCHLIST.md)
 - [Changelog](../CHANGELOG.md)
+- [Current alpha QA gate (#37)](https://github.com/miflow13/mochi-desktop/issues/37)
 - [Animation asset specification](../assets/mochi/README.md)
 
 Documentation should describe behavior that exists or an explicitly identified plan. When implementation changes, update the nearest relevant document instead of expanding the root README indefinitely.

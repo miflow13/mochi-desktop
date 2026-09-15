@@ -29,11 +29,14 @@ Primary environment:
 - GTK4 / PyGObject
 - Cairo
 
-Common setup from the repository:
+Complete the [Fedora runtime/helper setup](../../README.md#install), then create
+an editable environment from the repository:
 
 ```bash
-sudo dnf install python3 python3-gobject gtk4 gtk4-layer-shell
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
 python3 -m pip install -e .
+python3 -m pip install pytest
 ```
 
 Launch:
