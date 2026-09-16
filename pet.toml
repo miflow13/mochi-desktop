@@ -18,24 +18,24 @@ default_animation = "idle"
 [animations.idle]
 mode = "loop"
 frames = [
-  { file = "assets/mochi/idle/idle_01.png", duration_ms = 667 },
-  { file = "assets/mochi/idle/idle_02.png", duration_ms = 667 },
-  { file = "assets/mochi/idle/idle_03.png", duration_ms = 667 },
-  { file = "assets/mochi/idle/idle_04.png", duration_ms = 667 },
-  { file = "assets/mochi/idle/idle_05.png", duration_ms = 667 },
-  { file = "assets/mochi/idle/idle_06.png", duration_ms = 667 },
+  { file = "assets/mochi/idle/idle_01.png", duration_ms = 750 },
+  { file = "assets/mochi/idle/idle_02.png", duration_ms = 500 },
+  { file = "assets/mochi/idle/idle_03.png", duration_ms = 350 },
+  { file = "assets/mochi/idle/idle_04.png", duration_ms = 900 },
+  { file = "assets/mochi/idle/idle_05.png", duration_ms = 400 },
+  { file = "assets/mochi/idle/idle_06.png", duration_ms = 1000 },
 ]
 
 [animations.blink]
 mode = "once"
 frames = [
-  { file = "assets/mochi/blink/blink_01.png", duration_ms = 125 },
-  { file = "assets/mochi/blink/blink_02.png", duration_ms = 125 },
-  { file = "assets/mochi/blink/blink_03.png", duration_ms = 125 },
-  { file = "assets/mochi/blink/blink_04.png", duration_ms = 125 },
-  { file = "assets/mochi/blink/blink_05.png", duration_ms = 125 },
-  { file = "assets/mochi/blink/blink_06.png", duration_ms = 125 },
-  { file = "assets/mochi/blink/blink_07.png", duration_ms = 125 },
+  { file = "assets/mochi/blink/blink_01.png", duration_ms = 50 },
+  { file = "assets/mochi/blink/blink_02.png", duration_ms = 55 },
+  { file = "assets/mochi/blink/blink_03.png", duration_ms = 65 },
+  { file = "assets/mochi/blink/blink_04.png", duration_ms = 85 },
+  { file = "assets/mochi/blink/blink_05.png", duration_ms = 65 },
+  { file = "assets/mochi/blink/blink_06.png", duration_ms = 55 },
+  { file = "assets/mochi/blink/blink_07.png", duration_ms = 50 },
 ]
 
 [animations.look]
@@ -56,23 +56,23 @@ frames = [
 [animations.bounce]
 mode = "once"
 frames = [
-  { file = "assets/mochi/bounce/bounce_01.png", duration_ms = 125 },
-  { file = "assets/mochi/bounce/bounce_02.png", duration_ms = 125 },
-  { file = "assets/mochi/bounce/bounce_03.png", duration_ms = 125 },
-  { file = "assets/mochi/bounce/bounce_04.png", duration_ms = 125 },
-  { file = "assets/mochi/bounce/bounce_05.png", duration_ms = 125 },
-  { file = "assets/mochi/bounce/bounce_06.png", duration_ms = 125 },
-  { file = "assets/mochi/bounce/bounce_07.png", duration_ms = 125 },
+  { file = "assets/mochi/bounce/bounce_01.png", duration_ms = 50 },
+  { file = "assets/mochi/bounce/bounce_02.png", duration_ms = 75 },
+  { file = "assets/mochi/bounce/bounce_03.png", duration_ms = 85 },
+  { file = "assets/mochi/bounce/bounce_04.png", duration_ms = 95 },
+  { file = "assets/mochi/bounce/bounce_05.png", duration_ms = 135 },
+  { file = "assets/mochi/bounce/bounce_06.png", duration_ms = 145 },
+  { file = "assets/mochi/bounce/bounce_07.png", duration_ms = 110 },
 ]
 
 [animations.squish]
 mode = "once"
 frames = [
-  { file = "assets/mochi/squish/squish_01.png", duration_ms = 125 },
-  { file = "assets/mochi/squish/squish_02.png", duration_ms = 125 },
-  { file = "assets/mochi/squish/squish_03.png", duration_ms = 125 },
-  { file = "assets/mochi/squish/squish_04.png", duration_ms = 125 },
-  { file = "assets/mochi/squish/squish_05.png", duration_ms = 125 },
+  { file = "assets/mochi/squish/squish_01.png", duration_ms = 45 },
+  { file = "assets/mochi/squish/squish_02.png", duration_ms = 70 },
+  { file = "assets/mochi/squish/squish_03.png", duration_ms = 105 },
+  { file = "assets/mochi/squish/squish_04.png", duration_ms = 120 },
+  { file = "assets/mochi/squish/squish_05.png", duration_ms = 145 },
   { file = "assets/mochi/squish/squish_06.png", duration_ms = 125 },
 ]
 
@@ -126,12 +126,12 @@ frames = [
 [animations.sleep]
 mode = "once"
 frames = [
-  { file = "assets/mochi/sleep_transition/sleep_transition_01.png", duration_ms = 250 },
-  { file = "assets/mochi/sleep_transition/sleep_transition_02.png", duration_ms = 250 },
-  { file = "assets/mochi/sleep_transition/sleep_transition_03.png", duration_ms = 250 },
-  { file = "assets/mochi/sleep_transition/sleep_transition_04.png", duration_ms = 250 },
-  { file = "assets/mochi/sleep_transition/sleep_transition_05.png", duration_ms = 250 },
-  { file = "assets/mochi/sleep_transition/sleep_transition_06.png", duration_ms = 250 },
+  { file = "assets/mochi/sleep_transition/sleep_transition_01.png", duration_ms = 90 },
+  { file = "assets/mochi/sleep_transition/sleep_transition_02.png", duration_ms = 100 },
+  { file = "assets/mochi/sleep_transition/sleep_transition_03.png", duration_ms = 120 },
+  { file = "assets/mochi/sleep_transition/sleep_transition_04.png", duration_ms = 140 },
+  { file = "assets/mochi/sleep_transition/sleep_transition_05.png", duration_ms = 160 },
+  { file = "assets/mochi/sleep_transition/sleep_transition_06.png", duration_ms = 180 },
 ]
 
 [animations.sleeping]
@@ -145,12 +145,12 @@ frames = [
 [animations.wake]
 mode = "once"
 frames = [
-  { file = "assets/mochi/wake/wake_01.png", duration_ms = 200 },
-  { file = "assets/mochi/wake/wake_02.png", duration_ms = 200 },
-  { file = "assets/mochi/wake/wake_03.png", duration_ms = 200 },
-  { file = "assets/mochi/wake/wake_04.png", duration_ms = 200 },
-  { file = "assets/mochi/wake/wake_05.png", duration_ms = 200 },
-  { file = "assets/mochi/wake/wake_06.png", duration_ms = 200 },
+  { file = "assets/mochi/wake/wake_01.png", duration_ms = 70 },
+  { file = "assets/mochi/wake/wake_02.png", duration_ms = 80 },
+  { file = "assets/mochi/wake/wake_03.png", duration_ms = 90 },
+  { file = "assets/mochi/wake/wake_04.png", duration_ms = 100 },
+  { file = "assets/mochi/wake/wake_05.png", duration_ms = 100 },
+  { file = "assets/mochi/wake/wake_06.png", duration_ms = 90 },
 ]
 
 [animations.pickup]
