@@ -189,3 +189,54 @@ def test_eating_can_interrupt_ambient_but_not_critical_states() -> None:
     assert can_transition(MochiState.BOUNCING, MochiState.EATING)
     assert not can_transition(MochiState.SLEEPING, MochiState.EATING)
     assert not can_transition(MochiState.DRAGGED, MochiState.EATING)
+
+
+class _TickBase:
+    def _tick(self):
+        self.player.tick(30)
+        return True
+
+
+class _TickHarness(FeedMochiMixin, _TickBase):
+    pass
+
+
+def test_swallow_sound_follows_animation_once_per_feed() -> None:
+    from mochi.animation import Animation, AnimationFrame, AnimationPlayer
+    from mochi.sound import SoundEvent
+
+    harness = _TickHarness()
+    harness.player = AnimationPlayer()
+    harness.state = SimpleNamespace(current=MochiState.EATING)
+    harness._sound = Mock()
+    animation = Animation("eat", (AnimationFrame("sprite"),) * 16, 120)
+
+    for feeding in range(2):
+        harness.player.play(animation)
+        for _ in range(39):
+            assert harness._tick() is True
+        assert harness._sound.play.call_count == feeding
+        harness._tick()
+        assert harness.player.frame_index == 10
+        assert harness._sound.play.call_count == feeding + 1
+        for _ in range(24):
+            harness._tick()
+        assert harness._sound.play.call_count == feeding + 1
+    harness._sound.play.assert_called_with(SoundEvent.EAT)
+
+
+def test_interruption_before_swallow_stays_silent() -> None:
+    from mochi.animation import Animation, AnimationFrame, AnimationPlayer
+
+    harness = _TickHarness()
+    harness.player = AnimationPlayer()
+    harness.state = SimpleNamespace(current=MochiState.EATING)
+    harness._sound = Mock()
+    harness.player.play(Animation("eat", (AnimationFrame("sprite"),) * 16, 120))
+    for _ in range(39):
+        harness._tick()
+    harness.state.current = MochiState.PICKUP
+    harness.player.play(Animation("pickup", (AnimationFrame("sprite"),) * 16, 120))
+    for _ in range(64):
+        harness._tick()
+    harness._sound.play.assert_not_called()

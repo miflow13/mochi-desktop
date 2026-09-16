@@ -18,6 +18,7 @@ class AudioBackend(Protocol):
 
 class SoundEvent(StrEnum):
     CLICK = "click"
+    EAT = "eat"
     PET = "pet"
     PICKUP = "pickup"
     DROP = "drop"
@@ -57,6 +58,7 @@ class SoundManager:
     EVENT_FILES = {
         SoundEvent.CLICK: "mochi_chirp_01.ogg",
         SoundEvent.PET: "pet.wav",
+        SoundEvent.EAT: "mochi_eat.wav",
         SoundEvent.PICKUP: "pickup.ogg",
         SoundEvent.DROP: "drop.ogg",
         SoundEvent.LEVEL_UP: "level_up.ogg",

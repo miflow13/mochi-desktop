@@ -6,6 +6,7 @@ import time
 
 from gi.repository import Gtk
 
+from mochi.sound import SoundEvent
 from mochi.state import MochiState
 
 
@@ -17,7 +18,7 @@ class FeedMochiMixin:
     - the menu action closes through Buddy's proven deferred-action path;
     - EATING owns the one-shot animation while it is active;
     - a completed feed immediately chains into the existing heart emote;
-    - `_on_feed_animation_started()` is the extension seam for future sound;
+    - the existing animation tick plays the sound at the swallow frame;
     - `_on_feed_animation_completed()` is the extension seam for future
       fullness/XP/progression updates.
 
@@ -103,8 +104,25 @@ class FeedMochiMixin:
                 )
             self._on_feed_animation_completed()
 
+    def _tick(self) -> bool:
+        animation = self.player.animation
+        previous_frame = self.player.frame_index
+        result = super()._tick()
+        # Authored frame 11 is the first closed-mouth frame with no food.
+        # Detect crossing it instead of using a wall-clock timer: interrupted
+        # feeds stay silent and a held frame cannot repeat the cue.
+        if (
+            animation is not None
+            and animation.name == "eat"
+            and self.player.animation is animation
+            and self.state.current is MochiState.EATING
+            and previous_frame < 10 <= self.player.frame_index
+        ):
+            self._sound.play(SoundEvent.EAT)
+        return result
+
     def _on_feed_animation_started(self) -> None:
-        """Extension hook for future eating sound/timing integration."""
+        """Extension hook for future feeding entry behavior."""
 
     def _on_feed_animation_completed(self) -> None:
         """Extension hook for future fullness, XP, and progression updates."""
