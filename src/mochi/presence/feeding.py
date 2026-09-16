@@ -18,7 +18,7 @@ class FeedMochiMixin:
     - the menu action closes through Buddy's proven deferred-action path;
     - EATING owns the one-shot animation while it is active;
     - a completed feed immediately chains into the existing heart emote;
-    - the existing animation tick plays the sound at the swallow frame;
+    - the existing animation tick plays the sound when the candy reaches his mouth;
     - `_on_feed_animation_completed()` is the extension seam for future
       fullness/XP/progression updates.
 
@@ -108,7 +108,7 @@ class FeedMochiMixin:
         animation = self.player.animation
         previous_frame = self.player.frame_index
         result = super()._tick()
-        # Authored frame 11 is the first closed-mouth frame with no food.
+        # Authored frame 5 is where the candy first reaches his mouth.
         # Detect crossing it instead of using a wall-clock timer: interrupted
         # feeds stay silent and a held frame cannot repeat the cue.
         if (
@@ -116,7 +116,7 @@ class FeedMochiMixin:
             and animation.name == "eat"
             and self.player.animation is animation
             and self.state.current is MochiState.EATING
-            and previous_frame < 10 <= self.player.frame_index
+            and previous_frame < 4 <= self.player.frame_index
         ):
             self._sound.play(SoundEvent.EAT)
         return result
