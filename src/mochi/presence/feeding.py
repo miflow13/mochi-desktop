@@ -108,7 +108,7 @@ class FeedMochiMixin:
         animation = self.player.animation
         previous_frame = self.player.frame_index
         result = super()._tick()
-        # Authored frame 3 starts the cue as the candy approaches his mouth.
+        # Authored frame 2 starts the cue as the candy approaches his mouth.
         # Detect crossing it instead of using a wall-clock timer: interrupted
         # feeds stay silent and a held frame cannot repeat the cue.
         if (
@@ -116,7 +116,7 @@ class FeedMochiMixin:
             and animation.name == "eat"
             and self.player.animation is animation
             and self.state.current is MochiState.EATING
-            and previous_frame < 2 <= self.player.frame_index
+            and previous_frame < 1 <= self.player.frame_index
         ):
             self._sound.play(SoundEvent.EAT)
         return result
