@@ -99,9 +99,7 @@ for its event flow and privacy model.
 - **Workspace/Overview freeze — [#45](https://github.com/miflow13/mochi-desktop/issues/45):**
   on GNOME Wayland/XWayland, entering Overview or switching workspaces during
   an emote can leave Mochi visually frozen. This remains an open alpha blocker.
-- **Drag-direction latency — [#68](https://github.com/miflow13/mochi-desktop/issues/68):**
-  the left/right pose can lag after reversing the pointer. Investigation is
-  ongoing; this is not resolved.
+
 - Alpha behavior and compatibility may change. Passing automated tests does
   not establish reliability across desktop sessions, monitors, or scaling setups.
 
