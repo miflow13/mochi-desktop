@@ -6,8 +6,19 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "pet.toml"
 
 
+def _load_manifest() -> dict:
+    return tomllib.loads(MANIFEST.read_text(encoding="utf-8"))
+
+
+def _durations(data: dict, animation_name: str) -> list[int]:
+    return [
+        frame["duration_ms"]
+        for frame in data["animations"][animation_name]["frames"]
+    ]
+
+
 def test_deskling_manifest_references_existing_assets() -> None:
-    data = tomllib.loads(MANIFEST.read_text(encoding="utf-8"))
+    data = _load_manifest()
 
     assert data["schema_version"] == 1
     assert data["pet"]["name"] == "Mochi"
@@ -35,7 +46,7 @@ def test_deskling_manifest_references_existing_assets() -> None:
 
 
 def test_deskling_behavior_targets_defined_animations() -> None:
-    data = tomllib.loads(MANIFEST.read_text(encoding="utf-8"))
+    data = _load_manifest()
     animations = set(data["animations"])
 
     interaction = data["interaction"]
@@ -48,3 +59,19 @@ def test_deskling_behavior_targets_defined_animations() -> None:
     roam = data["behavior"]["roam"]
     assert roam["left_animation"] in animations
     assert roam["right_animation"] in animations
+
+
+def test_deskling_preserves_authored_animation_timing() -> None:
+    data = _load_manifest()
+
+    expected = {
+        "idle": [750, 500, 350, 900, 400, 1000],
+        "blink": [50, 55, 65, 85, 65, 55, 50],
+        "bounce": [50, 75, 85, 95, 135, 145, 110],
+        "squish": [45, 70, 105, 120, 145, 125],
+        "sleep": [90, 100, 120, 140, 160, 180],
+        "wake": [70, 80, 90, 100, 100, 90],
+    }
+
+    for animation_name, durations in expected.items():
+        assert _durations(data, animation_name) == durations
