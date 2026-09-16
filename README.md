@@ -1,8 +1,9 @@
+
 # Mochi
 
 [![Tests](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml/badge.svg)](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml)
 
-<img width="800" height="475" alt="Recorded demo of Mochi beside a terminal window" src="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e" />
+<img width="800" height="428" alt="ezgif-2e6aaeb139cf0fe7" src="https://github.com/user-attachments/assets/9f3e0ca5-8454-4e22-a3d1-70d7e27c23fe" />
 
 A Linux desktop companion that idles, walks, responds to interaction, and can
 react to broad local desktop activity without reading its contents.
