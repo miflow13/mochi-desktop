@@ -53,7 +53,7 @@ def test_update_shows_exact_xp_progress() -> None:
     )
 
 
-def test_xp_gain_shows_amount_and_schedules_brief_highlight() -> None:
+def test_xp_gain_keeps_hud_text_quiet_and_schedules_brief_highlight() -> None:
     overlay = _overlay_harness()
     overlay.resume = Mock()
 
@@ -63,7 +63,7 @@ def test_xp_gain_shows_amount_and_schedules_brief_highlight() -> None:
     ) as timeout:
         overlay.notify_xp_gain(BondState(level=1, xp=22), 1)
 
-    overlay._gain_label.set_text.assert_called_with("+1 XP")
+    overlay._gain_label.set_text.assert_called_with("")
     timeout.assert_called_once_with(
         BondProgressOverlay.GAIN_FLASH_MS,
         overlay._finish_gain_flash,

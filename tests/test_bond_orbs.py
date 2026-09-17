@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 
 from mochi.bond_orbs import (
+    GAIN_MARKER_DURATION_SECONDS,
     LEVEL_UP_BLOOM_DURATION_SECONDS,
     MAX_ACTIVE_ORBS,
     ORB_EMIT_INTERVAL_SECONDS,
@@ -113,6 +114,35 @@ def test_collected_orb_creates_short_absorption_pulse() -> None:
 
     field.advance(1.0, width=128, height=128, target_x=64, target_y=72)
     assert field.pulse_count == 0
+
+
+def test_gain_marker_floats_and_self_finishes_without_adding_xp() -> None:
+    field = XpOrbField(rng=random.Random(4))
+
+    assert field.show_gain_marker(1) == 1
+    assert field.marker_count == 1
+    assert field.pending_xp == 0
+    assert field.total_emitted == 0
+    assert field.has_activity is True
+
+    field.advance(
+        GAIN_MARKER_DURATION_SECONDS + 0.01,
+        width=128,
+        height=128,
+        target_x=64,
+        target_y=72,
+    )
+
+    assert field.marker_count == 0
+    assert field.pending_xp == 0
+    assert field.total_emitted == 0
+
+
+def test_large_award_uses_one_marker_for_the_award_amount() -> None:
+    field = XpOrbField(rng=random.Random(9))
+
+    assert field.show_gain_marker(60) == 60
+    assert field.marker_count == 1
 
 
 def test_level_up_bloom_is_feedback_only_and_self_finishes() -> None:

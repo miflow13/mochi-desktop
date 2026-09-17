@@ -106,6 +106,7 @@ def test_completed_feed_awards_large_boost_persists_and_shows_bar() -> None:
 
     assert harness._bond_state == BondState(level=1, xp=10 + BOND_FEED_XP)
     harness._bond_orbs.queue_xp.assert_called_once_with(BOND_FEED_XP)
+    harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_FEED_XP)
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
     harness._bond_progress_overlay.show_activity.assert_called_once_with(
         BondState(level=1, xp=10),
@@ -127,6 +128,7 @@ def test_typing_tick_adds_one_xp_without_writing_every_second() -> None:
     assert harness._bond_state == BondState(level=1, xp=101)
     assert harness._bond_unsaved_xp == 1
     harness._bond_orbs.queue_xp.assert_called_once_with(1)
+    harness._bond_orbs.show_gain_marker.assert_called_once_with(1)
     harness._bond_progress_overlay.notify_xp_gain.assert_called_once_with(
         harness._bond_state,
         1,

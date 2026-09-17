@@ -190,7 +190,9 @@ class BondProgressOverlay:
 
         self._cancel_hide_timer()
         self._active = True
-        self._gain_text = f"+{amount} XP"
+        # The numeric award now floats beside Mochi in the sprite surface.
+        # The HUD only pulses its bar/card so repeated +1 gains stay quiet.
+        self._gain_text = ""
         self.update(state)
 
         if not self._level_up_active:

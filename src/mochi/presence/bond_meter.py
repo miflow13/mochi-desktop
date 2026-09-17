@@ -130,6 +130,7 @@ class BondMeterMixin:
         self._set_bond_state_for_ui(advance.state)
         self._bond_unsaved_xp += advance.xp_awarded
         self._bond_orbs.queue_xp(advance.xp_awarded)
+        self._bond_orbs.show_gain_marker(advance.xp_awarded)
         if self._bond_progress_overlay is not None:
             self._bond_progress_overlay.notify_xp_gain(
                 self._bond_state,

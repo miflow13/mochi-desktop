@@ -21,6 +21,8 @@ MIN_ORB_DURATION_SECONDS = 0.72
 MAX_ORB_DURATION_SECONDS = 0.95
 COLLECTION_PULSE_DURATION_SECONDS = 0.34
 LEVEL_UP_BLOOM_DURATION_SECONDS = 1.25
+GAIN_MARKER_DURATION_SECONDS = 0.95
+MAX_ACTIVE_GAIN_MARKERS = 3
 
 
 def _coerce_positive_int(value: object) -> int:
@@ -87,6 +89,42 @@ class XpOrb:
 
 
 @dataclass
+class XpGainMarker:
+    """Short floating text marker for one awarded XP event."""
+
+    amount: int
+    age_seconds: float
+    duration_seconds: float
+    drift: float
+
+    @property
+    def complete(self) -> bool:
+        return self.age_seconds >= self.duration_seconds
+
+    @property
+    def progress(self) -> float:
+        if self.duration_seconds <= 0:
+            return 1.0
+        return min(1.0, max(0.0, self.age_seconds / self.duration_seconds))
+
+    @property
+    def alpha(self) -> float:
+        # Hold almost fully readable for the first beat, then fade away.
+        t = self.progress
+        if t < 0.22:
+            return 1.0
+        return max(0.0, 1.0 - (t - 0.22) / 0.78)
+
+    def position(self, target_x: float, target_y: float, size: float) -> tuple[float, float]:
+        """Float upward with a tiny sideways drift while fading."""
+        t = self.progress
+        eased = 1.0 - (1.0 - t) * (1.0 - t)
+        x = target_x + size * (0.08 + self.drift * math.sin(math.pi * t))
+        y = target_y - size * (0.20 + 0.16 * eased)
+        return x, y
+
+
+@dataclass
 class XpCollectionPulse:
     """Short glow produced when one real XP orb reaches Mochi."""
 
@@ -125,6 +163,7 @@ class XpOrbField:
         self._pending_xp = 0
         self._active: list[XpOrb] = []
         self._pulses: list[XpCollectionPulse] = []
+        self._gain_markers: list[XpGainMarker] = []
         self._emit_accumulator = 0.0
         self._total_emitted = 0
         self._level_up_age: float | None = None
@@ -142,6 +181,10 @@ class XpOrbField:
         return len(self._pulses)
 
     @property
+    def marker_count(self) -> int:
+        return len(self._gain_markers)
+
+    @property
     def total_emitted(self) -> int:
         return self._total_emitted
 
@@ -155,6 +198,7 @@ class XpOrbField:
             self._pending_xp
             or self._active
             or self._pulses
+            or self._gain_markers
             or self._level_up_age is not None
         )
 
@@ -173,6 +217,24 @@ class XpOrbField:
                 ORB_EMIT_INTERVAL_SECONDS,
             )
         return queued
+
+    def show_gain_marker(self, amount: int) -> int:
+        """Show one floating label for this award without inventing extra XP."""
+        shown = _coerce_positive_int(amount)
+        if shown <= 0:
+            return 0
+
+        self._gain_markers.append(
+            XpGainMarker(
+                amount=shown,
+                age_seconds=0.0,
+                duration_seconds=GAIN_MARKER_DURATION_SECONDS,
+                drift=self._rng.uniform(-0.045, 0.045),
+            )
+        )
+        if len(self._gain_markers) > MAX_ACTIVE_GAIN_MARKERS:
+            self._gain_markers = self._gain_markers[-MAX_ACTIVE_GAIN_MARKERS:]
+        return shown
 
     def trigger_level_up(self) -> None:
         """Start a celebratory bloom that does not add or imply extra XP."""
@@ -225,6 +287,15 @@ class XpOrbField:
                 if len(self._pulses) > MAX_ACTIVE_PULSES:
                     self._pulses = self._pulses[-MAX_ACTIVE_PULSES:]
             changed = bool(completed) or elapsed > 0.0
+
+        if self._gain_markers:
+            for marker in self._gain_markers:
+                marker.age_seconds += elapsed
+            before = len(self._gain_markers)
+            self._gain_markers = [
+                marker for marker in self._gain_markers if not marker.complete
+            ]
+            changed = changed or len(self._gain_markers) != before or elapsed > 0.0
 
         if self._level_up_age is not None:
             self._level_up_age += elapsed
@@ -338,6 +409,37 @@ class XpOrbField:
                 2 * math.pi,
             )
             context.fill()
+
+        # Award text floats upward from Mochi and fades. It lives in the same
+        # Cairo surface as the sprite, so it cannot steal focus or pointer input.
+        for marker in self._gain_markers:
+            text = f"+{marker.amount} XP"
+            x, y = marker.position(target_x, target_y, size)
+            alpha = marker.alpha
+            font_size = max(8.0, min(14.0, size * 0.085))
+
+            context.save()
+            context.select_font_face(
+                "Sans",
+                cairo.FONT_SLANT_NORMAL,
+                cairo.FONT_WEIGHT_BOLD,
+            )
+            context.set_font_size(font_size)
+            extents = context.text_extents(text)
+            try:
+                x_bearing = extents.x_bearing
+                width = extents.width
+            except AttributeError:
+                x_bearing, _, width, _, _, _ = extents
+
+            context.move_to(x - width / 2 - x_bearing, y)
+            context.text_path(text)
+            context.set_line_width(max(1.0, size * 0.010))
+            context.set_source_rgba(0.05, 0.12, 0.07, alpha * 0.58)
+            context.stroke_preserve()
+            context.set_source_rgba(0.82, 1.0, 0.70, alpha * 0.98)
+            context.fill()
+            context.restore()
 
     def _spawn_orb(
         self,
