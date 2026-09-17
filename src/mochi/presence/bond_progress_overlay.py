@@ -22,8 +22,8 @@ class BondProgressOverlay:
     GAP_PX = 7
     MONITOR_PADDING_PX = 12
     GAIN_FLASH_MS = 650
-    LEVEL_UP_DISPLAY_MS = 2600
-    LEVEL_UP_MIN_HOLD_SECONDS = 3.0
+    LEVEL_UP_DISPLAY_MS = 3200
+    LEVEL_UP_MIN_HOLD_SECONDS = 3.2
 
     def __init__(
         self,
@@ -49,20 +49,30 @@ class BondProgressOverlay:
         (
             self._content,
             self._card,
+            self._normal_content,
+            self._level_up_content,
             self._level_label,
             self._activity_label,
             self._bar,
             self._xp_label,
             self._gain_label,
+            self._level_up_title,
+            self._level_up_level,
+            self._level_up_subtitle,
         ) = self._make_content()
         (
             self._popover_content,
             self._popover_card,
+            self._popover_normal_content,
+            self._popover_level_up_content,
             self._popover_level_label,
             self._popover_activity_label,
             self._popover_bar,
             self._popover_xp_label,
             self._popover_gain_label,
+            self._popover_level_up_title,
+            self._popover_level_up_level,
+            self._popover_level_up_subtitle,
         ) = self._make_content()
 
         self._window = Gtk.Window()
@@ -96,9 +106,14 @@ class BondProgressOverlay:
     def _make_content() -> tuple[
         Gtk.Box,
         Gtk.Box,
+        Gtk.Box,
+        Gtk.Box,
         Gtk.Label,
         Gtk.Label,
         Gtk.ProgressBar,
+        Gtk.Label,
+        Gtk.Label,
+        Gtk.Label,
         Gtk.Label,
         Gtk.Label,
     ]:
@@ -117,6 +132,9 @@ class BondProgressOverlay:
         card.set_focusable(False)
         card.set_can_focus(False)
         card.set_can_target(False)
+
+        normal = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        normal.set_can_target(False)
 
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         header.set_can_target(False)
@@ -158,11 +176,51 @@ class BondProgressOverlay:
         gain.add_css_class("mochi-bond-gain-text")
         footer.append(gain)
 
-        card.append(header)
-        card.append(bar)
-        card.append(footer)
+        normal.append(header)
+        normal.append(bar)
+        normal.append(footer)
+
+        celebration = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        celebration.set_halign(Gtk.Align.CENTER)
+        celebration.set_can_target(False)
+        celebration.set_visible(False)
+        celebration.add_css_class("mochi-level-up-content")
+
+        level_up_title = Gtk.Label(label="✦  LEVEL UP!  ✦")
+        level_up_title.set_halign(Gtk.Align.CENTER)
+        level_up_title.set_can_target(False)
+        level_up_title.add_css_class("mochi-level-up-title")
+        celebration.append(level_up_title)
+
+        level_up_level = Gtk.Label(label="Bond Level 2")
+        level_up_level.set_halign(Gtk.Align.CENTER)
+        level_up_level.set_can_target(False)
+        level_up_level.add_css_class("mochi-level-up-level")
+        celebration.append(level_up_level)
+
+        level_up_subtitle = Gtk.Label(label="Your bond grew stronger")
+        level_up_subtitle.set_halign(Gtk.Align.CENTER)
+        level_up_subtitle.set_can_target(False)
+        level_up_subtitle.add_css_class("mochi-level-up-subtitle")
+        celebration.append(level_up_subtitle)
+
+        card.append(normal)
+        card.append(celebration)
         shell.append(card)
-        return shell, card, level, activity, bar, xp, gain
+        return (
+            shell,
+            card,
+            normal,
+            celebration,
+            level,
+            activity,
+            bar,
+            xp,
+            gain,
+            level_up_title,
+            level_up_level,
+            level_up_subtitle,
+        )
 
     @property
     def active(self) -> bool:
@@ -211,6 +269,7 @@ class BondProgressOverlay:
         self._level_up_active = True
         self._level_up_previous_level = previous_level
         self._active = True
+        self._set_level_up_content(True)
         self._set_level_up_highlight(True)
         self.update(state)
         self.resume()
@@ -225,15 +284,13 @@ class BondProgressOverlay:
             self._activity = activity.strip() or "bonding"
 
         level_text = f"Bond Lv. {self._state.level}"
-        activity_text = "LEVEL UP!" if self._level_up_active else self._activity
+        activity_text = self._activity
         xp_text = f"{self._state.xp} / {self._state.xp_required} XP"
+        gain_text = self._gain_text
 
-        if self._level_up_active and self._level_up_previous_level is not None:
-            gain_text = (
-                f"Lv. {self._level_up_previous_level} → {self._state.level} ✦"
-            )
-        else:
-            gain_text = self._gain_text
+        level_up_level_text = f"Bond Level {self._state.level}"
+        for label in (self._level_up_level, self._popover_level_up_level):
+            label.set_text(level_up_level_text)
 
         for label in (self._level_label, self._popover_level_label):
             label.set_text(level_text)
@@ -265,6 +322,7 @@ class BondProgressOverlay:
         self._gain_text = ""
         self._set_gain_highlight(False)
         self._set_level_up_highlight(False)
+        self._set_level_up_content(False)
         self._hide_surfaces()
 
     def finish_activity(self, delay_seconds: float = 1.6) -> None:
@@ -334,8 +392,10 @@ class BondProgressOverlay:
         self._level_up_active = False
         self._level_up_previous_level = None
         self._set_level_up_highlight(False)
+        self._set_level_up_content(False)
         self._gain_text = ""
-        self.update(self._state)
+        self._active = False
+        self._hide_surfaces()
         return GLib.SOURCE_REMOVE
 
     def _hide_surfaces(self) -> None:
@@ -363,6 +423,15 @@ class BondProgressOverlay:
             except Exception:
                 pass
 
+    def _set_level_up_content(self, enabled: bool) -> None:
+        for normal in (self._normal_content, self._popover_normal_content):
+            normal.set_visible(not enabled)
+        for celebration in (
+            self._level_up_content,
+            self._popover_level_up_content,
+        ):
+            celebration.set_visible(enabled)
+
     def _set_gain_highlight(self, enabled: bool) -> None:
         self._set_css_class(
             "mochi-bond-gain",
@@ -387,6 +456,12 @@ class BondProgressOverlay:
             self._popover_bar,
             self._gain_label,
             self._popover_gain_label,
+            self._level_up_title,
+            self._popover_level_up_title,
+            self._level_up_level,
+            self._popover_level_up_level,
+            self._level_up_subtitle,
+            self._popover_level_up_subtitle,
         )
 
     @staticmethod
@@ -464,9 +539,9 @@ class BondProgressOverlay:
         width = self._window.get_width()
         height = self._window.get_height()
         if width <= 1:
-            width = 192
+            width = 206
         if height <= 1:
-            height = 58
+            height = 76
 
         owner_scale = self._x11_coordinate_scale(self._owner)
         overlay_scale = self._x11_coordinate_scale(self._window)
@@ -554,9 +629,27 @@ class BondProgressOverlay:
                 box-shadow: 0 4px 16px alpha(#79c98b, 0.18);
             }
             .mochi-bond-card.mochi-bond-level-up {
-                background: alpha(#79c98b, 0.16);
-                border: 2px solid alpha(#a8f2b4, 0.90);
-                box-shadow: 0 5px 20px alpha(#79c98b, 0.28);
+                background: alpha(@window_bg_color, 0.98);
+                border: 2px solid alpha(#a8f2b4, 0.92);
+                border-radius: 14px;
+                box-shadow: 0 7px 24px alpha(#79c98b, 0.34);
+                padding: 10px 14px;
+            }
+            .mochi-level-up-content {
+                min-width: 172px;
+            }
+            .mochi-level-up-title {
+                color: #79c98b;
+                font-size: 10px;
+                font-weight: 800;
+            }
+            .mochi-level-up-level {
+                font-size: 17px;
+                font-weight: 800;
+            }
+            .mochi-level-up-subtitle {
+                color: alpha(@window_fg_color, 0.68);
+                font-size: 9px;
             }
             .mochi-bond-level {
                 font-size: 11px;
@@ -584,6 +677,9 @@ class BondProgressOverlay:
             }
             .mochi-bond-gain-text.mochi-bond-level-up {
                 font-weight: 800;
+            }
+            .mochi-level-up-title.mochi-bond-level-up {
+                color: #8fe29e;
             }
             progressbar.mochi-bond-progress trough {
                 min-height: 7px;

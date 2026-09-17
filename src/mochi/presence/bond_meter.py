@@ -167,10 +167,7 @@ class BondMeterMixin:
         """Celebrate clearly without taking over Mochi's behavior state."""
         self._logger.info("Bond level increased: %d -> %d", previous_level, new_level)
         self._bond_orbs.trigger_level_up()
-        if (
-            self._bond_progress_overlay is not None
-            and self.state.current is not MochiState.TYPING
-        ):
+        if self._bond_progress_overlay is not None:
             self._bond_progress_overlay.show_level_up(
                 self._bond_state,
                 previous_level=previous_level,
@@ -179,10 +176,6 @@ class BondMeterMixin:
         queue_draw = getattr(self, "queue_draw", None)
         if callable(queue_draw):
             queue_draw()
-
-        feedback = getattr(self, "show_nameplate_feedback", None)
-        if callable(feedback):
-            feedback(f"Bond Lv. {new_level}!")
 
     def _on_feed_animation_completed(self) -> None:
         """A completed feed gives a visible one-time relationship boost."""

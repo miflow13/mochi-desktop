@@ -28,6 +28,10 @@ def _overlay_harness() -> BondProgressOverlay:
 
     overlay._card = Mock()
     overlay._popover_card = Mock()
+    overlay._normal_content = Mock()
+    overlay._popover_normal_content = Mock()
+    overlay._level_up_content = Mock()
+    overlay._popover_level_up_content = Mock()
     overlay._level_label = Mock()
     overlay._popover_level_label = Mock()
     overlay._activity_label = Mock()
@@ -38,6 +42,12 @@ def _overlay_harness() -> BondProgressOverlay:
     overlay._popover_xp_label = Mock()
     overlay._gain_label = Mock()
     overlay._popover_gain_label = Mock()
+    overlay._level_up_title = Mock()
+    overlay._popover_level_up_title = Mock()
+    overlay._level_up_level = Mock()
+    overlay._popover_level_up_level = Mock()
+    overlay._level_up_subtitle = Mock()
+    overlay._popover_level_up_subtitle = Mock()
     return overlay
 
 
@@ -71,7 +81,7 @@ def test_xp_gain_keeps_hud_text_quiet_and_schedules_brief_highlight() -> None:
     assert overlay._gain_source_id == 91
 
 
-def test_level_up_is_explicit_and_keeps_normal_activity_for_afterward() -> None:
+def test_level_up_switches_to_dedicated_celebration_card() -> None:
     overlay = _overlay_harness()
     overlay.resume = Mock()
 
@@ -81,8 +91,9 @@ def test_level_up_is_explicit_and_keeps_normal_activity_for_afterward() -> None:
     ):
         overlay.show_level_up(BondState(level=2, xp=5), previous_level=1)
 
-    overlay._activity_label.set_text.assert_called_with("LEVEL UP!")
-    overlay._gain_label.set_text.assert_called_with("Lv. 1 → 2 ✦")
+    overlay._normal_content.set_visible.assert_called_with(False)
+    overlay._level_up_content.set_visible.assert_called_with(True)
+    overlay._level_up_level.set_text.assert_called_with("Bond Level 2")
     assert overlay._activity == "typing together"
     assert overlay.level_up_active is True
 
@@ -111,6 +122,7 @@ def test_dismiss_immediately_retires_hud_and_level_up_state() -> None:
     overlay._hide_surfaces = Mock()
     overlay._set_gain_highlight = Mock()
     overlay._set_level_up_highlight = Mock()
+    overlay._set_level_up_content = Mock()
 
     overlay.dismiss()
 
@@ -121,3 +133,21 @@ def test_dismiss_immediately_retires_hud_and_level_up_state() -> None:
     overlay._hide_surfaces.assert_called_once_with()
     overlay._set_gain_highlight.assert_called_once_with(False)
     overlay._set_level_up_highlight.assert_called_once_with(False)
+    overlay._set_level_up_content.assert_called_once_with(False)
+
+
+def test_level_up_card_finishes_by_hiding_instead_of_restoring_meter() -> None:
+    overlay = _overlay_harness()
+    overlay._level_up_active = True
+    overlay._level_up_previous_level = 1
+    overlay._hide_surfaces = Mock()
+    overlay._set_level_up_highlight = Mock()
+    overlay._set_level_up_content = Mock()
+
+    result = overlay._finish_level_up()
+
+    assert result == 0
+    assert overlay.active is False
+    assert overlay.level_up_active is False
+    overlay._set_level_up_content.assert_called_once_with(False)
+    overlay._hide_surfaces.assert_called_once_with()

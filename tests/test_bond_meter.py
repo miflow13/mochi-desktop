@@ -188,16 +188,19 @@ def test_typing_tick_stops_if_mochi_is_no_longer_typing() -> None:
     harness._bond_progress_overlay.finish_activity.assert_not_called()
 
 
-def test_level_up_triggers_bloom_without_hud_while_typing() -> None:
+def test_level_up_shows_dedicated_card_even_while_typing() -> None:
     harness = _runtime_harness(BondState(level=2, xp=10))
 
     BondMeterMixin._on_bond_level_up(harness, 1, 2)
 
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
-    harness._bond_progress_overlay.show_level_up.assert_not_called()
+    harness._bond_progress_overlay.show_level_up.assert_called_once_with(
+        harness._bond_state,
+        previous_level=1,
+    )
 
 
-def test_level_up_still_uses_hud_outside_typing() -> None:
+def test_level_up_still_uses_card_outside_typing() -> None:
     harness = _runtime_harness(BondState(level=2, xp=10))
     harness.state.current = MochiState.EATING
 

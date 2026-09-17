@@ -51,7 +51,7 @@ from mochi.windowing import WindowPlacement
 
 
 class Buddy(Gtk.DrawingArea):
-    SIZE = 112
+    SIZE = 96
     TICK_MS = 16
     CONTEXT_MENU_WIDTH = 244
     CONTEXT_MENU_BASE_HEIGHT = 176
