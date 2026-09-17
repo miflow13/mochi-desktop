@@ -64,6 +64,7 @@ def _runtime_harness(state: BondState | None = None):
     harness._bond_orbs = Mock()
     harness._bond_meter = Mock()
     harness._bond_level_label = Mock()
+    harness._bond_dev_status_label = None
     harness._bond_progress_overlay = Mock()
     harness._bond_progress_overlay.active = True
     harness._bond_typing_source_id = None
@@ -210,3 +211,72 @@ def test_level_up_still_uses_card_outside_typing() -> None:
         harness._bond_state,
         previous_level=1,
     )
+
+
+def test_dev_award_one_uses_real_bond_path() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=20))
+    harness._award_bond = Mock()
+
+    BondMeterMixin._test_bond_award_one(harness)
+
+    harness._award_bond.assert_called_once_with(1, persist=True)
+
+
+def test_dev_swarm_is_visual_only() -> None:
+    harness = _runtime_harness(BondState(level=3, xp=210))
+    harness.queue_draw = Mock()
+    original = harness._bond_state
+
+    BondMeterMixin._test_bond_swarm(harness)
+
+    assert harness._bond_state == original
+    harness._bond_orbs.queue_xp.assert_called_once_with(BOND_FEED_XP)
+    harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_FEED_XP)
+    harness._config.save_bond_state.assert_not_called()
+    harness.queue_draw.assert_called_once_with()
+
+
+def test_dev_level_up_card_previews_next_level_without_mutating_state() -> None:
+    harness = _runtime_harness(BondState(level=4, xp=120))
+    harness.queue_draw = Mock()
+    original = harness._bond_state
+
+    BondMeterMixin._test_bond_level_up_card(harness)
+
+    assert harness._bond_state == original
+    harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    harness._bond_progress_overlay.show_level_up.assert_called_once_with(
+        BondState(level=5, xp=0),
+        previous_level=4,
+    )
+    harness._config.save_bond_state.assert_not_called()
+
+
+def test_dev_real_level_up_crosses_boundary_with_one_xp() -> None:
+    harness = _runtime_harness(BondState(level=2, xp=33))
+    harness._set_bond_state_for_ui = Mock(
+        side_effect=lambda state: setattr(harness, "_bond_state", state)
+    )
+    harness._persist_bond_state = Mock()
+    harness._award_bond = Mock()
+
+    BondMeterMixin._test_bond_real_level_up(harness)
+
+    near = BondState(level=2, xp=BondState(level=2).xp_required - 1)
+    harness._set_bond_state_for_ui.assert_called_once_with(near)
+    harness._persist_bond_state.assert_called_once_with()
+    harness._award_bond.assert_called_once_with(1, persist=True)
+
+
+def test_dev_reset_restores_level_one_and_dismisses_overlay() -> None:
+    harness = _runtime_harness(BondState(level=7, xp=222))
+    harness._set_bond_state_for_ui = Mock(
+        side_effect=lambda state: setattr(harness, "_bond_state", state)
+    )
+    harness._persist_bond_state = Mock()
+
+    BondMeterMixin._test_bond_reset(harness)
+
+    harness._set_bond_state_for_ui.assert_called_once_with(BondState())
+    harness._persist_bond_state.assert_called_once_with()
+    harness._bond_progress_overlay.dismiss.assert_called_once_with()

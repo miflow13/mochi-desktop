@@ -52,6 +52,7 @@ class BondMeterMixin:
         self._bond_orbs = XpOrbField()
         self._bond_meter: BondMeter | None = None
         self._bond_level_label: Gtk.Label | None = None
+        self._bond_dev_status_label: Gtk.Label | None = None
         self._bond_progress_overlay: BondProgressOverlay | None = None
         self._bond_typing_source_id: int | None = None
         self._bond_unsaved_xp = 0
@@ -100,12 +101,147 @@ class BondMeterMixin:
             self._bond_level_label.set_label(self._bond_label_text())
         if self._bond_meter is not None:
             self._bond_meter.set_state(self._bond_state)
+        if self._bond_dev_status_label is not None:
+            self._bond_dev_status_label.set_text(self._bond_dev_status_text())
         if (
             self._bond_progress_overlay is not None
             and self._bond_progress_overlay.active
             and self.state.current is not MochiState.TYPING
         ):
             self._bond_progress_overlay.update(self._bond_state)
+
+    def _bond_dev_status_text(self) -> str:
+        return (
+            f"Lv. {self._bond_state.level}  ·  "
+            f"{self._bond_state.xp}/{self._bond_state.xp_required} XP"
+        )
+
+    def _build_developer_menu(self):
+        """Add focused care/bond QA controls to Mochi Lab."""
+        popover = super()._build_developer_menu()
+        card = self._developer_menu_content
+        animated_rows = list(self._developer_menu_animated_rows)
+
+        card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        label = Gtk.Label(label="Bond testing")
+        label.set_xalign(0)
+        label.add_css_class("mochi-menu-section")
+        card.append(label)
+
+        status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        status_row.add_css_class("mochi-setting-row")
+        status_title = Gtk.Label(label="Current bond")
+        status_title.set_xalign(0)
+        status_title.set_hexpand(True)
+        status_row.append(status_title)
+
+        self._bond_dev_status_label = Gtk.Label(label=self._bond_dev_status_text())
+        self._bond_dev_status_label.add_css_class("mochi-menu-value")
+        status_row.append(self._bond_dev_status_label)
+        card.append(status_row)
+        animated_rows.append(status_row)
+
+        award_button, _ = self._make_menu_button(
+            "Award +1 XP",
+            "list-add-symbolic",
+            self._test_bond_award_one,
+        )
+        award_button.set_tooltip_text(
+            "Awards one real bond XP and persists the updated bond state"
+        )
+        card.append(award_button)
+        animated_rows.append(award_button)
+
+        swarm_button, _ = self._make_menu_button(
+            "Preview 60 XP swarm",
+            "weather-clear-symbolic",
+            self._test_bond_swarm,
+        )
+        swarm_button.set_tooltip_text(
+            "Visual-only dense particle test; does not change saved bond XP"
+        )
+        card.append(swarm_button)
+        animated_rows.append(swarm_button)
+
+        card_button, _ = self._make_menu_button(
+            "Preview level-up card",
+            "emblem-favorite-symbolic",
+            self._test_bond_level_up_card,
+        )
+        card_button.set_tooltip_text(
+            "Visual-only preview of the next bond level celebration"
+        )
+        card.append(card_button)
+        animated_rows.append(card_button)
+
+        real_level_button, _ = self._make_menu_button(
+            "Trigger real level-up",
+            "go-up-symbolic",
+            self._test_bond_real_level_up,
+        )
+        real_level_button.set_tooltip_text(
+            "Moves to one XP before the next level, then awards the final XP"
+        )
+        card.append(real_level_button)
+        animated_rows.append(real_level_button)
+
+        reset_button, _ = self._make_menu_button(
+            "Reset test bond",
+            "edit-undo-symbolic",
+            self._test_bond_reset,
+        )
+        reset_button.set_tooltip_text(
+            "Resets saved bond progress to Level 1 with 0 XP"
+        )
+        card.append(reset_button)
+        animated_rows.append(reset_button)
+
+        self._developer_menu_animated_rows = tuple(animated_rows)
+        return popover
+
+    def _test_bond_award_one(self, _button=None) -> None:
+        """Award one real XP for progress/persistence QA."""
+        self._award_bond(1, persist=True)
+
+    def _test_bond_swarm(self, _button=None) -> None:
+        """Preview a feed-sized particle swarm without mutating bond progress."""
+        self._bond_orbs.queue_xp(BOND_FEED_XP)
+        self._bond_orbs.show_gain_marker(BOND_FEED_XP)
+        queue_draw = getattr(self, "queue_draw", None)
+        if callable(queue_draw):
+            queue_draw()
+
+    def _test_bond_level_up_card(self, _button=None) -> None:
+        """Preview the next-level celebration without changing saved progress."""
+        preview_state = BondState(level=self._bond_state.level + 1, xp=0)
+        self._bond_orbs.trigger_level_up()
+        if self._bond_progress_overlay is not None:
+            self._bond_progress_overlay.show_level_up(
+                preview_state,
+                previous_level=self._bond_state.level,
+            )
+        queue_draw = getattr(self, "queue_draw", None)
+        if callable(queue_draw):
+            queue_draw()
+
+    def _test_bond_real_level_up(self, _button=None) -> None:
+        """Cross a real level boundary with one XP so every hook is exercised."""
+        near_level = BondState(
+            level=self._bond_state.level,
+            xp=max(0, self._bond_state.xp_required - 1),
+        )
+        self._set_bond_state_for_ui(near_level)
+        self._persist_bond_state()
+        self._award_bond(1, persist=True)
+
+    def _test_bond_reset(self, _button=None) -> None:
+        """Restore a predictable Level 1 baseline after developer testing."""
+        self._set_bond_state_for_ui(BondState())
+        self._persist_bond_state()
+        if self._bond_progress_overlay is not None:
+            self._bond_progress_overlay.dismiss()
+        self._logger.info("Developer bond progress reset to Level 1")
 
     def _restore_bond_state(self) -> None:
         config = getattr(self, "_config", None)
