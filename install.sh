@@ -179,8 +179,31 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
+# An activated development venv shadows `python3` in PATH. PyGObject is
+# intentionally supplied by Fedora's RPM packages rather than pip, so a normal
+# isolated dev venv cannot import `gi`. Resolve the interpreter that created
+# the current Python environment and use that system interpreter for OS-level
+# dependency checks and for creating Mochi's private --system-site-packages
+# environment. This keeps ./install.sh reliable even when run from an active
+# .venv.
+SYSTEM_PYTHON="$(
+    python3 - <<'PY'
+import sys
+
+print(getattr(sys, "_base_executable", None) or sys.executable)
+PY
+)"
+
+if [[ ! -x "$SYSTEM_PYTHON" ]]; then
+    if [[ -x /usr/bin/python3 ]]; then
+        SYSTEM_PYTHON=/usr/bin/python3
+    else
+        SYSTEM_PYTHON="$(command -v python3)"
+    fi
+fi
+
 step "Checking GTK4 / PyGObject"
-python3 - <<'PY'
+"$SYSTEM_PYTHON" - <<'PY'
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -193,7 +216,7 @@ step "Installing Mochi"
 printf '%sTarget:%s %s\n' "$DIM" "$RESET" "$APP_HOME"
 mkdir -p "$APP_HOME" "$BIN_DIR" "$APPLICATIONS_DIR" "$ICON_DIR"
 rm -rf "$VENV"
-python3 -m venv --system-site-packages "$VENV"
+"$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"
 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"
 
 install_launcher "$LAUNCHER" "$VENV/bin/mochi"
