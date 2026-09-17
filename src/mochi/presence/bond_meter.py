@@ -57,9 +57,10 @@ class BondMeterMixin:
         super().__init__(*args, **kwargs)
         self._restore_bond_state()
 
-        if not getattr(self, "_preview_mode", False):
+        window = getattr(self, "_window", None)
+        if not getattr(self, "_preview_mode", False) and window is not None:
             self._bond_progress_overlay = BondProgressOverlay(
-                owner=self._window,
+                owner=window,
                 anchor_widget=self,
                 logger=self._logger,
             )
