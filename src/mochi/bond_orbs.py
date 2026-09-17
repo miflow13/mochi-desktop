@@ -70,6 +70,8 @@ class XpOrb:
     def alpha(self) -> float:
         """Stay readable until collection, then softly disappear into Mochi."""
         t = self.progress
+        if t >= 1.0:
+            return 0.0
         if t < 0.78:
             return 0.92
         return max(0.0, 0.92 * (1.0 - (t - 0.78) / 0.22))
