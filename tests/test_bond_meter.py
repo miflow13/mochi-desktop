@@ -108,8 +108,12 @@ def test_completed_feed_awards_large_boost_persists_and_shows_bar() -> None:
     harness._bond_orbs.queue_xp.assert_called_once_with(BOND_FEED_XP)
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
     harness._bond_progress_overlay.show_activity.assert_called_once_with(
-        harness._bond_state,
+        BondState(level=1, xp=10),
         "sharing a snack",
+    )
+    harness._bond_progress_overlay.notify_xp_gain.assert_called_once_with(
+        harness._bond_state,
+        BOND_FEED_XP,
     )
     harness._bond_progress_overlay.finish_activity.assert_called_once()
     assert harness.completion_chain_calls == 1
@@ -123,6 +127,10 @@ def test_typing_tick_adds_one_xp_without_writing_every_second() -> None:
     assert harness._bond_state == BondState(level=1, xp=101)
     assert harness._bond_unsaved_xp == 1
     harness._bond_orbs.queue_xp.assert_called_once_with(1)
+    harness._bond_progress_overlay.notify_xp_gain.assert_called_once_with(
+        harness._bond_state,
+        1,
+    )
     harness._config.save_bond_state.assert_not_called()
 
 
@@ -181,3 +189,15 @@ def test_typing_tick_stops_if_mochi_is_no_longer_typing() -> None:
     assert result == 0
     assert harness._bond_state == BondState(level=1, xp=200)
     harness._bond_progress_overlay.finish_activity.assert_called_once()
+
+
+def test_level_up_triggers_bloom_and_explicit_overlay_state() -> None:
+    harness = _runtime_harness(BondState(level=2, xp=10))
+
+    harness._on_bond_level_up(1, 2)
+
+    harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    harness._bond_progress_overlay.show_level_up.assert_called_once_with(
+        harness._bond_state,
+        previous_level=1,
+    )

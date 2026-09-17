@@ -21,6 +21,9 @@ class BondProgressOverlay:
 
     GAP_PX = 7
     MONITOR_PADDING_PX = 12
+    GAIN_FLASH_MS = 650
+    LEVEL_UP_DISPLAY_MS = 2600
+    LEVEL_UP_MIN_HOLD_SECONDS = 3.0
 
     def __init__(
         self,
@@ -35,19 +38,31 @@ class BondProgressOverlay:
         self._active = False
         self._mode: str | None = None
         self._hide_source_id: int | None = None
+        self._gain_source_id: int | None = None
+        self._level_up_source_id: int | None = None
         self._activity = "bonding"
+        self._gain_text = ""
+        self._level_up_active = False
+        self._level_up_previous_level: int | None = None
+        self._state = BondState()
 
         (
             self._content,
+            self._card,
             self._level_label,
             self._activity_label,
             self._bar,
+            self._xp_label,
+            self._gain_label,
         ) = self._make_content()
         (
             self._popover_content,
+            self._popover_card,
             self._popover_level_label,
             self._popover_activity_label,
             self._popover_bar,
+            self._popover_xp_label,
+            self._popover_gain_label,
         ) = self._make_content()
 
         self._window = Gtk.Window()
@@ -78,7 +93,15 @@ class BondProgressOverlay:
         self.update(BondState())
 
     @staticmethod
-    def _make_content() -> tuple[Gtk.Box, Gtk.Label, Gtk.Label, Gtk.ProgressBar]:
+    def _make_content() -> tuple[
+        Gtk.Box,
+        Gtk.Box,
+        Gtk.Label,
+        Gtk.Label,
+        Gtk.ProgressBar,
+        Gtk.Label,
+        Gtk.Label,
+    ]:
         shell = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         shell.add_css_class("mochi-bond-shell")
         shell.set_margin_top(7)
@@ -116,13 +139,30 @@ class BondProgressOverlay:
         bar.set_show_text(False)
         bar.set_can_target(False)
         bar.set_focusable(False)
-        bar.set_size_request(150, 6)
+        bar.set_size_request(164, 7)
         bar.add_css_class("mochi-bond-progress")
+
+        footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        footer.set_can_target(False)
+
+        xp = Gtk.Label(label="0 / 480 XP")
+        xp.set_xalign(0)
+        xp.set_hexpand(True)
+        xp.set_can_target(False)
+        xp.add_css_class("mochi-bond-xp")
+        footer.append(xp)
+
+        gain = Gtk.Label(label="")
+        gain.set_xalign(1)
+        gain.set_can_target(False)
+        gain.add_css_class("mochi-bond-gain-text")
+        footer.append(gain)
 
         card.append(header)
         card.append(bar)
+        card.append(footer)
         shell.append(card)
-        return shell, level, activity, bar
+        return shell, card, level, activity, bar, xp, gain
 
     @property
     def active(self) -> bool:
@@ -132,6 +172,10 @@ class BondProgressOverlay:
     def visible(self) -> bool:
         return bool(self._window.get_visible() or self._popover.get_visible())
 
+    @property
+    def level_up_active(self) -> bool:
+        return self._level_up_active
+
     def show_activity(self, state: BondState, activity: str) -> None:
         self._cancel_hide_timer()
         self._active = True
@@ -139,20 +183,72 @@ class BondProgressOverlay:
         self.update(state)
         self.resume()
 
+    def notify_xp_gain(self, state: BondState, amount: int) -> None:
+        """Make a real XP award legible without creating another surface."""
+        if amount <= 0:
+            return
+
+        self._cancel_hide_timer()
+        self._active = True
+        self._gain_text = f"+{amount} XP"
+        self.update(state)
+
+        if not self._level_up_active:
+            self._set_gain_highlight(True)
+            self._cancel_gain_timer()
+            self._gain_source_id = GLib.timeout_add(
+                self.GAIN_FLASH_MS,
+                self._finish_gain_flash,
+            )
+        self.resume()
+
+    def show_level_up(self, state: BondState, *, previous_level: int) -> None:
+        """Present a distinct, unmistakable relationship-level milestone."""
+        self._cancel_hide_timer()
+        self._cancel_level_up_timer()
+        self._level_up_active = True
+        self._level_up_previous_level = previous_level
+        self._active = True
+        self._set_level_up_highlight(True)
+        self.update(state)
+        self.resume()
+        self._level_up_source_id = GLib.timeout_add(
+            self.LEVEL_UP_DISPLAY_MS,
+            self._finish_level_up,
+        )
+
     def update(self, state: BondState, activity: str | None = None) -> None:
+        self._state = BondState(level=state.level, xp=state.xp)
         if activity is not None:
             self._activity = activity.strip() or "bonding"
-        level_text = f"Bond Lv. {state.level}"
+
+        level_text = f"Bond Lv. {self._state.level}"
+        activity_text = "LEVEL UP!" if self._level_up_active else self._activity
+        xp_text = f"{self._state.xp} / {self._state.xp_required} XP"
+
+        if self._level_up_active and self._level_up_previous_level is not None:
+            gain_text = (
+                f"Lv. {self._level_up_previous_level} → {self._state.level} ✦"
+            )
+        else:
+            gain_text = self._gain_text
+
         for label in (self._level_label, self._popover_level_label):
             label.set_text(level_text)
         for label in (self._activity_label, self._popover_activity_label):
-            label.set_text(self._activity)
+            label.set_text(activity_text)
+        for label in (self._xp_label, self._popover_xp_label):
+            label.set_text(xp_text)
+        for label in (self._gain_label, self._popover_gain_label):
+            label.set_text(gain_text)
+
         for bar in (self._bar, self._popover_bar):
-            bar.set_fraction(state.progress_fraction)
+            bar.set_fraction(self._state.progress_fraction)
             bar.set_tooltip_text(
-                f"{state.xp}/{state.xp_required} bond XP "
-                f"({state.progress_percent}%)"
+                f"{self._state.xp}/{self._state.xp_required} bond XP "
+                f"({self._state.progress_percent}%)"
             )
+
         if self.visible:
             self.update_position()
 
@@ -160,7 +256,10 @@ class BondProgressOverlay:
         if not self._active:
             return
         self._cancel_hide_timer()
-        delay_ms = max(1, round(max(0.0, delay_seconds) * 1000))
+        delay = max(0.0, delay_seconds)
+        if self._level_up_active:
+            delay = max(delay, self.LEVEL_UP_MIN_HOLD_SECONDS)
+        delay_ms = max(1, round(delay * 1000))
         self._hide_source_id = GLib.timeout_add(delay_ms, self._finish_hide)
 
     def suspend(self) -> None:
@@ -194,6 +293,8 @@ class BondProgressOverlay:
 
     def destroy(self) -> None:
         self._cancel_hide_timer()
+        self._cancel_gain_timer()
+        self._cancel_level_up_timer()
         self._active = False
         self._hide_surfaces()
         self._window.destroy()
@@ -205,6 +306,23 @@ class BondProgressOverlay:
         self._hide_surfaces()
         return GLib.SOURCE_REMOVE
 
+    def _finish_gain_flash(self) -> bool:
+        self._gain_source_id = None
+        self._set_gain_highlight(False)
+        if not self._level_up_active:
+            self._gain_text = ""
+            self.update(self._state)
+        return GLib.SOURCE_REMOVE
+
+    def _finish_level_up(self) -> bool:
+        self._level_up_source_id = None
+        self._level_up_active = False
+        self._level_up_previous_level = None
+        self._set_level_up_highlight(False)
+        self._gain_text = ""
+        self.update(self._state)
+        return GLib.SOURCE_REMOVE
+
     def _hide_surfaces(self) -> None:
         if self._window.get_visible():
             self._window.hide()
@@ -213,13 +331,56 @@ class BondProgressOverlay:
         self._mode = None
 
     def _cancel_hide_timer(self) -> None:
-        source_id = self._hide_source_id
-        self._hide_source_id = None
+        self._remove_source("_hide_source_id")
+
+    def _cancel_gain_timer(self) -> None:
+        self._remove_source("_gain_source_id")
+
+    def _cancel_level_up_timer(self) -> None:
+        self._remove_source("_level_up_source_id")
+
+    def _remove_source(self, attribute: str) -> None:
+        source_id = getattr(self, attribute, None)
+        setattr(self, attribute, None)
         if source_id is not None:
             try:
                 GLib.source_remove(source_id)
             except Exception:
                 pass
+
+    def _set_gain_highlight(self, enabled: bool) -> None:
+        self._set_css_class(
+            "mochi-bond-gain",
+            enabled,
+            self._card,
+            self._popover_card,
+            self._bar,
+            self._popover_bar,
+        )
+
+    def _set_level_up_highlight(self, enabled: bool) -> None:
+        self._set_css_class(
+            "mochi-bond-level-up",
+            enabled,
+            self._card,
+            self._popover_card,
+            self._level_label,
+            self._popover_level_label,
+            self._activity_label,
+            self._popover_activity_label,
+            self._bar,
+            self._popover_bar,
+            self._gain_label,
+            self._popover_gain_label,
+        )
+
+    @staticmethod
+    def _set_css_class(css_class: str, enabled: bool, *widgets: Gtk.Widget) -> None:
+        for widget in widgets:
+            if enabled:
+                widget.add_css_class(css_class)
+            else:
+                widget.remove_css_class(css_class)
 
     def _visible_anchor_bounds(
         self, owner_width: int, owner_height: int
@@ -288,9 +449,9 @@ class BondProgressOverlay:
         width = self._window.get_width()
         height = self._window.get_height()
         if width <= 1:
-            width = 178
+            width = 192
         if height <= 1:
-            height = 42
+            height = 58
 
         owner_scale = self._x11_coordinate_scale(self._owner)
         overlay_scale = self._x11_coordinate_scale(self._window)
@@ -366,30 +527,64 @@ class BondProgressOverlay:
                 background: transparent;
             }
             .mochi-bond-card {
-                background: alpha(@window_bg_color, 0.96);
+                background: alpha(@window_bg_color, 0.97);
                 color: @window_fg_color;
-                border: 1px solid alpha(#79c98b, 0.34);
-                border-radius: 10px;
-                box-shadow: 0 5px 16px alpha(black, 0.14);
-                padding: 7px 9px;
+                border: 1px solid alpha(#79c98b, 0.44);
+                border-radius: 11px;
+                box-shadow: 0 5px 18px alpha(black, 0.16);
+                padding: 8px 10px;
+            }
+            .mochi-bond-card.mochi-bond-gain {
+                border-color: alpha(#8fe29e, 0.76);
+                box-shadow: 0 4px 16px alpha(#79c98b, 0.18);
+            }
+            .mochi-bond-card.mochi-bond-level-up {
+                background: alpha(#79c98b, 0.16);
+                border: 2px solid alpha(#a8f2b4, 0.90);
+                box-shadow: 0 5px 20px alpha(#79c98b, 0.28);
             }
             .mochi-bond-level {
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 700;
             }
+            .mochi-bond-level.mochi-bond-level-up {
+                font-weight: 800;
+            }
             .mochi-bond-activity {
-                color: alpha(@window_fg_color, 0.60);
+                color: alpha(@window_fg_color, 0.62);
                 font-size: 9px;
             }
+            .mochi-bond-activity.mochi-bond-level-up {
+                color: #79c98b;
+                font-weight: 800;
+            }
+            .mochi-bond-xp {
+                color: alpha(@window_fg_color, 0.62);
+                font-size: 9px;
+            }
+            .mochi-bond-gain-text {
+                color: #79c98b;
+                font-size: 9px;
+                font-weight: 700;
+            }
+            .mochi-bond-gain-text.mochi-bond-level-up {
+                font-weight: 800;
+            }
             progressbar.mochi-bond-progress trough {
-                min-height: 5px;
+                min-height: 7px;
                 border-radius: 999px;
                 background: alpha(@window_fg_color, 0.12);
             }
             progressbar.mochi-bond-progress progress {
-                min-height: 5px;
+                min-height: 7px;
                 border-radius: 999px;
                 background: #79c98b;
+            }
+            progressbar.mochi-bond-progress.mochi-bond-gain progress {
+                background: #95e5a2;
+            }
+            progressbar.mochi-bond-progress.mochi-bond-level-up progress {
+                background: #a8f2b4;
             }
             popover.mochi-bond-popover > contents {
                 background: transparent;
@@ -398,8 +593,8 @@ class BondProgressOverlay:
                 padding: 0;
             }
             popover.mochi-bond-popover > arrow {
-                background: alpha(@window_bg_color, 0.96);
-                border-color: alpha(#79c98b, 0.34);
+                background: alpha(@window_bg_color, 0.97);
+                border-color: alpha(#79c98b, 0.44);
             }
             """
         )

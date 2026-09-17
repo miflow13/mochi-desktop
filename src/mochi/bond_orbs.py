@@ -1,8 +1,8 @@
-"""Tiny XP particles drawn inside Mochi's existing sprite surface.
+"""Visual-only bond XP particles rendered inside Mochi's sprite surface.
 
-The particle field is presentation-only. It never creates a GTK window, widget,
-controller, hit target, or state-machine transition. One queued XP always maps
-to one orb.
+No extra GTK windows, widgets, controllers, or hit targets are created here.
+Every awarded XP still maps to exactly one orb; collection pulses and the
+level-up bloom are feedback effects only and never represent additional XP.
 """
 
 from __future__ import annotations
@@ -15,9 +15,12 @@ import cairo
 
 
 ORB_EMIT_INTERVAL_SECONDS = 0.04
-MAX_ACTIVE_ORBS = 24
+MAX_ACTIVE_ORBS = 18
+MAX_ACTIVE_PULSES = 12
 MIN_ORB_DURATION_SECONDS = 0.72
 MAX_ORB_DURATION_SECONDS = 0.95
+COLLECTION_PULSE_DURATION_SECONDS = 0.34
+LEVEL_UP_BLOOM_DURATION_SECONDS = 1.25
 
 
 def _coerce_positive_int(value: object) -> int:
@@ -56,8 +59,8 @@ class XpOrb:
         dy = target_y - self.start_y
         distance = max(1.0, math.hypot(dx, dy))
 
-        # Perpendicular curve that peaks halfway through the trip and returns
-        # exactly to the target, giving the orb a soft float instead of a line.
+        # Perpendicular curve peaks halfway through the trip and returns
+        # exactly to the target, so XP feels gently pulled in rather than shot.
         perpendicular_x = -dy / distance
         perpendicular_y = dx / distance
         curve = math.sin(math.pi * t) * self.sway
@@ -73,14 +76,45 @@ class XpOrb:
         if t >= 1.0:
             return 0.0
         if t < 0.78:
-            return 0.92
-        return max(0.0, 0.92 * (1.0 - (t - 0.78) / 0.22))
+            return 0.98
+        return max(0.0, 0.98 * (1.0 - (t - 0.78) / 0.22))
 
     @property
     def rendered_radius(self) -> float:
         """Shrink slightly as the orb is absorbed."""
         t = self.progress
-        return max(0.7, self.radius * (1.0 - 0.45 * t))
+        return max(0.9, self.radius * (1.0 - 0.38 * t))
+
+
+@dataclass
+class XpCollectionPulse:
+    """Short glow produced when one real XP orb reaches Mochi."""
+
+    age_seconds: float
+    duration_seconds: float
+    base_radius: float
+
+    @property
+    def complete(self) -> bool:
+        return self.age_seconds >= self.duration_seconds
+
+    @property
+    def progress(self) -> float:
+        if self.duration_seconds <= 0:
+            return 1.0
+        return min(1.0, max(0.0, self.age_seconds / self.duration_seconds))
+
+    @property
+    def alpha(self) -> float:
+        return max(0.0, 0.42 * (1.0 - self.progress))
+
+    @property
+    def radius(self) -> float:
+        # Ease-out expansion makes collection feel crisp at the center and
+        # softer at the edge.
+        t = self.progress
+        eased = 1.0 - (1.0 - t) * (1.0 - t)
+        return self.base_radius * (1.0 + 2.4 * eased)
 
 
 class XpOrbField:
@@ -90,8 +124,10 @@ class XpOrbField:
         self._rng = rng or random.Random()
         self._pending_xp = 0
         self._active: list[XpOrb] = []
+        self._pulses: list[XpCollectionPulse] = []
         self._emit_accumulator = 0.0
         self._total_emitted = 0
+        self._level_up_age: float | None = None
 
     @property
     def pending_xp(self) -> int:
@@ -102,12 +138,25 @@ class XpOrbField:
         return len(self._active)
 
     @property
+    def pulse_count(self) -> int:
+        return len(self._pulses)
+
+    @property
     def total_emitted(self) -> int:
         return self._total_emitted
 
     @property
+    def level_up_active(self) -> bool:
+        return self._level_up_age is not None
+
+    @property
     def has_activity(self) -> bool:
-        return bool(self._pending_xp or self._active)
+        return bool(
+            self._pending_xp
+            or self._active
+            or self._pulses
+            or self._level_up_age is not None
+        )
 
     def queue_xp(self, amount: int) -> int:
         """Queue exactly one future orb per positive XP and return that amount."""
@@ -117,13 +166,17 @@ class XpOrbField:
         self._pending_xp += queued
 
         # The first XP should feel immediate rather than waiting for the first
-        # emission interval. Larger rewards still stream in at a bounded rate.
+        # emission interval. Large rewards still stream in at a bounded rate.
         if not self._active:
             self._emit_accumulator = max(
                 self._emit_accumulator,
                 ORB_EMIT_INTERVAL_SECONDS,
             )
         return queued
+
+    def trigger_level_up(self) -> None:
+        """Start a celebratory bloom that does not add or imply extra XP."""
+        self._level_up_age = 0.0
 
     def advance(
         self,
@@ -134,16 +187,46 @@ class XpOrbField:
         target_x: float,
         target_y: float,
     ) -> bool:
-        """Advance particles and emit a bounded number from the XP queue."""
+        """Advance particles, collection pulses, and the level-up bloom."""
         elapsed = max(0.0, float(elapsed_seconds))
         changed = False
 
         if self._active:
+            completed: list[XpOrb] = []
+            remaining: list[XpOrb] = []
             for orb in self._active:
                 orb.age_seconds += elapsed
-            before = len(self._active)
-            self._active = [orb for orb in self._active if not orb.complete]
-            changed = changed or len(self._active) != before or elapsed > 0.0
+                if orb.complete:
+                    completed.append(orb)
+                else:
+                    remaining.append(orb)
+            self._active = remaining
+
+            if completed:
+                for orb in completed:
+                    self._pulses.append(
+                        XpCollectionPulse(
+                            age_seconds=0.0,
+                            duration_seconds=COLLECTION_PULSE_DURATION_SECONDS,
+                            base_radius=max(2.4, orb.radius * 0.95),
+                        )
+                    )
+                if len(self._pulses) > MAX_ACTIVE_PULSES:
+                    self._pulses = self._pulses[-MAX_ACTIVE_PULSES:]
+            changed = bool(completed) or elapsed > 0.0
+
+        if self._pulses:
+            for pulse in self._pulses:
+                pulse.age_seconds += elapsed
+            before = len(self._pulses)
+            self._pulses = [pulse for pulse in self._pulses if not pulse.complete]
+            changed = changed or len(self._pulses) != before or elapsed > 0.0
+
+        if self._level_up_age is not None:
+            self._level_up_age += elapsed
+            if self._level_up_age >= LEVEL_UP_BLOOM_DURATION_SECONDS:
+                self._level_up_age = None
+            changed = True
 
         if self._pending_xp > 0:
             self._emit_accumulator += elapsed
@@ -177,29 +260,76 @@ class XpOrbField:
         *,
         target_x: float,
         target_y: float,
+        size: float,
     ) -> None:
-        """Paint soft green XP lights over the existing Mochi sprite."""
+        """Paint satisfying but compact XP feedback over Mochi's sprite."""
+        size = max(16.0, float(size))
+
+        # A real level-up gets one larger bloom around Mochi. It is deliberately
+        # a ring/glow rather than additional orbs so the 1 XP == 1 orb language
+        # remains truthful.
+        if self._level_up_age is not None:
+            t = min(1.0, self._level_up_age / LEVEL_UP_BLOOM_DURATION_SECONDS)
+            eased = 1.0 - (1.0 - t) * (1.0 - t)
+            alpha = max(0.0, 0.52 * (1.0 - t))
+            radius = size * (0.10 + 0.24 * eased)
+
+            context.set_source_rgba(0.66, 1.0, 0.70, alpha * 0.22)
+            context.arc(target_x, target_y, radius * 1.22, 0, 2 * math.pi)
+            context.fill()
+
+            context.set_source_rgba(0.82, 1.0, 0.72, alpha)
+            context.set_line_width(max(1.2, size * 0.012))
+            context.arc(target_x, target_y, radius, 0, 2 * math.pi)
+            context.stroke()
+
+        # Collection pulses make each orb visibly "land" without adding clutter
+        # elsewhere on the desktop.
+        for pulse in self._pulses:
+            context.set_source_rgba(0.75, 1.0, 0.70, pulse.alpha * 0.26)
+            context.arc(
+                target_x,
+                target_y,
+                pulse.radius * 1.35,
+                0,
+                2 * math.pi,
+            )
+            context.fill()
+
+            context.set_source_rgba(0.88, 1.0, 0.76, pulse.alpha)
+            context.set_line_width(max(1.0, size * 0.008))
+            context.arc(target_x, target_y, pulse.radius, 0, 2 * math.pi)
+            context.stroke()
+
         for orb in self._active:
             x, y = orb.position(target_x, target_y)
             alpha = orb.alpha
             radius = orb.rendered_radius
 
-            # Gentle halo.
-            context.set_source_rgba(0.48, 0.86, 0.58, alpha * 0.25)
-            context.arc(x, y, radius * 2.15, 0, 2 * math.pi)
+            # Larger soft halo makes the orb readable against bright and dark
+            # desktops while the bright center remains small and non-intrusive.
+            context.set_source_rgba(0.44, 0.90, 0.56, alpha * 0.36)
+            context.arc(x, y, radius * 2.80, 0, 2 * math.pi)
             context.fill()
 
+            # A faint rim gives the particle a more deliberate "collectible"
+            # appearance rather than looking like a random green dot.
+            context.set_source_rgba(0.70, 1.0, 0.68, alpha * 0.55)
+            context.set_line_width(max(0.8, radius * 0.24))
+            context.arc(x, y, radius * 1.18, 0, 2 * math.pi)
+            context.stroke()
+
             # Bright XP body.
-            context.set_source_rgba(0.77, 0.96, 0.62, alpha)
+            context.set_source_rgba(0.80, 1.0, 0.66, alpha)
             context.arc(x, y, radius, 0, 2 * math.pi)
             context.fill()
 
-            # Tiny highlight keeps small orbs legible at 64 px.
-            context.set_source_rgba(1.0, 1.0, 0.90, alpha * 0.88)
+            # Small highlight keeps orbs dimensional even at Mochi's 64px size.
+            context.set_source_rgba(1.0, 1.0, 0.94, alpha * 0.96)
             context.arc(
-                x - radius * 0.28,
-                y - radius * 0.28,
-                max(0.55, radius * 0.28),
+                x - radius * 0.25,
+                y - radius * 0.27,
+                max(0.70, radius * 0.30),
                 0,
                 2 * math.pi,
             )
@@ -215,7 +345,7 @@ class XpOrbField:
     ) -> XpOrb:
         size = max(16.0, min(float(width), float(height)))
         angle = self._rng.uniform(0.0, 2 * math.pi)
-        distance = self._rng.uniform(size * 0.30, size * 0.44)
+        distance = self._rng.uniform(size * 0.32, size * 0.46)
 
         start_x = target_x + math.cos(angle) * distance
         start_y = target_y + math.sin(angle) * distance
@@ -226,11 +356,11 @@ class XpOrbField:
         return XpOrb(
             start_x=start_x,
             start_y=start_y,
-            sway=self._rng.uniform(-size * 0.11, size * 0.11),
+            sway=self._rng.uniform(-size * 0.12, size * 0.12),
             age_seconds=0.0,
             duration_seconds=self._rng.uniform(
                 MIN_ORB_DURATION_SECONDS,
                 MAX_ORB_DURATION_SECONDS,
             ),
-            radius=max(1.6, size * self._rng.uniform(0.018, 0.026)),
+            radius=max(2.2, size * self._rng.uniform(0.026, 0.040)),
         )

@@ -130,6 +130,11 @@ class BondMeterMixin:
         self._set_bond_state_for_ui(advance.state)
         self._bond_unsaved_xp += advance.xp_awarded
         self._bond_orbs.queue_xp(advance.xp_awarded)
+        if self._bond_progress_overlay is not None:
+            self._bond_progress_overlay.notify_xp_gain(
+                self._bond_state,
+                advance.xp_awarded,
+            )
         queue_draw = getattr(self, "queue_draw", None)
         if callable(queue_draw):
             queue_draw()
@@ -155,16 +160,29 @@ class BondMeterMixin:
             overlay.show_activity(self._bond_state, activity)
 
     def _on_bond_level_up(self, previous_level: int, new_level: int) -> None:
-        """Surface a quiet celebration without taking over animation state."""
+        """Celebrate clearly without taking over Mochi's behavior state."""
         self._logger.info("Bond level increased: %d -> %d", previous_level, new_level)
+        self._bond_orbs.trigger_level_up()
+        if self._bond_progress_overlay is not None:
+            self._bond_progress_overlay.show_level_up(
+                self._bond_state,
+                previous_level=previous_level,
+            )
+
+        queue_draw = getattr(self, "queue_draw", None)
+        if callable(queue_draw):
+            queue_draw()
+
         feedback = getattr(self, "show_nameplate_feedback", None)
         if callable(feedback):
             feedback(f"Bond Lv. {new_level}!")
 
     def _on_feed_animation_completed(self) -> None:
         """A completed feed gives a visible one-time relationship boost."""
-        self._award_bond(BOND_FEED_XP, persist=True)
+        # Establish the reason first so the +XP pulse and any level-up message
+        # inherit the correct activity instead of flashing generic "bonding".
         self._show_bond_progress("sharing a snack")
+        self._award_bond(BOND_FEED_XP, persist=True)
         if self._bond_progress_overlay is not None:
             self._bond_progress_overlay.finish_activity(BOND_FEED_HOLD_SECONDS)
 
@@ -236,13 +254,14 @@ class BondMeterMixin:
     def _draw(self, area, context, width: int, height: int) -> None:
         """Paint Mochi normally, then render XP orbs in the same input surface."""
         super()._draw(area, context, width, height)
-        if not self._bond_orbs.active_count:
+        if not self._bond_orbs.has_activity:
             return
         target_x, target_y = self._bond_orb_target(width, height)
         self._bond_orbs.draw(
             context,
             target_x=target_x,
             target_y=target_y,
+            size=min(width, height),
         )
 
     def _tick(self) -> bool:

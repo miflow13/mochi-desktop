@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 
 from mochi.bond_orbs import (
+    LEVEL_UP_BLOOM_DURATION_SECONDS,
     MAX_ACTIVE_ORBS,
     ORB_EMIT_INTERVAL_SECONDS,
     XpOrb,
@@ -60,7 +61,7 @@ def test_every_queued_xp_eventually_becomes_exactly_one_orb() -> None:
     field = XpOrbField(rng=random.Random(11))
     field.queue_xp(60)
 
-    for _ in range(400):
+    for _ in range(500):
         field.advance(
             0.05,
             width=128,
@@ -73,6 +74,7 @@ def test_every_queued_xp_eventually_becomes_exactly_one_orb() -> None:
 
     assert field.pending_xp == 0
     assert field.active_count == 0
+    assert field.pulse_count == 0
     assert field.total_emitted == 60
 
 
@@ -96,6 +98,41 @@ def test_orb_curves_to_exact_target_and_fades_at_collection() -> None:
     assert round(y, 5) == 72
     assert orb.alpha == 0
     assert orb.complete is True
+
+
+def test_collected_orb_creates_short_absorption_pulse() -> None:
+    field = XpOrbField(rng=random.Random(5))
+    field.queue_xp(1)
+    field.advance(0.0, width=128, height=128, target_x=64, target_y=72)
+
+    field.advance(2.0, width=128, height=128, target_x=64, target_y=72)
+
+    assert field.active_count == 0
+    assert field.pulse_count == 1
+    assert field.has_activity is True
+
+    field.advance(1.0, width=128, height=128, target_x=64, target_y=72)
+    assert field.pulse_count == 0
+
+
+def test_level_up_bloom_is_feedback_only_and_self_finishes() -> None:
+    field = XpOrbField(rng=random.Random(2))
+    field.trigger_level_up()
+
+    assert field.level_up_active is True
+    assert field.pending_xp == 0
+    assert field.total_emitted == 0
+
+    field.advance(
+        LEVEL_UP_BLOOM_DURATION_SECONDS + 0.01,
+        width=128,
+        height=128,
+        target_x=64,
+        target_y=72,
+    )
+
+    assert field.level_up_active is False
+    assert field.total_emitted == 0
 
 
 def test_invalid_or_negative_awards_do_not_queue_particles() -> None:
