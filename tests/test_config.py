@@ -81,23 +81,32 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertTrue(store.has_seen_intro())
 
 
-    def test_bond_state_defaults_round_trips_and_migrates_legacy_phases(self) -> None:
+    def test_bond_state_defaults_round_trips_and_migrates_old_progress(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             store = ConfigStore(path)
 
             self.assertEqual(store.load_bond_state(), BondState())
 
-            store.save_bond_state(BondState(level=3, points=2))
+            store.save_bond_state(BondState(level=3, xp=210))
             self.assertEqual(
                 store.load_bond_state(),
-                BondState(level=3, points=2),
+                BondState(level=3, xp=210),
+            )
+
+            path.write_text(
+                '{"bond_level": 1, "bond_points": 2}\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                store.load_bond_state(),
+                BondState(level=1, xp=240),
             )
 
             path.write_text('{"bond_phases": 4}\n', encoding="utf-8")
             self.assertEqual(
                 store.load_bond_state(),
-                BondState(level=2, points=0),
+                BondState(level=2, xp=0),
             )
 
 

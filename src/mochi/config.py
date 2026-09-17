@@ -122,29 +122,44 @@ class ConfigStore:
         except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError):
             return BondState()
 
-        if "bond_level" in data or "bond_points" in data:
+        if "bond_xp" in data:
             return BondState(
                 level=data.get("bond_level", 1),
-                points=data.get("bond_points", 0),
+                xp=data.get("bond_xp", 0),
             )
 
-        # Migrate the short-lived v0.3 preview key if somebody tested that
-        # branch locally. Four legacy phases naturally become level 2, 0/4.
-        return BondState(points=data.get("bond_phases", 0))
+        # Migrate the earlier four-step care preview proportionally into the
+        # smooth XP bar so local testers do not lose relationship progress.
+        if "bond_points" in data or "bond_phases" in data:
+            try:
+                level = max(1, int(data.get("bond_level", 1)))
+            except (TypeError, ValueError):
+                level = 1
+            raw_steps = data.get("bond_points", data.get("bond_phases", 0))
+            try:
+                steps = max(0, min(4, int(raw_steps)))
+            except (TypeError, ValueError):
+                steps = 0
+            base = BondState(level=level)
+            migrated_xp = round(base.xp_required * (steps / 4))
+            return BondState(level=level, xp=migrated_xp)
+
+        return BondState()
 
     def save_bond_state(self, state: BondState) -> None:
-        """Persist bond level/progress without storing animation state."""
-        normalized = BondState(level=state.level, points=state.points)
+        """Persist bond level/XP without storing animation state."""
+        normalized = BondState(level=state.level, xp=state.xp)
         data = self._load_or_empty()
         data["bond_level"] = normalized.level
-        data["bond_points"] = normalized.points
+        data["bond_xp"] = normalized.xp
+        data.pop("bond_points", None)
         data.pop("bond_phases", None)
         self._save(data)
         self._logger.debug(
-            "Bond saved: level=%d progress=%d/%d",
+            "Bond saved: level=%d progress=%d/%d XP",
             normalized.level,
-            normalized.points,
-            normalized.points_per_level,
+            normalized.xp,
+            normalized.xp_required,
         )
 
     def has_started_before(self) -> bool:

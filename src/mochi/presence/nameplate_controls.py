@@ -284,10 +284,24 @@ class NameplateMixin:
             return
         bubble = getattr(self, "_presence_bubble", None)
         bubble_visible = bool(bubble is not None and bubble.visible)
+        bond_overlay = getattr(self, "_bond_progress_overlay", None)
+
+        # Shared anchor priority:
+        # speech bubble > live bond progress > normal Mochi nameplate.
         if bubble_visible:
+            if bond_overlay is not None and bond_overlay.visible:
+                bond_overlay.suspend()
             if nameplate.visible:
                 nameplate.hide()
             return
+
+        if bond_overlay is not None and bond_overlay.active:
+            if nameplate.visible:
+                nameplate.hide()
+            bond_overlay.resume()
+            bond_overlay.update_position()
+            return
+
         if not nameplate.visible:
             nameplate.show()
         else:
