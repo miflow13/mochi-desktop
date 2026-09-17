@@ -194,7 +194,7 @@ def test_typing_tick_stops_if_mochi_is_no_longer_typing() -> None:
 def test_level_up_triggers_bloom_and_explicit_overlay_state() -> None:
     harness = _runtime_harness(BondState(level=2, xp=10))
 
-    harness._on_bond_level_up(1, 2)
+    BondMeterMixin._on_bond_level_up(harness, 1, 2)
 
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
     harness._bond_progress_overlay.show_level_up.assert_called_once_with(
