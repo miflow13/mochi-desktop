@@ -6,6 +6,7 @@ import random
 
 from mochi.bond_orbs import (
     GAIN_MARKER_DURATION_SECONDS,
+    DENSE_ORB_THRESHOLD,
     LEVEL_UP_BLOOM_DURATION_SECONDS,
     MAX_ACTIVE_ORBS,
     ORB_EMIT_INTERVAL_SECONDS,
@@ -56,6 +57,45 @@ def test_large_reward_streams_without_exceeding_active_cap() -> None:
 
     assert field.total_emitted > 0
     assert field.total_emitted + field.pending_xp >= 60 - field.active_count
+
+
+def test_dense_reward_uses_bounded_particle_count() -> None:
+    field = XpOrbField(rng=random.Random(13))
+    field.queue_xp(60)
+
+    peak = 0
+    for _ in range(240):
+        field.advance(
+            0.016,
+            width=128,
+            height=128,
+            target_x=64,
+            target_y=72,
+        )
+        peak = max(peak, field.active_count)
+
+    assert peak <= MAX_ACTIVE_ORBS
+    assert MAX_ACTIVE_ORBS > DENSE_ORB_THRESHOLD
+
+
+def test_dense_spawn_pattern_reaches_all_four_quadrants() -> None:
+    field = XpOrbField(rng=random.Random(17))
+    field.queue_xp(12)
+
+    # Give the emitter enough accumulated time to fill its bounded active set.
+    field.advance(
+        1.0,
+        width=128,
+        height=128,
+        target_x=64,
+        target_y=64,
+    )
+
+    quadrants = {
+        (orb.start_x >= 64, orb.start_y >= 64)
+        for orb in field._active
+    }
+    assert len(quadrants) == 4
 
 
 def test_every_queued_xp_eventually_becomes_exactly_one_orb() -> None:

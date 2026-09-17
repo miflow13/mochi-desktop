@@ -14,9 +14,12 @@ import random
 import cairo
 
 
-ORB_EMIT_INTERVAL_SECONDS = 0.04
-MAX_ACTIVE_ORBS = 18
-MAX_ACTIVE_PULSES = 12
+ORB_EMIT_INTERVAL_SECONDS = 0.055
+MAX_ACTIVE_ORBS = 12
+MAX_ACTIVE_PULSES = 6
+MAX_COLLECTION_PULSES_PER_FRAME = 2
+DENSE_ORB_THRESHOLD = 7
+GOLDEN_ANGLE_RADIANS = math.pi * (3.0 - math.sqrt(5.0))
 MIN_ORB_DURATION_SECONDS = 0.72
 MAX_ORB_DURATION_SECONDS = 0.95
 COLLECTION_PULSE_DURATION_SECONDS = 0.34
@@ -166,6 +169,7 @@ class XpOrbField:
         self._gain_markers: list[XpGainMarker] = []
         self._emit_accumulator = 0.0
         self._total_emitted = 0
+        self._spawn_index = 0
         self._level_up_age: float | None = None
 
     @property
@@ -276,7 +280,11 @@ class XpOrbField:
             self._active = remaining
 
             if completed:
-                for orb in completed:
+                # A large reward can finish several orbs on the same frame.
+                # The orbs still remain one-per-XP, but their decorative landing
+                # rings are sampled so the center does not turn into a strobe.
+                pulse_sources = completed[:MAX_COLLECTION_PULSES_PER_FRAME]
+                for orb in pulse_sources:
                     self._pulses.append(
                         XpCollectionPulse(
                             age_seconds=0.0,
@@ -376,25 +384,35 @@ class XpOrbField:
             context.arc(target_x, target_y, pulse.radius, 0, 2 * math.pi)
             context.stroke()
 
+        dense_range = max(1, MAX_ACTIVE_ORBS - DENSE_ORB_THRESHOLD)
+        density = min(
+            1.0,
+            max(0.0, (len(self._active) - DENSE_ORB_THRESHOLD) / dense_range),
+        )
+        radius_scale = 1.0 - 0.14 * density
+        halo_scale = 2.80 - 0.42 * density
+        halo_alpha = 0.36 - 0.13 * density
+        rim_alpha = 0.55 - 0.10 * density
+
         for orb in self._active:
             x, y = orb.position(target_x, target_y)
             alpha = orb.alpha
-            radius = orb.rendered_radius
+            radius = orb.rendered_radius * radius_scale
 
-            # Larger soft halo makes the orb readable against bright and dark
-            # desktops while the bright center remains small and non-intrusive.
-            context.set_source_rgba(0.44, 0.90, 0.56, alpha * 0.36)
-            context.arc(x, y, radius * 2.80, 0, 2 * math.pi)
+            # Sparse rewards keep the plush glow. Dense rewards automatically
+            # tighten halos and particles so the swarm stays legible instead of
+            # becoming one bright green cloud.
+            context.set_source_rgba(0.44, 0.90, 0.56, alpha * halo_alpha)
+            context.arc(x, y, radius * halo_scale, 0, 2 * math.pi)
             context.fill()
 
-            # A faint rim gives the particle a more deliberate "collectible"
-            # appearance rather than looking like a random green dot.
-            context.set_source_rgba(0.70, 1.0, 0.68, alpha * 0.55)
+            # A faint rim gives the particle a deliberate collectible shape.
+            context.set_source_rgba(0.70, 1.0, 0.68, alpha * rim_alpha)
             context.set_line_width(max(0.8, radius * 0.24))
             context.arc(x, y, radius * 1.18, 0, 2 * math.pi)
             context.stroke()
 
-            # Bright XP body.
+            # Keep the body bright even when a large reward is on screen.
             context.set_source_rgba(0.80, 1.0, 0.66, alpha)
             context.arc(x, y, radius, 0, 2 * math.pi)
             context.fill()
@@ -450,8 +468,15 @@ class XpOrbField:
         target_y: float,
     ) -> XpOrb:
         size = max(16.0, min(float(width), float(height)))
-        angle = self._rng.uniform(0.0, 2 * math.pi)
-        distance = self._rng.uniform(size * 0.32, size * 0.46)
+        # Golden-angle spacing prevents a 60-XP reward from randomly bunching
+        # most of its particles on one side of Mochi. Small jitter keeps the
+        # stream organic instead of looking like a perfect geometric pattern.
+        angle = (
+            self._spawn_index * GOLDEN_ANGLE_RADIANS
+            + self._rng.uniform(-0.10, 0.10)
+        ) % (2 * math.pi)
+        self._spawn_index += 1
+        distance = self._rng.uniform(size * 0.33, size * 0.47)
 
         start_x = target_x + math.cos(angle) * distance
         start_y = target_y + math.sin(angle) * distance

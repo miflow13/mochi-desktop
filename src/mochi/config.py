@@ -18,9 +18,10 @@ class Position:
 
 
 class ConfigStore:
-    DEFAULT_SIZE = 128
+    DEFAULT_SIZE = 112
     MIN_SIZE = 64
     MAX_SIZE = 256
+    SIZE_STEP = 16
     DEFAULT_VOLUME = 0.6
 
     def __init__(self, path: Path | None = None) -> None:

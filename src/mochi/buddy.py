@@ -51,7 +51,7 @@ from mochi.windowing import WindowPlacement
 
 
 class Buddy(Gtk.DrawingArea):
-    SIZE = 128
+    SIZE = 112
     TICK_MS = 16
     CONTEXT_MENU_WIDTH = 244
     CONTEXT_MENU_BASE_HEIGHT = 176
@@ -454,13 +454,20 @@ class Buddy(Gtk.DrawingArea):
         card.append(size_row)
         animated_rows.append(size_row)
 
-        size_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, ConfigStore.MIN_SIZE, ConfigStore.MAX_SIZE, 64)
+        size_scale = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL,
+            ConfigStore.MIN_SIZE,
+            ConfigStore.MAX_SIZE,
+            ConfigStore.SIZE_STEP,
+        )
         size_scale.set_value(self._size)
         size_scale.set_draw_value(False)
         size_scale.set_hexpand(True)
         size_scale.add_css_class("mochi-menu-scale")
         size_scale.connect("value-changed", self._change_size)
-        size_scale.connect("value-changed", lambda scale: size_value.set_text(f"{round(scale.get_value() / 64) * 64}px"))
+        size_scale.connect("value-changed", lambda scale: size_value.set_text(
+                f"{round(scale.get_value() / ConfigStore.SIZE_STEP) * ConfigStore.SIZE_STEP}px"
+            ))
         card.append(size_scale)
         animated_rows.append(size_scale)
 
@@ -620,7 +627,10 @@ class Buddy(Gtk.DrawingArea):
         self._logger.debug("Tuning changed: %s=%s", attribute, value)
 
     def _change_size(self, scale: Gtk.Scale) -> None:
-        size = round(scale.get_value() / 64) * 64
+        size = (
+            round(scale.get_value() / ConfigStore.SIZE_STEP)
+            * ConfigStore.SIZE_STEP
+        )
         if size == self._size:
             return
         self._size = size
