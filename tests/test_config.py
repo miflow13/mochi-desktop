@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from mochi.care import BondState
 from mochi.config import ConfigStore, Position
 
 
@@ -78,6 +79,26 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertFalse(store.has_seen_intro())
             store.mark_intro_seen()
             self.assertTrue(store.has_seen_intro())
+
+
+    def test_bond_state_defaults_round_trips_and_migrates_legacy_phases(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            store = ConfigStore(path)
+
+            self.assertEqual(store.load_bond_state(), BondState())
+
+            store.save_bond_state(BondState(level=3, points=2))
+            self.assertEqual(
+                store.load_bond_state(),
+                BondState(level=3, points=2),
+            )
+
+            path.write_text('{"bond_phases": 4}\n', encoding="utf-8")
+            self.assertEqual(
+                store.load_bond_state(),
+                BondState(level=2, points=0),
+            )
 
 
 if __name__ == "__main__":

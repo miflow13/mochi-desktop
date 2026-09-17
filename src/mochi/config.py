@@ -8,6 +8,8 @@ import logging
 import os
 from pathlib import Path
 
+from mochi.care import BondState
+
 
 @dataclass(frozen=True)
 class Position:
@@ -112,6 +114,38 @@ class ConfigStore:
         data["edge_roam"] = bool(enabled)
         self._save(data)
         self._logger.debug("Edge roam: %s", bool(enabled))
+
+    def load_bond_state(self) -> BondState:
+        """Return Mochi's persisted, non-decaying bond progress."""
+        try:
+            data = self._load()
+        except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError):
+            return BondState()
+
+        if "bond_level" in data or "bond_points" in data:
+            return BondState(
+                level=data.get("bond_level", 1),
+                points=data.get("bond_points", 0),
+            )
+
+        # Migrate the short-lived v0.3 preview key if somebody tested that
+        # branch locally. Four legacy phases naturally become level 2, 0/4.
+        return BondState(points=data.get("bond_phases", 0))
+
+    def save_bond_state(self, state: BondState) -> None:
+        """Persist bond level/progress without storing animation state."""
+        normalized = BondState(level=state.level, points=state.points)
+        data = self._load_or_empty()
+        data["bond_level"] = normalized.level
+        data["bond_points"] = normalized.points
+        data.pop("bond_phases", None)
+        self._save(data)
+        self._logger.debug(
+            "Bond saved: level=%d progress=%d/%d",
+            normalized.level,
+            normalized.points,
+            normalized.points_per_level,
+        )
 
     def has_started_before(self) -> bool:
         """Whether Mochi has completed at least one non-preview startup."""
