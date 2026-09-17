@@ -84,6 +84,7 @@ def test_bond_row_lands_between_status_and_feed() -> None:
 
 def test_restore_loads_persisted_relationship_state() -> None:
     harness = _runtime_harness()
+    harness.state.current = MochiState.IDLE
     harness._config.load_bond_state.return_value = BondState(level=3, xp=210)
 
     harness._restore_bond_state()
