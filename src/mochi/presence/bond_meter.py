@@ -21,7 +21,6 @@ from .bond_progress_overlay import BondProgressOverlay
 
 BOND_TYPING_TICK_SECONDS = 1
 BOND_PERSIST_INTERVAL_XP = 15
-BOND_PROGRESS_HOLD_SECONDS = 1.6
 BOND_FEED_HOLD_SECONDS = 2.4
 
 
@@ -104,6 +103,7 @@ class BondMeterMixin:
         if (
             self._bond_progress_overlay is not None
             and self._bond_progress_overlay.active
+            and self.state.current is not MochiState.TYPING
         ):
             self._bond_progress_overlay.update(self._bond_state)
 
@@ -131,7 +131,10 @@ class BondMeterMixin:
         self._bond_unsaved_xp += advance.xp_awarded
         self._bond_orbs.queue_xp(advance.xp_awarded)
         self._bond_orbs.show_gain_marker(advance.xp_awarded)
-        if self._bond_progress_overlay is not None:
+        if (
+            self._bond_progress_overlay is not None
+            and self.state.current is not MochiState.TYPING
+        ):
             self._bond_progress_overlay.notify_xp_gain(
                 self._bond_state,
                 advance.xp_awarded,
@@ -164,7 +167,10 @@ class BondMeterMixin:
         """Celebrate clearly without taking over Mochi's behavior state."""
         self._logger.info("Bond level increased: %d -> %d", previous_level, new_level)
         self._bond_orbs.trigger_level_up()
-        if self._bond_progress_overlay is not None:
+        if (
+            self._bond_progress_overlay is not None
+            and self.state.current is not MochiState.TYPING
+        ):
             self._bond_progress_overlay.show_level_up(
                 self._bond_state,
                 previous_level=previous_level,
@@ -198,7 +204,10 @@ class BondMeterMixin:
             self._start_bond_typing_session()
 
     def _start_bond_typing_session(self) -> None:
-        self._show_bond_progress("typing together")
+        # Typing quips own the shared speech/nameplate area. Bond progression
+        # stays ambient through orbs and floating XP markers, never the HUD.
+        if self._bond_progress_overlay is not None:
+            self._bond_progress_overlay.dismiss()
         if self._bond_typing_source_id is None:
             self._bond_typing_source_id = GLib.timeout_add_seconds(
                 BOND_TYPING_TICK_SECONDS,
@@ -229,9 +238,6 @@ class BondMeterMixin:
 
         if self._bond_unsaved_xp > 0:
             self._persist_bond_state()
-
-        if self._bond_progress_overlay is not None:
-            self._bond_progress_overlay.finish_activity(BOND_PROGRESS_HOLD_SECONDS)
 
     def _bond_orb_target(self, width: int, height: int) -> tuple[float, float]:
         """Aim XP at the visible center of Mochi instead of transparent padding."""

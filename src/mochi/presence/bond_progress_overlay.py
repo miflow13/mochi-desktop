@@ -254,6 +254,19 @@ class BondProgressOverlay:
         if self.visible:
             self.update_position()
 
+    def dismiss(self) -> None:
+        """Immediately retire the HUD without changing bond progression."""
+        self._cancel_hide_timer()
+        self._cancel_gain_timer()
+        self._cancel_level_up_timer()
+        self._active = False
+        self._level_up_active = False
+        self._level_up_previous_level = None
+        self._gain_text = ""
+        self._set_gain_highlight(False)
+        self._set_level_up_highlight(False)
+        self._hide_surfaces()
+
     def finish_activity(self, delay_seconds: float = 1.6) -> None:
         if not self._active:
             return

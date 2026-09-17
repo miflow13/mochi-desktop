@@ -101,3 +101,23 @@ def test_finish_activity_holds_long_enough_for_level_up_message() -> None:
         round(BondProgressOverlay.LEVEL_UP_MIN_HOLD_SECONDS * 1000),
         overlay._finish_hide,
     )
+
+
+def test_dismiss_immediately_retires_hud_and_level_up_state() -> None:
+    overlay = _overlay_harness()
+    overlay._level_up_active = True
+    overlay._level_up_previous_level = 1
+    overlay._gain_text = "+1 XP"
+    overlay._hide_surfaces = Mock()
+    overlay._set_gain_highlight = Mock()
+    overlay._set_level_up_highlight = Mock()
+
+    overlay.dismiss()
+
+    assert overlay.active is False
+    assert overlay.level_up_active is False
+    assert overlay._level_up_previous_level is None
+    assert overlay._gain_text == ""
+    overlay._hide_surfaces.assert_called_once_with()
+    overlay._set_gain_highlight.assert_called_once_with(False)
+    overlay._set_level_up_highlight.assert_called_once_with(False)

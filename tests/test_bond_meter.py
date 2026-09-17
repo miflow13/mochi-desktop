@@ -101,6 +101,7 @@ def test_completed_feed_awards_large_boost_persists_and_shows_bar() -> None:
     runtime = _runtime_harness(BondState(level=1, xp=10))
     harness.__dict__.update(runtime.__dict__)
     harness.completion_chain_calls = 0
+    harness.state.current = MochiState.EATING
 
     harness._on_feed_animation_completed()
 
@@ -129,10 +130,7 @@ def test_typing_tick_adds_one_xp_without_writing_every_second() -> None:
     assert harness._bond_unsaved_xp == 1
     harness._bond_orbs.queue_xp.assert_called_once_with(1)
     harness._bond_orbs.show_gain_marker.assert_called_once_with(1)
-    harness._bond_progress_overlay.notify_xp_gain.assert_called_once_with(
-        harness._bond_state,
-        1,
-    )
+    harness._bond_progress_overlay.notify_xp_gain.assert_not_called()
     harness._config.save_bond_state.assert_not_called()
 
 
@@ -147,9 +145,8 @@ def test_typing_progress_batches_disk_writes() -> None:
     assert harness._bond_unsaved_xp == 0
 
 
-def test_typing_activity_starts_one_timer_and_live_overlay() -> None:
+def test_typing_activity_starts_one_timer_without_showing_bond_hud() -> None:
     harness = _runtime_harness()
-    harness._bond_progress_overlay.active = False
 
     with patch(
         "mochi.presence.bond_meter.GLib.timeout_add_seconds",
@@ -160,11 +157,8 @@ def test_typing_activity_starts_one_timer_and_live_overlay() -> None:
 
     timeout.assert_called_once()
     assert harness._bond_typing_source_id == 44
-    assert harness._bond_progress_overlay.show_activity.call_count == 2
-    harness._bond_progress_overlay.show_activity.assert_called_with(
-        harness._bond_state,
-        "typing together",
-    )
+    assert harness._bond_progress_overlay.dismiss.call_count == 2
+    harness._bond_progress_overlay.show_activity.assert_not_called()
 
 
 def test_typing_stop_flushes_pending_xp_and_holds_progress_briefly() -> None:
@@ -177,7 +171,7 @@ def test_typing_stop_flushes_pending_xp_and_holds_progress_briefly() -> None:
 
     remove.assert_called_once_with(77)
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
-    harness._bond_progress_overlay.finish_activity.assert_called_once()
+    harness._bond_progress_overlay.finish_activity.assert_not_called()
     assert harness._bond_typing_source_id is None
     assert harness._bond_unsaved_xp == 0
 
@@ -190,15 +184,24 @@ def test_typing_tick_stops_if_mochi_is_no_longer_typing() -> None:
 
     assert result == 0
     assert harness._bond_state == BondState(level=1, xp=200)
-    harness._bond_progress_overlay.finish_activity.assert_called_once()
+    harness._bond_progress_overlay.finish_activity.assert_not_called()
 
 
-def test_level_up_triggers_bloom_and_explicit_overlay_state() -> None:
+def test_level_up_triggers_bloom_without_hud_while_typing() -> None:
     harness = _runtime_harness(BondState(level=2, xp=10))
 
     BondMeterMixin._on_bond_level_up(harness, 1, 2)
 
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    harness._bond_progress_overlay.show_level_up.assert_not_called()
+
+
+def test_level_up_still_uses_hud_outside_typing() -> None:
+    harness = _runtime_harness(BondState(level=2, xp=10))
+    harness.state.current = MochiState.EATING
+
+    BondMeterMixin._on_bond_level_up(harness, 1, 2)
+
     harness._bond_progress_overlay.show_level_up.assert_called_once_with(
         harness._bond_state,
         previous_level=1,
