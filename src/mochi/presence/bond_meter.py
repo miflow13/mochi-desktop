@@ -13,6 +13,7 @@ from mochi.care import (
     BondAdvance,
     BondState,
 )
+from mochi.bond_orbs import XpOrbField
 from mochi.state import MochiState
 
 from .bond_progress_overlay import BondProgressOverlay
@@ -49,6 +50,7 @@ class BondMeterMixin:
 
     def __init__(self, *args, **kwargs) -> None:
         self._bond_state = BondState()
+        self._bond_orbs = XpOrbField()
         self._bond_meter: BondMeter | None = None
         self._bond_level_label: Gtk.Label | None = None
         self._bond_progress_overlay: BondProgressOverlay | None = None
@@ -127,6 +129,10 @@ class BondMeterMixin:
         previous_level = self._bond_state.level
         self._set_bond_state_for_ui(advance.state)
         self._bond_unsaved_xp += advance.xp_awarded
+        self._bond_orbs.queue_xp(advance.xp_awarded)
+        queue_draw = getattr(self, "queue_draw", None)
+        if callable(queue_draw):
+            queue_draw()
 
         if persist or self._bond_unsaved_xp >= BOND_PERSIST_INTERVAL_XP:
             self._persist_bond_state()
@@ -207,6 +213,57 @@ class BondMeterMixin:
 
         if self._bond_progress_overlay is not None:
             self._bond_progress_overlay.finish_activity(BOND_PROGRESS_HOLD_SECONDS)
+
+    def _bond_orb_target(self, width: int, height: int) -> tuple[float, float]:
+        """Aim XP at the visible center of Mochi instead of transparent padding."""
+        frame = getattr(getattr(self, "player", None), "frame", None)
+        atlas = getattr(self, "atlas", None)
+        if frame is not None and atlas is not None and hasattr(atlas, "visible_bounds"):
+            try:
+                x, y, visible_width, visible_height = atlas.visible_bounds(
+                    frame,
+                    width,
+                    height,
+                )
+                return (
+                    x + visible_width * 0.50,
+                    y + visible_height * 0.58,
+                )
+            except Exception:
+                pass
+        return (width * 0.50, height * 0.58)
+
+    def _draw(self, area, context, width: int, height: int) -> None:
+        """Paint Mochi normally, then render XP orbs in the same input surface."""
+        super()._draw(area, context, width, height)
+        if not self._bond_orbs.active_count:
+            return
+        target_x, target_y = self._bond_orb_target(width, height)
+        self._bond_orbs.draw(
+            context,
+            target_x=target_x,
+            target_y=target_y,
+        )
+
+    def _tick(self) -> bool:
+        """Advance XP particles on Mochi's existing 60-ish Hz animation tick."""
+        result = super()._tick()
+        if self._bond_orbs.has_activity:
+            width = max(1, getattr(self, "get_width", lambda: 128)())
+            height = max(1, getattr(self, "get_height", lambda: 128)())
+            target_x, target_y = self._bond_orb_target(width, height)
+            changed = self._bond_orbs.advance(
+                getattr(self, "TICK_MS", 16) / 1000.0,
+                width=width,
+                height=height,
+                target_x=target_x,
+                target_y=target_y,
+            )
+            if changed:
+                queue_draw = getattr(self, "queue_draw", None)
+                if callable(queue_draw):
+                    queue_draw()
+        return result
 
     def shutdown_presence(self) -> None:
         """Flush earned XP and tear down the visual-only progress surface."""

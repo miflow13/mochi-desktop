@@ -61,6 +61,7 @@ class _BondCompletionHarness(BondMeterMixin, _CompletionBase):
 def _runtime_harness(state: BondState | None = None):
     harness = object.__new__(BondMeterMixin)
     harness._bond_state = state or BondState()
+    harness._bond_orbs = Mock()
     harness._bond_meter = Mock()
     harness._bond_level_label = Mock()
     harness._bond_progress_overlay = Mock()
@@ -104,6 +105,7 @@ def test_completed_feed_awards_large_boost_persists_and_shows_bar() -> None:
     harness._on_feed_animation_completed()
 
     assert harness._bond_state == BondState(level=1, xp=10 + BOND_FEED_XP)
+    harness._bond_orbs.queue_xp.assert_called_once_with(BOND_FEED_XP)
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
     harness._bond_progress_overlay.show_activity.assert_called_once_with(
         harness._bond_state,
@@ -120,6 +122,7 @@ def test_typing_tick_adds_one_xp_without_writing_every_second() -> None:
 
     assert harness._bond_state == BondState(level=1, xp=101)
     assert harness._bond_unsaved_xp == 1
+    harness._bond_orbs.queue_xp.assert_called_once_with(1)
     harness._config.save_bond_state.assert_not_called()
 
 
