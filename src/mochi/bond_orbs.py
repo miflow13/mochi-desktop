@@ -191,6 +191,17 @@ class XpOrbField:
         elapsed = max(0.0, float(elapsed_seconds))
         changed = False
 
+        # Advance pulses that already existed at the start of this frame.
+        # Pulses created by orb collection below intentionally begin at age 0
+        # and survive until the next tick, so even a delayed frame cannot skip
+        # the visible "XP landed" moment entirely.
+        if self._pulses:
+            for pulse in self._pulses:
+                pulse.age_seconds += elapsed
+            before = len(self._pulses)
+            self._pulses = [pulse for pulse in self._pulses if not pulse.complete]
+            changed = changed or len(self._pulses) != before or elapsed > 0.0
+
         if self._active:
             completed: list[XpOrb] = []
             remaining: list[XpOrb] = []
@@ -214,13 +225,6 @@ class XpOrbField:
                 if len(self._pulses) > MAX_ACTIVE_PULSES:
                     self._pulses = self._pulses[-MAX_ACTIVE_PULSES:]
             changed = bool(completed) or elapsed > 0.0
-
-        if self._pulses:
-            for pulse in self._pulses:
-                pulse.age_seconds += elapsed
-            before = len(self._pulses)
-            self._pulses = [pulse for pulse in self._pulses if not pulse.complete]
-            changed = changed or len(self._pulses) != before or elapsed > 0.0
 
         if self._level_up_age is not None:
             self._level_up_age += elapsed
