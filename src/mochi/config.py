@@ -18,7 +18,7 @@ class Position:
 
 
 class ConfigStore:
-    DEFAULT_SIZE = 96
+    DEFAULT_SIZE = 112
     MIN_SIZE = 64
     MAX_SIZE = 256
     SIZE_STEP = 16

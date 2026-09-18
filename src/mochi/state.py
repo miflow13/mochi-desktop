@@ -28,10 +28,32 @@ class MochiState(Enum):
     FEDORA = auto()
 
 
+class PresentationState(Enum):
+    NORMAL = auto()
+    LEVEL_UP = auto()
+
+
 class StateMachine:
     def __init__(self) -> None:
         self.current = MochiState.IDLE
+        self.presentation = PresentationState.NORMAL
         self._logger = logging.getLogger(__name__)
+
+    @property
+    def dialogue_allowed(self) -> bool:
+        """Whether speech/quips may claim Mochi's presentation space."""
+        return self.presentation is PresentationState.NORMAL
+
+    def transition_presentation(self, next_state: PresentationState) -> None:
+        if next_state is self.presentation:
+            return
+        previous = self.presentation
+        self.presentation = next_state
+        self._logger.debug(
+            "Mochi presentation: %s -> %s",
+            previous.name,
+            next_state.name,
+        )
 
     def transition_to(self, next_state: MochiState) -> None:
         if next_state is self.current:

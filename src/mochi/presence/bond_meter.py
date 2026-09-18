@@ -14,7 +14,7 @@ from mochi.care import (
     BondState,
 )
 from mochi.bond_orbs import XpOrbField
-from mochi.state import MochiState
+from mochi.state import MochiState, PresentationState
 
 from .bond_progress_overlay import BondProgressOverlay
 
@@ -65,6 +65,7 @@ class BondMeterMixin:
                 owner=window,
                 anchor_widget=self,
                 logger=self._logger,
+                on_level_up_finished=self._on_bond_level_up_finished,
             )
 
     def _build_context_menu(self):
@@ -215,15 +216,10 @@ class BondMeterMixin:
     def _test_bond_level_up_card(self, _button=None) -> None:
         """Preview the next-level celebration without changing saved progress."""
         preview_state = BondState(level=self._bond_state.level + 1, xp=0)
-        self._bond_orbs.trigger_level_up()
-        if self._bond_progress_overlay is not None:
-            self._bond_progress_overlay.show_level_up(
-                preview_state,
-                previous_level=self._bond_state.level,
-            )
-        queue_draw = getattr(self, "queue_draw", None)
-        if callable(queue_draw):
-            queue_draw()
+        self._begin_bond_level_up_presentation(
+            preview_state,
+            previous_level=self._bond_state.level,
+        )
 
     def _test_bond_real_level_up(self, _button=None) -> None:
         """Cross a real level boundary with one XP so every hook is exercised."""
@@ -299,19 +295,41 @@ class BondMeterMixin:
         if overlay is not None:
             overlay.show_activity(self._bond_state, activity)
 
-    def _on_bond_level_up(self, previous_level: int, new_level: int) -> None:
-        """Celebrate clearly without taking over Mochi's behavior state."""
-        self._logger.info("Bond level increased: %d -> %d", previous_level, new_level)
+    def _begin_bond_level_up_presentation(
+        self,
+        state: BondState,
+        *,
+        previous_level: int,
+    ) -> None:
+        overlay = self._bond_progress_overlay
+        if overlay is None:
+            return
+
+        # Level-up is a presentation priority, not a behavior state. Typing,
+        # eating, and other animation state can continue while speech yields.
+        self.state.transition_presentation(PresentationState.LEVEL_UP)
+        dismiss_dialogue = getattr(self, "_dismiss_presence_bubble", None)
+        if callable(dismiss_dialogue):
+            dismiss_dialogue(user_initiated=False)
+
         self._bond_orbs.trigger_level_up()
-        if self._bond_progress_overlay is not None:
-            self._bond_progress_overlay.show_level_up(
-                self._bond_state,
-                previous_level=previous_level,
-            )
+        overlay.show_level_up(state, previous_level=previous_level)
 
         queue_draw = getattr(self, "queue_draw", None)
         if callable(queue_draw):
             queue_draw()
+
+    def _on_bond_level_up_finished(self) -> None:
+        if self.state.presentation is PresentationState.LEVEL_UP:
+            self.state.transition_presentation(PresentationState.NORMAL)
+
+    def _on_bond_level_up(self, previous_level: int, new_level: int) -> None:
+        """Celebrate clearly without taking over Mochi's behavior state."""
+        self._logger.info("Bond level increased: %d -> %d", previous_level, new_level)
+        self._begin_bond_level_up_presentation(
+            self._bond_state,
+            previous_level=previous_level,
+        )
 
     def _on_feed_animation_completed(self) -> None:
         """A completed feed gives a visible one-time relationship boost."""
@@ -335,7 +353,10 @@ class BondMeterMixin:
     def _start_bond_typing_session(self) -> None:
         # Typing quips own the shared speech/nameplate area. Bond progression
         # stays ambient through orbs and floating XP markers, never the HUD.
-        if self._bond_progress_overlay is not None:
+        if (
+            self._bond_progress_overlay is not None
+            and not self._bond_progress_overlay.level_up_active
+        ):
             self._bond_progress_overlay.dismiss()
         if self._bond_typing_source_id is None:
             self._bond_typing_source_id = GLib.timeout_add_seconds(
