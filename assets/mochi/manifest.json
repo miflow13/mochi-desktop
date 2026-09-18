@@ -487,7 +487,24 @@
       ]
     },
     "table_flip": {
-      "spritesheet": "table_flip/table_flip.png",
+      "frames": [
+        "table_flip/table_flip_0001.png",
+        "table_flip/table_flip_0002.png",
+        "table_flip/table_flip_0003.png",
+        "table_flip/table_flip_0004.png",
+        "table_flip/table_flip_0005.png",
+        "table_flip/table_flip_0006.png",
+        "table_flip/table_flip_0007.png",
+        "table_flip/table_flip_0008.png",
+        "table_flip/table_flip_0009.png",
+        "table_flip/table_flip_0010.png",
+        "table_flip/table_flip_0011.png",
+        "table_flip/table_flip_0012.png",
+        "table_flip/table_flip_0013.png",
+        "table_flip/table_flip_0014.png",
+        "table_flip/table_flip_0015.png",
+        "table_flip/table_flip_0016.png"
+      ],
       "frame_count": 16,
       "fps": 8.333333333333334,
       "loop": false,
