@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import lru_cache
 import logging
 
@@ -14,38 +13,14 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.care import BondState, bond_xp_required
+from mochi.emotes import (
+    EMOTE_CATALOGUE,
+    EMOTES_BY_ID,
+    EmoteDefinition,
+    next_emote_unlock,
+)
 from mochi.emote_shortcut import EmoteCatalogueShortcutMonitor
 from mochi.sprites import ANIMATIONS, SpriteAtlas
-
-
-@dataclass(frozen=True, slots=True)
-class EmoteDefinition:
-    id: str
-    label: str
-    animation: str | None
-    required_bond_level: int | None
-    available: bool = True
-    rarity: str = "common"
-
-    def is_unlocked(self, state: BondState) -> bool:
-        return bool(
-            self.available
-            and self.required_bond_level is not None
-            and state.level >= self.required_bond_level
-        )
-
-
-EMOTE_CATALOGUE = (
-    EmoteDefinition("heart", "Heart", "heart", 1, rarity="common"),
-    EmoteDefinition("bounce", "Bounce", "bounce", 1, rarity="common"),
-    EmoteDefinition("squish", "Squish", "squish", 1, rarity="uncommon"),
-    EmoteDefinition("look", "Look Around", "look", 3, rarity="rare"),
-    EmoteDefinition("dance", "Dance", "dance", 5, rarity="epic"),
-    EmoteDefinition("mystery-1", "Mystery Emote I", None, None, False, "legendary"),
-    EmoteDefinition("mystery-2", "Mystery Emote II", None, None, False, "legendary"),
-    EmoteDefinition("mystery-3", "Mystery Emote III", None, None, False, "legendary"),
-)
-EMOTES_BY_ID = {emote.id: emote for emote in EMOTE_CATALOGUE}
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,21 +56,15 @@ def bond_xp_until_level(state: BondState, target_level: int) -> int:
     return max(0, target_total - current_total)
 
 
-def next_emote_unlock(state: BondState) -> EmoteDefinition | None:
-    candidates = (
-        emote
-        for emote in EMOTE_CATALOGUE
-        if emote.available
-        and emote.required_bond_level is not None
-        and emote.required_bond_level > state.level
-    )
-    return min(candidates, key=lambda emote: emote.required_bond_level, default=None)
-
-
-def emote_status_text(emote: EmoteDefinition, state: BondState) -> str:
+def emote_status_text(
+    emote: EmoteDefinition,
+    state: BondState,
+    *,
+    unlock_all: bool = False,
+) -> str:
     if not emote.available:
         return "COMING SOON"
-    if emote.is_unlocked(state):
+    if emote.is_unlocked(state, unlock_all=unlock_all):
         return "UNLOCKED"
     return f"BOND LV. {emote.required_bond_level}"
 
@@ -177,6 +146,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         self._state: BondState | None = None
         self._card_surfaces: list[cairo.ImageSurface] = []
         self._render_scale = 0
+        self._unlock_all = False
         self._hovered_index: int | None = None
         self._hover_progress = [0.0 for _ in EMOTE_CATALOGUE]
         self._hover_source_id: int | None = None
@@ -212,13 +182,16 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
                 return index
         return None
 
-    def refresh(self, state: BondState) -> None:
+    def refresh(self, state: BondState, *, unlock_all: bool = False) -> None:
         state = BondState(level=state.level, xp=state.xp)
         previous = self._state
+        previous_unlock_all = self._unlock_all
         self._state = state
+        self._unlock_all = bool(unlock_all)
         if (
             previous is not None
             and state.level == previous.level
+            and self._unlock_all == previous_unlock_all
             and len(self._card_surfaces) == len(EMOTE_CATALOGUE)
         ):
             return
@@ -342,7 +315,10 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         x: int,
         y: int,
     ) -> None:
-        unlocked = emote.is_unlocked(self._state)
+        unlocked = emote.is_unlocked(
+            self._state,
+            unlock_all=self._unlock_all,
+        )
         rarity = RARITY_STYLES[emote.rarity]
         red, green, blue = rarity.colour
         context.save()
@@ -388,7 +364,11 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             (0.12, 0.12, 0.12, 1),
             bold=True,
         )
-        status = emote_status_text(emote, self._state)
+        status = emote_status_text(
+            emote,
+            self._state,
+            unlock_all=self._unlock_all,
+        )
         status_colour = rarity.colour if unlocked else (0.38, 0.38, 0.38)
         self._draw_text(context, status, 126, 62, 10, status_colour, bold=True)
         self._draw_text(
@@ -607,7 +587,7 @@ class EmoteCatalogueWindow:
     """Large reusable collection window opened by Mochi's global shortcut."""
 
     DEFAULT_WIDTH = 900
-    DEFAULT_HEIGHT = 780
+    DEFAULT_HEIGHT = 900
 
     def __init__(
         self,
@@ -618,6 +598,7 @@ class EmoteCatalogueWindow:
     ) -> None:
         self._logger = logger or logging.getLogger(__name__)
         self._state: BondState | None = None
+        self._unlock_all = False
 
         application = owner.get_application()
         if application is not None:
@@ -710,15 +691,32 @@ class EmoteCatalogueWindow:
     def visible(self) -> bool:
         return self.window.get_visible()
 
-    def refresh(self, state: BondState, *, force: bool = False) -> bool:
+    def refresh(
+        self,
+        state: BondState,
+        *,
+        force: bool = False,
+        unlock_all: bool = False,
+    ) -> bool:
         next_state = BondState(level=state.level, xp=state.xp)
-        if not force and next_state == self._state:
+        next_unlock_all = bool(unlock_all)
+        if (
+            not force
+            and next_state == self._state
+            and next_unlock_all == self._unlock_all
+        ):
             return False
 
         self._state = next_state
-        next_unlock = next_emote_unlock(self._state)
+        self._unlock_all = next_unlock_all
+        next_unlock = None if self._unlock_all else next_emote_unlock(self._state)
 
-        if next_unlock is None:
+        if self._unlock_all:
+            self._next_label.set_text(
+                f"Bond Lv. {self._state.level} · all available emotes unlocked (developer) ✦"
+            )
+            self._progress.set_fraction(1.0)
+        elif next_unlock is None:
             self._next_label.set_text(
                 f"Bond Lv. {self._state.level} · all current emotes unlocked ✦"
             )
@@ -742,7 +740,10 @@ class EmoteCatalogueWindow:
                 f"at Lv. {target} · {remaining:,} XP to go"
             )
 
-        self._canvas.refresh(self._state)
+        self._canvas.refresh(
+            self._state,
+            unlock_all=self._unlock_all,
+        )
         return True
 
     def present(self) -> None:
@@ -802,10 +803,14 @@ class EmoteCatalogueMixin:
             self._emote_catalogue_window = window
         return window
 
-    def _refresh_emote_catalogue(self) -> None:
+    def _refresh_emote_catalogue(self, *, force: bool = False) -> None:
         window = self._emote_catalogue_window
         if window is not None and window.visible:
-            window.refresh(self._bond_state)
+            window.refresh(
+                self._bond_state,
+                force=force,
+                unlock_all=getattr(self, "_dev_unlock_all_emotes", False),
+            )
 
     def _set_bond_state_for_ui(self, state: BondState) -> None:
         super()._set_bond_state_for_ui(state)
@@ -818,7 +823,10 @@ class EmoteCatalogueMixin:
         # Reuse the retained surface when bond state has not changed. Hidden
         # catalogues intentionally skip live updates, so a changed state still
         # refreshes naturally here without forcing an unnecessary rebuild.
-        window.refresh(self._bond_state)
+        window.refresh(
+            self._bond_state,
+            unlock_all=getattr(self, "_dev_unlock_all_emotes", False),
+        )
         window.present()
 
     def shutdown_presence(self) -> None:
