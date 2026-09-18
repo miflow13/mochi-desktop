@@ -1,21 +1,11 @@
-
-# Mochi
-
-## Support Mochi ☕
-
-Mochi is free and open source. If you enjoy having this little desktop buddy around
-and would like to support continued development, you can support the project on Ko-fi.
-
-[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](YOUR_PUBLIC_KOFI_URL)
-
-[![Tests](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml/badge.svg)](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml)
-
+# mochi 🌱
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![GTK4](https://img.shields.io/badge/GTK-4-7FE719?logo=gtk&logoColor=black)
 ![PyGObject](https://img.shields.io/badge/PyGObject-GI-4A86CF)
 ![Cairo](https://img.shields.io/badge/Cairo-rendering-F39914)
 ![Linux](https://img.shields.io/badge/Linux-desktop-FCC624?logo=linux&logoColor=black)
 ![Wayland](https://img.shields.io/badge/Wayland-primary-FFBC00)
+[![Tests](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml/badge.svg)](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml)
 
 <img width="800" height="428" alt="ezgif-2e6aaeb139cf0fe7" src="https://github.com/user-attachments/assets/9f3e0ca5-8454-4e22-a3d1-70d7e27c23fe" />
 
@@ -23,6 +13,14 @@ A Linux desktop companion that idles, walks, responds to interaction, and can
 react to broad local desktop activity without reading its contents.
 
 [Website](https://miflow13.github.io/mochi-desktop/) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Report a bug](#reporting-bugs) · [Asset guide](assets/mochi/README.md)
+
+## Support Mochi ☕
+
+Mochi is free and open source. If you enjoy having this little desktop buddy around
+and would like to support continued development, you can support the project on Ko-fi.
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)]([YOUR_PUBLIC_KOFI_URL](https://ko-fi.com/mikachew))
+
 
 > **Status:** early public alpha. Fedora with GNOME on Wayland is the primary
 > tested configuration. Mochi uses XWayland for its window on GNOME Wayland,
