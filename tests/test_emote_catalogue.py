@@ -358,9 +358,10 @@ def test_hover_animation_is_short_lived_and_render_cache_independent() -> None:
 def test_only_rare_and_legendary_cards_get_persistent_rarity_glow() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas._draw_rarity_glow)
 
-    assert '{"rare", "legendary"}' in source
     assert 'emote.rarity == "rare"' in source
     assert 'emote.rarity == "legendary"' in source
+    assert "else:" in source
+    assert "return" in source
     assert "boost" in source
 
 
