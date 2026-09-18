@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from functools import lru_cache
 import logging
+import sys
 
 import cairo
 import gi
@@ -90,6 +91,21 @@ window.mochi-emote-catalogue {
     background-color: @theme_bg_color;
     color: @theme_fg_color;
 }
+.mochi-emote-header {
+    min-height: 42px;
+    background-color: @theme_bg_color;
+    border-bottom: 1px solid alpha(@theme_fg_color, 0.08);
+    box-shadow: none;
+}
+.mochi-emote-header-title {
+    font-weight: 700;
+}
+button.mochi-emote-close {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    border-radius: 999px;
+}
 .mochi-emote-kicker {
     color: #79c98b;
     font-size: 11px;
@@ -156,8 +172,8 @@ button.mochi-emote-card:disabled {
 """
 
 
-class EmotePreview(Gtk.DrawingArea):
-    """Static catalogue art using authored animation frames and silhouette masks."""
+class EmotePreview(Gtk.Picture):
+    """GPU-friendly static preview backed by pre-rendered immutable textures."""
 
     SIZE = 166
 
@@ -166,57 +182,103 @@ class EmotePreview(Gtk.DrawingArea):
         *,
         atlas: SpriteAtlas,
         emote: EmoteDefinition,
+        texture_cache: dict[tuple[object, ...], Gdk.Texture],
     ) -> None:
         super().__init__()
-        self._atlas = atlas
-        self._emote = emote
         animation = ANIMATIONS[emote.animation or "idle"]
         frames = animation.frames
-        self._frame = frames[min(len(frames) - 1, len(frames) // 2)]
+        frame = frames[min(len(frames) - 1, len(frames) // 2)]
+        key = (
+            frame.sprite,
+            frame.horizontal_offset,
+            frame.vertical_offset,
+        )
+        self._unlocked_texture = self._cached_texture(
+            atlas,
+            frame,
+            locked=False,
+            key=(*key, False),
+            cache=texture_cache,
+        )
+        self._locked_texture = self._cached_texture(
+            atlas,
+            frame,
+            locked=True,
+            key=(*key, True),
+            cache=texture_cache,
+        )
         self._locked = True
-        self.set_content_width(self.SIZE)
-        self.set_content_height(self.SIZE)
-        self.set_hexpand(True)
+        self.set_paintable(self._locked_texture)
+        self.set_content_fit(Gtk.ContentFit.CONTAIN)
+        self.set_can_shrink(True)
+        self.set_size_request(self.SIZE, self.SIZE)
+        self.set_halign(Gtk.Align.CENTER)
         self.add_css_class("mochi-emote-preview")
-        self.set_draw_func(self._draw)
 
     def set_locked(self, locked: bool) -> None:
         if locked == self._locked:
             return
         self._locked = locked
-        self.queue_draw()
-
-    def _draw(
-        self,
-        _area: Gtk.DrawingArea,
-        context: cairo.Context,
-        width: int,
-        height: int,
-    ) -> None:
-        frame = self._frame
-        if not self._locked:
-            self._atlas.draw(context, frame, width, height)
-            return
-
-        sprite = self._atlas.frames[frame.sprite]
-        source_width, source_height = self._atlas.CANVAS_SIZE
-        scale = min(width / source_width, height / source_height)
-        offset_scale = min(width, height) / self._atlas.OFFSET_COORDINATE_SIZE
-        x = round(
-            (width - source_width * scale) / 2
-            + frame.horizontal_offset * offset_scale
-        )
-        y = round(
-            (height - source_height * scale) / 2
-            + frame.vertical_offset * offset_scale
+        self.set_paintable(
+            self._locked_texture if locked else self._unlocked_texture
         )
 
-        context.save()
-        context.translate(x, y)
-        context.scale(scale, scale)
-        context.set_source_rgba(0.10, 0.14, 0.11, 0.78)
-        context.mask_surface(sprite, 0, 0)
-        context.restore()
+    @classmethod
+    def _cached_texture(
+        cls,
+        atlas: SpriteAtlas,
+        frame,
+        *,
+        locked: bool,
+        key: tuple[object, ...],
+        cache: dict[tuple[object, ...], Gdk.Texture],
+    ) -> Gdk.Texture:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+
+        surface = cairo.ImageSurface(
+            cairo.FORMAT_ARGB32,
+            cls.SIZE,
+            cls.SIZE,
+        )
+        context = cairo.Context(surface)
+        if locked:
+            sprite = atlas.frames[frame.sprite]
+            source_width, source_height = atlas.CANVAS_SIZE
+            scale = min(cls.SIZE / source_width, cls.SIZE / source_height)
+            offset_scale = cls.SIZE / atlas.OFFSET_COORDINATE_SIZE
+            x = round(
+                (cls.SIZE - source_width * scale) / 2
+                + frame.horizontal_offset * offset_scale
+            )
+            y = round(
+                (cls.SIZE - source_height * scale) / 2
+                + frame.vertical_offset * offset_scale
+            )
+            context.translate(x, y)
+            context.scale(scale, scale)
+            context.set_source_rgba(0.10, 0.14, 0.11, 0.78)
+            context.mask_surface(sprite, 0, 0)
+        else:
+            atlas.draw(context, frame, cls.SIZE, cls.SIZE)
+
+        surface.flush()
+        pixel_bytes = GLib.Bytes.new(bytes(surface.get_data()))
+        memory_format = (
+            Gdk.MemoryFormat.B8G8R8A8_PREMULTIPLIED
+            if sys.byteorder == "little"
+            else Gdk.MemoryFormat.A8R8G8B8_PREMULTIPLIED
+        )
+        texture = Gdk.MemoryTexture.new(
+            cls.SIZE,
+            cls.SIZE,
+            memory_format,
+            pixel_bytes,
+            surface.get_stride(),
+        )
+        cache[key] = texture
+        return texture
 
 
 class EmoteCard:
@@ -228,6 +290,7 @@ class EmoteCard:
         atlas: SpriteAtlas,
         emote: EmoteDefinition,
         on_activate,
+        texture_cache: dict[tuple[object, ...], Gdk.Texture],
     ) -> None:
         self.emote = emote
         self._last_unlocked: bool | None = None
@@ -243,7 +306,11 @@ class EmoteCard:
         content.set_margin_start(12)
         content.set_margin_end(12)
 
-        self.preview = EmotePreview(atlas=atlas, emote=emote)
+        self.preview = EmotePreview(
+            atlas=atlas,
+            emote=emote,
+            texture_cache=texture_cache,
+        )
         content.append(self.preview)
 
         self.name = Gtk.Label(label=emote.label)
@@ -312,6 +379,7 @@ class EmoteCatalogueWindow:
     ) -> None:
         self._logger = logger or logging.getLogger(__name__)
         self._cards: dict[str, EmoteCard] = {}
+        self._preview_texture_cache: dict[tuple[object, ...], Gdk.Texture] = {}
         self._state: BondState | None = None
         self._on_emote_requested = on_emote_requested
 
@@ -325,6 +393,22 @@ class EmoteCatalogueWindow:
         self.window.set_default_size(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
         self.window.set_size_request(680, 500)
         self.window.add_css_class("mochi-emote-catalogue")
+
+        # Use a client-side titlebar so the collection has exactly one window
+        # control: close. GtkHeaderBar keeps native Wayland window dragging.
+        header = Gtk.HeaderBar()
+        header.set_show_title_buttons(False)
+        header.add_css_class("mochi-emote-header")
+        header_title = Gtk.Label(label="Mochi Emotes")
+        header_title.add_css_class("mochi-emote-header-title")
+        header.set_title_widget(header_title)
+        close_button = Gtk.Button.new_from_icon_name("window-close-symbolic")
+        close_button.set_tooltip_text("Close")
+        close_button.add_css_class("flat")
+        close_button.add_css_class("mochi-emote-close")
+        close_button.connect("clicked", lambda _button: self.hide())
+        header.pack_end(close_button)
+        self.window.set_titlebar(header)
 
         css = Gtk.CssProvider()
         css.load_from_string(CATALOGUE_CSS)
@@ -390,6 +474,7 @@ class EmoteCatalogueWindow:
                 atlas=atlas,
                 emote=emote,
                 on_activate=self._on_card_activate,
+                texture_cache=self._preview_texture_cache,
             )
             self._cards[emote.id] = card
             grid.attach(card.button, index % 3, index // 3, 1, 1)

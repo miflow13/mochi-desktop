@@ -94,11 +94,13 @@ def test_catalogue_is_large_card_grid_not_a_context_menu_feature() -> None:
     assert "index % 3" in window_source
 
 
-def test_locked_previews_use_authored_sprite_alpha_as_silhouette() -> None:
-    source = inspect.getsource(EmotePreview._draw)
+def test_previews_are_static_pictures_with_cached_silhouette_textures() -> None:
+    source = inspect.getsource(EmotePreview)
 
+    assert "Gtk.Picture" in source
+    assert "Gdk.MemoryTexture.new" in source
     assert "mask_surface" in source
-    assert "self._atlas.draw" in source
+    assert "set_draw_func" not in source
 
 
 def test_locked_emote_cannot_be_dispatched_before_required_bond_level() -> None:
@@ -175,13 +177,14 @@ def test_locked_card_does_not_hide_or_dispatch() -> None:
     idle_add.assert_not_called()
 
 
-def test_preview_caches_representative_frame_before_draw() -> None:
+def test_preview_rasterizes_each_lock_state_only_once() -> None:
     source = inspect.getsource(EmotePreview)
 
-    assert "self._frame =" in source
-    draw_source = inspect.getsource(EmotePreview._draw)
-    assert "ANIMATIONS[" not in draw_source
-    assert "self._frame" in draw_source
+    assert "_unlocked_texture" in source
+    assert "_locked_texture" in source
+    assert "texture_cache" in source
+    assert "set_paintable" in source
+    assert "queue_draw" not in source
 
 
 def test_card_refresh_skips_redundant_widget_writes() -> None:
@@ -281,3 +284,19 @@ def test_cumulative_xp_helper_is_cached() -> None:
     second = _bond_xp_to_level_start.cache_info()
 
     assert second.hits > first.hits
+
+
+def test_catalogue_titlebar_exposes_only_custom_close_control() -> None:
+    source = inspect.getsource(EmoteCatalogueWindow.__init__)
+
+    assert "Gtk.HeaderBar()" in source
+    assert "header.set_show_title_buttons(False)" in source
+    assert 'Gtk.Button.new_from_icon_name("window-close-symbolic")' in source
+    assert "self.window.set_titlebar(header)" in source
+
+
+def test_cards_share_preview_texture_cache() -> None:
+    source = inspect.getsource(EmoteCatalogueWindow.__init__)
+
+    assert "_preview_texture_cache" in source
+    assert "texture_cache=self._preview_texture_cache" in source
