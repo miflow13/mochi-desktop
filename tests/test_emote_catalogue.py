@@ -10,10 +10,9 @@ from mochi.care import BondState, bond_xp_required
 from mochi.presence.emote_catalogue import (
     EMOTE_CATALOGUE,
     EMOTES_BY_ID,
-    EmoteCard,
+    EmoteCatalogueCanvas,
     EmoteCatalogueMixin,
     EmoteCatalogueWindow,
-    EmotePreview,
     bond_xp_until_level,
     emote_status_text,
     next_emote_unlock,
@@ -83,34 +82,45 @@ def test_next_unlock_advances_from_look_to_dance() -> None:
     assert next_emote_unlock(BondState(level=5, xp=0)) is None
 
 
-def test_catalogue_uses_virtualized_grid_view_not_a_scrolled_grid() -> None:
+def test_catalogue_uses_single_compact_canvas_without_scrolling() -> None:
     mixin_source = inspect.getsource(EmoteCatalogueMixin)
     window_source = inspect.getsource(EmoteCatalogueWindow)
 
     assert "_build_context_menu" not in mixin_source
     assert "DEFAULT_WIDTH = 900" in window_source
     assert "DEFAULT_HEIGHT = 680" in window_source
-    assert "Gtk.GridView.new" in window_source
+    assert "EmoteCatalogueCanvas" in window_source
     assert "Gtk.Grid()" not in window_source
-    assert "Gtk.SignalListItemFactory" in window_source
-    assert "grid.set_max_columns(3)" in window_source
+    assert "Gtk.GridView" not in window_source
+    assert "Gtk.ScrolledWindow" not in window_source
 
 
-def test_previews_are_static_pictures_with_cached_silhouette_textures() -> None:
-    source = inspect.getsource(EmotePreview)
+def test_canvas_retains_one_surface_and_no_card_widget_tree() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas)
 
-    assert "Gtk.Picture" in source
-    assert "Gdk.MemoryTexture.new" in source
+    assert "Gtk.DrawingArea" in source
+    assert "cairo.ImageSurface" in source
     assert "mask_surface" in source
-    assert "set_draw_func" not in source
+    assert "Gtk.Button" not in source
+    assert "Gtk.Picture" not in source
 
 
-def test_factory_refreshes_only_cards_bound_in_the_viewport() -> None:
-    source = inspect.getsource(EmoteCatalogueWindow)
+def test_canvas_has_no_scroll_path_and_only_repaints_on_state_or_hover_change() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas)
 
-    assert "self._bound_cards" in source
-    assert "for card in self._bound_cards" in source
-    assert 'factory.connect("unbind", self._unbind_card)' in source
+    assert "Gtk.ScrolledWindow" not in source
+    assert "def refresh" in source
+    assert "if state == self._state" in source
+    assert "if hovered == self._hovered" in source
+
+
+def test_canvas_hit_testing_maps_cards_and_excludes_gaps() -> None:
+    canvas = EmoteCatalogueCanvas.__new__(EmoteCatalogueCanvas)
+
+    assert EmoteCatalogueCanvas.emote_at(canvas, 1, 1).id == "heart"
+    assert EmoteCatalogueCanvas.emote_at(canvas, 300, 1).id == "bounce"
+    assert EmoteCatalogueCanvas.emote_at(canvas, 270, 1) is None
+    assert EmoteCatalogueCanvas.emote_at(canvas, 1, 200).id == "look"
 
 
 def test_locked_emote_cannot_be_dispatched_before_required_bond_level() -> None:
@@ -187,46 +197,10 @@ def test_locked_card_does_not_hide_or_dispatch() -> None:
     idle_add.assert_not_called()
 
 
-def test_preview_rasterizes_each_lock_state_only_once() -> None:
-    source = inspect.getsource(EmotePreview)
-
-    assert "_unlocked_texture" in source
-    assert "_locked_texture" in source
-    assert "texture_cache" in source
-    assert "set_paintable" in source
-    assert "queue_draw" not in source
-
-
-def test_card_refresh_skips_redundant_widget_writes() -> None:
-    card = object.__new__(EmoteCard)
-    card.emote = EMOTES_BY_ID["heart"]
-    card._last_unlocked = True
-    card._last_status = "UNLOCKED"
-    card._last_detail = "Click to ask Mochi to do this emote."
-    card.button = SimpleNamespace(set_sensitive=Mock())
-    card.preview = SimpleNamespace(set_locked=Mock())
-    card.status = SimpleNamespace(
-        set_text=Mock(),
-        add_css_class=Mock(),
-        remove_css_class=Mock(),
-    )
-    card.detail = SimpleNamespace(set_text=Mock())
-
-    EmoteCard.refresh(card, BondState(level=4, xp=123))
-
-    card.button.set_sensitive.assert_not_called()
-    card.preview.set_locked.assert_not_called()
-    card.status.set_text.assert_not_called()
-    card.status.add_css_class.assert_not_called()
-    card.status.remove_css_class.assert_not_called()
-    card.detail.set_text.assert_not_called()
-
-
 def test_window_refresh_skips_identical_bond_state() -> None:
     window = object.__new__(EmoteCatalogueWindow)
     window._state = BondState(level=2, xp=33)
-    card = Mock()
-    window._bound_cards = {card}
+    window._canvas = SimpleNamespace(refresh=Mock())
     window._next_label = SimpleNamespace(set_text=Mock())
     window._progress = SimpleNamespace(set_fraction=Mock())
 
@@ -236,7 +210,7 @@ def test_window_refresh_skips_identical_bond_state() -> None:
     )
 
     assert changed is False
-    card.refresh.assert_not_called()
+    window._canvas.refresh.assert_not_called()
     window._next_label.set_text.assert_not_called()
     window._progress.set_fraction.assert_not_called()
 
@@ -306,8 +280,7 @@ def test_catalogue_titlebar_uses_native_close_only_decoration() -> None:
     assert "self.window.set_titlebar(header)" in source
 
 
-def test_cards_share_preview_texture_cache() -> None:
-    source = inspect.getsource(EmoteCatalogueWindow)
+def test_window_refreshes_only_the_single_canvas() -> None:
+    source = inspect.getsource(EmoteCatalogueWindow.refresh)
 
-    assert "_preview_texture_cache" in source
-    assert "texture_cache=self._preview_texture_cache" in source
+    assert "self._canvas.refresh(self._state)" in source
