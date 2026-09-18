@@ -10,6 +10,7 @@ from mochi.sound import SoundEvent
 from .clicks import ClickBurstDetector
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
+from .emotes_menu import EmotesMenuMixin
 from .fedora_mode import FedoraModeMixin
 from .feeding import FeedMochiMixin
 from .idle_look import IdleLookMixin
@@ -156,6 +157,7 @@ class PresenceBuddy(
     ClickDialogueMixin,
     IdleLookMixin,
     QuickStartMixin,
+    EmotesMenuMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
     MusicDanceMixin,
@@ -171,6 +173,7 @@ class PresenceX11Buddy(
     ClickDialogueMixin,
     IdleLookMixin,
     QuickStartMixin,
+    EmotesMenuMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
     MusicDanceMixin,

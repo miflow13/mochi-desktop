@@ -7,6 +7,7 @@ import unittest
 
 from mochi.buddy import Buddy
 from mochi.presence.edge_roam_controls import EdgeRoamMixin
+from mochi.presence.emotes_menu import EmotesMenuMixin
 from mochi.presence.integration import PresenceBuddyMixin
 from mochi.presence.nameplate_controls import NameplateMixin
 from mochi.quick_start import QuickStartMixin
@@ -169,6 +170,7 @@ class ContextMenuFeatureMigrationTests(unittest.TestCase):
         )
         builders = (
             EdgeRoamMixin._build_context_menu,
+            EmotesMenuMixin._build_context_menu,
             PresenceBuddyMixin._build_context_menu,
             NameplateMixin._build_context_menu,
             QuickStartMixin._build_context_menu,
