@@ -11,7 +11,7 @@ import gi
 
 gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, Gtk  # noqa: E402
 
 from mochi.care import BondState, bond_xp_required
 from mochi.emote_shortcut import EmoteCatalogueShortcutMonitor
@@ -143,21 +143,15 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
     ROWS = (len(EMOTE_CATALOGUE) + COLUMNS - 1) // COLUMNS
     HEIGHT = ROWS * CARD_HEIGHT + (ROWS - 1) * GAP
 
-    def __init__(self, *, atlas: SpriteAtlas, on_activate) -> None:
+    def __init__(self, *, atlas: SpriteAtlas) -> None:
         super().__init__()
         self._atlas = atlas
-        self._on_activate = on_activate
         self._state: BondState | None = None
         self._surface: cairo.ImageSurface | None = None
         self.set_content_width(self.WIDTH)
         self.set_content_height(self.HEIGHT)
         self.set_halign(Gtk.Align.CENTER)
-        self.set_cursor_from_name("pointer")
         self.set_draw_func(self._draw)
-
-        click = Gtk.GestureClick.new()
-        click.connect("released", self._on_click)
-        self.add_controller(click)
         self.connect("notify::scale-factor", self._on_scale_factor_changed)
 
     def refresh(self, state: BondState) -> None:
@@ -167,23 +161,6 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         self._state = state
         self._render()
         self.queue_draw()
-
-    def emote_at(self, x: float, y: float) -> EmoteDefinition | None:
-        column = int(x // (self.CARD_WIDTH + self.GAP))
-        row = int(y // (self.CARD_HEIGHT + self.GAP))
-        if column < 0 or column >= self.COLUMNS or row < 0 or row >= self.ROWS:
-            return None
-        card_x = column * (self.CARD_WIDTH + self.GAP)
-        card_y = row * (self.CARD_HEIGHT + self.GAP)
-        if x >= card_x + self.CARD_WIDTH or y >= card_y + self.CARD_HEIGHT:
-            return None
-        index = row * self.COLUMNS + column
-        return EMOTE_CATALOGUE[index] if index < len(EMOTE_CATALOGUE) else None
-
-    def _on_click(self, _gesture, _presses: int, x: float, y: float) -> None:
-        emote = self.emote_at(x, y)
-        if self._state is not None and emote is not None and emote.is_unlocked(self._state):
-            self._on_activate(emote.id)
 
     def _on_scale_factor_changed(self, *_args) -> None:
         if self._state is not None:
@@ -218,13 +195,20 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         unlocked = emote.is_unlocked(self._state)
         context.save()
         context.translate(x, y)
-        context.set_source_rgba(0.32, 0.70, 0.41, 0.055)
-        context.rectangle(0, 0, self.CARD_WIDTH, self.CARD_HEIGHT)
+        self._rounded_rectangle(context, 0.5, 0.5, self.CARD_WIDTH - 1, self.CARD_HEIGHT - 1, 14)
+        background = cairo.LinearGradient(0, 0, 0, self.CARD_HEIGHT)
+        background.add_color_stop_rgba(0, 0.32, 0.70, 0.41, 0.085 if unlocked else 0.035)
+        background.add_color_stop_rgba(1, 0.32, 0.70, 0.41, 0.025)
+        context.set_source(background)
         context.fill()
         context.set_source_rgba(0.32, 0.70, 0.41, 0.16)
         context.set_line_width(1)
-        context.rectangle(0.5, 0.5, self.CARD_WIDTH - 1, self.CARD_HEIGHT - 1)
+        self._rounded_rectangle(context, 0.5, 0.5, self.CARD_WIDTH - 1, self.CARD_HEIGHT - 1, 14)
         context.stroke()
+
+        context.set_source_rgba(0.32, 0.70, 0.41, 0.08)
+        self._rounded_rectangle(context, 12, 10, self.CARD_WIDTH - 24, self.PREVIEW_SIZE + 4, 10)
+        context.fill()
 
         frame = self._preview_frame(emote)
         context.save()
@@ -235,12 +219,28 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             self._draw_silhouette(context, frame)
         context.restore()
 
-        self._draw_text(context, emote.label, 14, 126, 15, (0.12, 0.12, 0.12, 1), bold=True)
+        self._draw_text(context, emote.label, 16, 126, 15, (0.12, 0.12, 0.12, 1), bold=True)
         status = emote_status_text(emote, self._state)
         colour = (0.18, 0.52, 0.28, 1) if unlocked else (0.38, 0.38, 0.38, 1)
-        self._draw_text(context, status, 14, 145, 10, colour, bold=True)
-        self._draw_text(context, self._detail(emote, unlocked), 14, 164, 10, (0.40, 0.40, 0.40, 1))
+        self._draw_text(context, status, 16, 145, 10, colour, bold=True)
+        self._draw_text(context, self._detail(emote, unlocked), 16, 164, 10, (0.40, 0.40, 0.40, 1))
         context.restore()
+
+    @staticmethod
+    def _rounded_rectangle(
+        context: cairo.Context,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        radius: float,
+    ) -> None:
+        context.new_sub_path()
+        context.arc(x + width - radius, y + radius, radius, -1.5708, 0)
+        context.arc(x + width - radius, y + height - radius, radius, 0, 1.5708)
+        context.arc(x + radius, y + height - radius, radius, 1.5708, 3.1416)
+        context.arc(x + radius, y + radius, radius, 3.1416, 4.7124)
+        context.close_path()
 
     def _preview_frame(self, emote: EmoteDefinition):
         animation = ANIMATIONS[emote.animation or "idle"]
@@ -262,7 +262,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         if not emote.available:
             return "A future little mood."
         if unlocked:
-            return "Click to ask Mochi to do this emote."
+            return "A little mood Mochi has learned."
         remaining = bond_xp_until_level(self._state, emote.required_bond_level or self._state.level)
         return f"{remaining:,} bond XP remaining"
 
@@ -292,12 +292,10 @@ class EmoteCatalogueWindow:
         *,
         owner: Gtk.Window,
         atlas: SpriteAtlas,
-        on_emote_requested,
         logger: logging.Logger | None = None,
     ) -> None:
         self._logger = logger or logging.getLogger(__name__)
         self._state: BondState | None = None
-        self._on_emote_requested = on_emote_requested
 
         self.window = Gtk.Window()
         self.window.set_title("Mochi Emote Catalogue")
@@ -370,10 +368,7 @@ class EmoteCatalogueWindow:
         hero.append(self._progress)
         root.append(hero)
 
-        self._canvas = EmoteCatalogueCanvas(
-            atlas=atlas,
-            on_activate=self._on_card_activate,
-        )
+        self._canvas = EmoteCatalogueCanvas(atlas=atlas)
         self._canvas.set_margin_top(18)
         root.append(self._canvas)
 
@@ -434,17 +429,6 @@ class EmoteCatalogueWindow:
     def destroy(self) -> None:
         self.window.destroy()
 
-    def _on_card_activate(self, emote_id: str) -> None:
-        emote = EMOTES_BY_ID.get(emote_id)
-        if self._state is None or emote is None or not emote.is_unlocked(self._state):
-            return
-        self.hide()
-        GLib.idle_add(self._dispatch_card, emote_id)
-
-    def _dispatch_card(self, emote_id: str) -> bool:
-        self._on_emote_requested(emote_id)
-        return GLib.SOURCE_REMOVE
-
     def _on_key_pressed(
         self,
         _controller: Gtk.EventControllerKey,
@@ -502,7 +486,6 @@ class EmoteCatalogueMixin:
             window = EmoteCatalogueWindow(
                 owner=self._window,
                 atlas=self.atlas,
-                on_emote_requested=self._start_manual_emote,
                 logger=self._logger,
             )
             self._emote_catalogue_window = window

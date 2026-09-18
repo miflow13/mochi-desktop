@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from mochi.care import BondState, bond_xp_required
 from mochi.presence.emote_catalogue import (
@@ -115,13 +115,13 @@ def test_canvas_has_no_scroll_path_or_pointer_motion_repaint() -> None:
     assert "def _on_motion" not in source
 
 
-def test_canvas_hit_testing_maps_cards_and_excludes_gaps() -> None:
-    canvas = EmoteCatalogueCanvas.__new__(EmoteCatalogueCanvas)
+def test_canvas_is_a_read_only_collection_view() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas)
 
-    assert EmoteCatalogueCanvas.emote_at(canvas, 1, 1).id == "heart"
-    assert EmoteCatalogueCanvas.emote_at(canvas, 300, 1).id == "bounce"
-    assert EmoteCatalogueCanvas.emote_at(canvas, 270, 1) is None
-    assert EmoteCatalogueCanvas.emote_at(canvas, 1, 200).id == "look"
+    assert "Gtk.GestureClick" not in source
+    assert "def _on_click" not in source
+    assert "def emote_at" not in source
+    assert "Click to ask Mochi" not in source
 
 
 def test_locked_emote_cannot_be_dispatched_before_required_bond_level() -> None:
@@ -169,33 +169,6 @@ def test_manual_emote_does_not_interrupt_level_up_presentation() -> None:
     assert EmoteCatalogueMixin._start_manual_emote(buddy, "heart") is False
 
     buddy._start_heart_emote.assert_not_called()
-
-
-def test_unlocked_card_hides_window_then_dispatches_on_idle() -> None:
-    window = object.__new__(EmoteCatalogueWindow)
-    window._state = BondState(level=3, xp=0)
-    window._on_emote_requested = Mock()
-    window.hide = Mock()
-    window._dispatch_card = Mock(return_value=False)
-
-    with patch("mochi.presence.emote_catalogue.GLib.idle_add") as idle_add:
-        EmoteCatalogueWindow._on_card_activate(window, "look")
-
-    window.hide.assert_called_once_with()
-    idle_add.assert_called_once_with(window._dispatch_card, "look")
-
-
-def test_locked_card_does_not_hide_or_dispatch() -> None:
-    window = object.__new__(EmoteCatalogueWindow)
-    window._state = BondState(level=1, xp=0)
-    window.hide = Mock()
-    window._dispatch_card = Mock(return_value=False)
-
-    with patch("mochi.presence.emote_catalogue.GLib.idle_add") as idle_add:
-        EmoteCatalogueWindow._on_card_activate(window, "dance")
-
-    window.hide.assert_not_called()
-    idle_add.assert_not_called()
 
 
 def test_window_refresh_skips_identical_bond_state() -> None:
