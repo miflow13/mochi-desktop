@@ -1,34 +1,41 @@
 # mochi 🌱
-<img width="800" height="475" alt="648764645-d64b6900-3120-4174-9ec6-a40688fe921a" src="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e" />
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![GTK4](https://img.shields.io/badge/GTK-4-7FE719?logo=gtk&logoColor=black)
+![PyGObject](https://img.shields.io/badge/PyGObject-GI-4A86CF)
+![Cairo](https://img.shields.io/badge/Cairo-rendering-F39914)
+![Linux](https://img.shields.io/badge/Linux-desktop-FCC624?logo=linux&logoColor=black)
+![Wayland](https://img.shields.io/badge/Wayland-primary-FFBC00)
+[![Tests](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml/badge.svg)](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml)
+
+<img width="800" height="428" alt="ezgif-2e6aaeb139cf0fe7" src="https://github.com/user-attachments/assets/9f3e0ca5-8454-4e22-a3d1-70d7e27c23fe" />
+
+A Linux desktop companion that idles, walks, responds to interaction, and can
+react to broad local desktop activity without reading its contents.
+
+[Website](https://miflow13.github.io/mochi-desktop/) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Report a bug](#reporting-bugs) · [Asset guide](assets/mochi/README.md)
+
+## Support Mochi ☕
+
+Mochi is free and open source. If you enjoy having this little desktop buddy around
+and would like to support continued development, you can support the project on Ko-fi.
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)]([YOUR_PUBLIC_KOFI_URL](https://ko-fi.com/mikachew))
 
 
-> ⚠️ **First install on GNOME Wayland**
->
-> **Log out and back in once after installing Mochi.**
->
-> This activates Mochi’s desktop-awareness helper for typing, app, file, and focused media reactions. Mochi will finish enabling it automatically after you sign back in.
+> **Status:** early public alpha. Fedora with GNOME on Wayland is the primary
+> tested configuration. Mochi uses XWayland for its window on GNOME Wayland,
+> where native positioning restrictions require it.
 
-*A tiny Deskling companion for Linux.*
-
-[website](https://miflow13.github.io/mochi-desktop/) · [issues](https://github.com/miflow13/mochi-desktop/issues) · [animation guide](assets/mochi/README.md)
-## why/what is mochi?
-
-Desktop pets already exist. i built mochi as an experiment in making one feel **native to the Linux desktop, expressive, context-aware, and pleasant to actually leave running** while being cute, polished and easy to use
-
-Most of the work is in the small details: animation timing, squash and stretch, cursor reactions, movement, persistence, speech pacing, state transitions, and knowing when not to interrupt.
-Mochi is designed to make the desktop feel a little more alive. He wanders, reacts to clicks and dragging, notices broad desktop activity through **AmbiSense** (cool name huh?), sleeps, chats, and mostly keeps to himself.
-
-Mochi is currently an **early public alpha**. Fedora + GNOME on Wayland is the actively tested environment
-**(I plan to test on different setups, this is my first big application please be gentle)**
-
-> Please note Mochi as an application is intentionally small feature wise. **There is no productivity score, streak, nagging assistant, or requirement to interact with him.**
-
----
+> 🌟 **Milestone:** Mochi reached **30 GitHub stars**! Thank you to everyone
+> following, testing, and cheering on this tiny Linux desktop buddy while the
+> public alpha takes shape.
 
 
-## install
+## Install
 
-### Fedora + GNOME (Recommended Environment) 
+The installer has a supported dependency path for Fedora. It creates a private
+Python environment, installs the GNOME helper, adds Mochi to the application
+grid, and installs `mochi` and `mochi-uninstall` under `~/.local/bin`.
 
 ```bash
 git clone https://github.com/miflow13/mochi-desktop.git
@@ -36,265 +43,125 @@ cd mochi-desktop
 ./install.sh
 ```
 
-The installer handles Fedora dependencies, creates Mochi's private Python environment, installs the GNOME helper, adds Mochi to the application grid, and installs `mochi` / `mochi-uninstall` launchers under `~/.local/bin`.
+This installs the checked-out source (by default, current `main`), not a pinned
+release. The installer may use `sudo dnf` for missing Fedora packages.
 
-> [!NOTE]
-> GNOME Wayland may require one logout/login after the first install before Mochi's desktop-awareness helper becomes active. You do not need to reinstall afterward.
+After the first GNOME Wayland installation, log out and back in once. This lets
+GNOME load Mochi's optional desktop-awareness helper. Without it, Mochi still
+runs, but typing, app-category, file-browsing, and focused-media reactions may
+be unavailable.
 
-### Fedora + Niri
+### Update an installed copy
 
-The installer includes Fedora's `gtk4-layer-shell` package for Niri. After updating an existing installation, run `./install.sh` again and start Mochi once with:
+Quit Mochi, then run these commands from your clean `main` checkout:
 
 ```bash
+git pull --ff-only
+./install.sh
+```
+
+Relaunch Mochi afterward. The installer copies the checkout into a private
+environment; `git pull` alone does not update the app-grid installation, and
+an already-running process keeps its loaded code.
+
+### Fedora with Niri
+
+Niri support is experimental. After an update, rerun the installer and reset
+Mochi's saved position before launching:
+
+```bash
+./install.sh
 mochi --reset-position
 ```
 
-Niri support is still less extensively tested than Fedora + GNOME.
+## Run and interact
 
-### run
+Launch Mochi from the application grid or run `mochi`. If `~/.local/bin` is
+not on `PATH`, use `~/.local/bin/mochi`.
 
-Launch Mochi from the application grid or:
+- Left-click: chirp and tactile reaction.
+- Three quick clicks: short dialogue.
+- Double-click: heart emote.
+- Drag: reposition Mochi.
+- Right-click: controls for size, audio, sleep/wake, movement, and quit.
+- **Stay put**: disable autonomous walking while leaving other behavior active.
+
+`Ctrl + Alt + Shift + M` opens Mochi Lab, a developer surface for animation and
+AmbiSense previews. It requires the GNOME helper.
+
+## AmbiSense and privacy
+
+AmbiSense is Mochi's local, rule-based awareness system. Depending on the
+available integrations, it can use anonymous typing activity, session state,
+coarse app categories, media playback, power changes, network changes, and
+file-browsing activity.
+
+It is not an LLM and does not use a cloud service. Mochi does not collect typed
+characters, words, key values, typing history, application titles, document
+names, or on-screen content. See the [AmbiSense documentation](docs/ambisense.md)
+for its event flow and privacy model.
+
+## Compatibility and troubleshooting
+
+- Fedora with GNOME on Wayland is the primary tested target. Other
+  distributions may work, but automatic dependency installation supports Fedora
+  only.
+- GNOME provides the fullest AmbiSense integration. Other desktops may have
+  reduced awareness features.
+- Niri, fractional scaling, and multi-monitor configurations receive less
+  regression coverage.
+
+### Known issues
+
+- **Workspace/Overview freeze — [#45](https://github.com/miflow13/mochi-desktop/issues/45):**
+  on GNOME Wayland/XWayland, entering Overview or switching workspaces during
+  an emote can leave Mochi visually frozen. This remains an open alpha blocker.
+
+- Alpha behavior and compatibility may change. Passing automated tests does
+  not establish reliability across desktop sessions, monitors, or scaling setups.
+
+### Helper and placement checks
+
+If typing reactions do not work, check the helper and log out/in once:
 
 ```bash
-mochi
-```
-
-If `~/.local/bin` is not on your PATH:
-
-```bash
-~/.local/bin/mochi
-```
-
-### update
-
-From the repository checkout:
-
-```bash
-git pull
-./install.sh
-```
-
-Running the installer again refreshes Mochi's private environment, launchers, application entry, icon, and GNOME helper.
-
-## typing / AmbiSense troubleshooting
-
-Mochi's GNOME typing and desktop-awareness reactions depend on the GNOME Shell helper being active.
-
-Check it with:
-
-```bash
-gnome-extensions info mochi-typing@miflow13 | grep State
-```
-
-You should see:
-
-```text
-State: ACTIVE
-```
-
-If the helper is installed but inactive, first **log out of GNOME and log back in once**. On a fresh GNOME Wayland install this is normally the only extra step required.
-
-If it is still inactive afterward, try:
-
-```bash
+gnome-extensions info mochi-typing@miflow13
 gnome-extensions enable mochi-typing@miflow13
 ```
 
-Then launch Mochi again. If you recently updated the repository, also rerun:
+Use `mochi --reset-position` to forget saved placement and `mochi --debug` for
+diagnostic logging. Detailed setup and recovery steps are in [Getting Started](docs/wiki/Getting-Started.md)
+and [Troubleshooting and Regressions](docs/wiki/Troubleshooting-and-Regressions.md).
+
+## Reporting bugs
+
+[Open a bug report](https://github.com/miflow13/mochi-desktop/issues/new?template=bug_report.md)
+with the shortest reproduction steps, expected and actual behavior, Linux and
+GNOME/compositor versions, Wayland/X11 session type, and monitor layout/scaling.
+Include the tested branch/commit or release tag, how you installed/launched Mochi,
+and whether you reinstalled and restarted after updating.
+
+For logs, quit Mochi and launch `mochi --debug` in a terminal. Include relevant
+output and whether dragging, a menu, an emote, Overview, or a workspace switch
+preceded the problem. Check [existing issues](https://github.com/miflow13/mochi-desktop/issues)
+first; reports for #45 and #68 are still useful.
+
+## Uninstall
 
 ```bash
-git pull
-./install.sh
+mochi-uninstall
 ```
 
-### uninstall
+To remove saved settings as well:
 
 ```bash
-~/.local/bin/mochi-uninstall
+mochi-uninstall --purge
 ```
 
-Remove saved settings too:
+## Development
 
-```bash
-~/.local/bin/mochi-uninstall --purge
-```
-
----
-
-## current status
-
-**Version:** `0.2.0-alpha`  
-**Stage:** Phase 2 — *Make Mochi Feel Alive*
-
-Working now:
-
-- idle / breathing + natural blink
-- walking + persistent **Stay put**
-- pickup, velocity-aware drag + drop
-- bounce / squish / heart reactions
-- click chirps + triple-click dialogue
-- sleep / wake behavior
-- typing + media companion states
-- AmbiSense ambient dialogue
-- multi-monitor / XWayland reliability work
-
-Still growing:
-
-- more ambient idle emotes
-- animation-library polish
-- broader Linux compatibility
-- installation testing outside the dev machines
-- more AmbiSense contexts
-
----
-
-## known limitations !!
-
-Mochi is an **alpha**, and the current support boundary is intentionally narrow while the interaction/state system is stabilized.
-
-- **Fedora + GNOME + Wayland is the primary tested target.** Other Linux distributions may work, but automatic dependency installation currently supports Fedora only.
-- **GNOME gets the fullest AmbiSense experience.** Typing, focused-app, file-browsing, and focused-media awareness rely on Mochi's GNOME Shell helper. On other desktops, Mochi can still run but desktop-awareness features may be reduced or unavailable.
-- **A one-time GNOME logout/login may be required after first install.** GNOME may not load a newly installed Shell helper into the current session immediately.
-- **Mochi uses XWayland for parts of desktop positioning and interaction on GNOME Wayland.** Compositor, monitor-layout, scaling, and workspace behavior can expose edge cases that do not appear on the primary development setup.
-- **Workspace-switch reliability is still being watched.** An intermittent XWayland/workspace freeze was reported in [issue #45](https://github.com/miflow13/mochi-desktop/issues/45), but it has not been reproducible in the latest deliberate stress testing.
-- **Niri support is experimental compared with GNOME.** The installer includes the required Fedora layer-shell package, but Niri does not yet receive the same breadth of regression testing.
-- **Multi-monitor and fractional-scaling combinations are not exhaustively tested.** Please report the monitor layout and scale factors if placement, menus, bubbles, or dragging behave incorrectly.
-- **No stable compatibility promise yet.** Alpha configuration, behavior, or installation details may change between prereleases.
-
-If something fails quietly rather than crashing, that is still worth reporting. Ambient-awareness failures are intended to degrade gracefully, so missing reactions can be useful debugging information too.
-
----
-
-## AmbiSense
-
-"**AmbiSense**" (cool name huh?) is mochi's lightweight local awareness system. It turns privacy-reduced desktop signals into small behavior decisions: say something, react, perform an activity, or simply do nothing. 
-This is achieved by using pulse detection logic within a Gnome Shell extension/plugin.
-Basically:
-```
-GNOME Shell extension
-→ sees keyboard activity
-→ turns it into anonymous "Pulse"
-→ sends Pulse over D-Bus
-→ Mochi's Python side receives it
-→ AmbiSense reacts
-```
-
-Depending on what is available on the system, Mochi can notice broad signals such as:
-
-- anonymous typing activity and sustained typing intensity
-- active vs. idle / returned presence
-- coarse app categories such as editor, terminal, browser, media, or pixel-art software
-- media playback
-- battery / charging transitions
-- network connection transitions
-- file-browsing activity
-
-> AmbiSense is a **local rule-based behavior engine**, NOT an LLM and not a cloud AI service.
-
-### privacy
-
-privacy comes first, so typing awareness is content-blind. Mochi does **NOT** store characters, inspect typed text, reconstruct words, log key values, or persist typing history. It uses **anonymous** activity timing and frequency only.
-
-Application awareness is reduced to broad semantic categories before Mochi reacts. The goal is to notice the *shape* of desktop activity without reading your work.
-
----
-
-## interactions
-
-- **Left-click** — tactile bounce / squish + chirp
-- **Three quick clicks** — occasional tiny dialogue
-- **Double-click** — heart emote
-- **Drag** — pick Mochi up and move him around
-- **Right-click** — size, audio, sleep/wake, **Stay put**, and Quit
-- **Stay put** — disables autonomous wandering without freezing other behavior
-- **Mochi Lab** — developer controls for animations and AmbiSense tuning
-
-Nothing requires a response. You can ignore Mochi completely and let him do his little thing.
-
----
-
-## art
-
-ALL Mochi pixel art, animations, and audio are created by me.
-
-The sprites are handcrafted frame by frame using [Pixelorama](https://github.com/orama-interactive/pixelorama) with attention to silhouette, timing, squash and stretch, and the tiny expressions that make Mochi feel alive.
-
-Runtime artwork lives under `assets/mochi/` and is defined by `assets/mochi/manifest.json`.
-
-See [`assets/mochi/README.md`](assets/mochi/README.md) for frame, naming, looping, export, and validation rules.
-
-
----
-
-## engineering
-
-Mochi is also a hands-on Linux software-engineering project. Current work includes:
-
-- state-driven behavior for idle, movement, reactions, sleep, media, typing, and interaction transitions
-- privacy-first event and context handling through AmbiSense
-- manifest-driven sprite assets with runtime inventory validation
-- per-frame animation timing with cached Cairo surfaces and nearest-neighbor rendering
-- persistent configuration for placement and preferences
-- GTK4 transparent desktop integration
-- GNOME Wayland + XWayland compatibility work around positioning, input, menus, and multiple monitors
-- D-Bus / event-driven system awareness where appropriate
-- automated regression tests around interaction and animation behavior
-
-### stack
-
-Python 3 · GTK4 / PyGObject · Cairo · GNOME Shell helper · XWayland
-
-The actively tested target is **Fedora Linux + GNOME + Wayland**. Other distributions may work, but they are not yet part of the supported one-command installation path.
-
----
-
-## roadmap
-
-| version | focus |
-| --- | --- |
-| **v0.1 — Exists** | core desktop buddy functionality |
-| **v0.2 — Feels alive** | animation polish, AmbiSense, reactions, contextual behavior, reliability, public alpha |
-| **v0.3 — Needs care** | lightweight care / progression without turning Mochi into a chore |
-| **v0.4 — Develops personality** | more behaviors, expressions, traits, and cosmetic personality |
-| **v0.5 — Lives on your desktop** | deeper Linux desktop interactions and broader environment support |
-
-The roadmap is directional rather than a promise. Interaction quality comes first.
-
----
-
-## reporting bugs
-
-Bug reports are especially useful during the alpha. Open an issue at [GitHub Issues](https://github.com/miflow13/mochi-desktop/issues) and include as much of the following as you can:
-
-- what you were doing immediately before the problem
-- what you expected Mochi to do
-- what Mochi actually did
-- whether the problem is reproducible and the shortest sequence that reproduces it
-- Fedora / distribution version
-- desktop environment and session type
-- number of monitors, layout, and scale factors if positioning is involved
-- whether Mochi had just been clicked, dragged, put to sleep, switched between workspaces, or entered an AmbiSense state
-- relevant terminal output or traceback
-
-Useful environment checks:
-
-```bash
-echo "$XDG_CURRENT_DESKTOP"
-echo "$XDG_SESSION_TYPE"
-gnome-extensions info mochi-typing@miflow13 | grep State
-```
-
-For runtime debugging, launch Mochi from a terminal with:
-
-```bash
-mochi --debug
-```
-
-For intermittent interaction bugs, please capture the exact sequence immediately before the failure. A short reproducible sequence is more useful than a large log with no surrounding context.
-
----
-
-## development
+Complete the [Fedora runtime/helper installation](#install) first, then use a
+separate editable environment:
 
 ```bash
 git clone https://github.com/miflow13/mochi-desktop.git
@@ -302,20 +169,22 @@ cd mochi-desktop
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
 python -m pip install -e .
+python -m pip install pytest
 python -m pytest
 mochi --debug
 ```
 
-**Mochi Lab** can be opened with `Ctrl + Alt + Shift + M` when the GNOME helper is active.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [REGRESSION_WATCHLIST.md](REGRESSION_WATCHLIST.md),
+and the [documentation index](docs/README.md) for contribution and verification
+guidance.
 
-Mochi is developed with the assistance of coding agents for implementation, debugging, code review, and investigation. I direct the architecture, product decisions, testing, releases, and overall development process.
+## Roadmap
 
----
+| Direction | Focus |
+| --- | --- |
+| Current alpha | Core interactions, AmbiSense, and reliability |
+| Future possibilities | Care/progression, more expressions, and personalization |
+| Longer term | Broader Linux desktop integration |
 
-## feedback
-
-Bug reports, Linux compatibility notes, animation feedback, and feature ideas are welcome through [GitHub Issues](https://github.com/miflow13/mochi-desktop/issues).
-
-If Mochi makes your desktop a little nicer, starring the repository helps other Linux users find him. 💚
-
-MIT licensed.
+Future ideas are not a list of shipped features or a release schedule. Mochi is released under
+the [MIT License](LICENSE).

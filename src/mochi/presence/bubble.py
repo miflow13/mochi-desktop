@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 import random
 import time
@@ -39,10 +40,12 @@ class SpeechBubble:
         owner: Gtk.Window,
         anchor_widget: Gtk.Widget,
         logger: logging.Logger | None = None,
+        can_show: Callable[[], bool] | None = None,
     ) -> None:
         self._owner = owner
         self._anchor = anchor_widget
         self._logger = logger or logging.getLogger(__name__)
+        self._can_show = can_show
         self._hide_source_id: int | None = None
         self._follow_source_id: int | None = None
         self._animation_source_id: int | None = None
@@ -130,8 +133,16 @@ class SpeechBubble:
     def visible(self) -> bool:
         return bool(self._window.get_visible() or self._popover.get_visible())
 
-    def show(self, text: str, *, duration_seconds: float) -> bool:
-        typing_preview = bool(getattr(text, "typing_preview", False))
+    def show(
+        self, text: str, *, duration_seconds: float, markup: str | None = None
+    ) -> bool:
+        if self._can_show is not None and not self._can_show():
+            self._logger.debug("Speech bubble suppressed by presentation priority")
+            return False
+
+        # Rich introductory text is revealed immediately; ordinary speech
+        # retains its typing beat. Markup is supplied only by trusted app copy.
+        typing_preview = markup is None and bool(getattr(text, "typing_preview", False))
         final_text = str(text).strip()
         if self.visible or not final_text:
             return False
@@ -143,7 +154,7 @@ class SpeechBubble:
             self._typing_step = 0
             self._set_text("Mochi is typing", typing=True)
         else:
-            self._set_text(final_text, typing=False)
+            self._set_text(final_text, typing=False, markup=markup)
 
         if get_window_position(self._owner) is not None:
             self._mode = "x11"
@@ -196,10 +207,12 @@ class SpeechBubble:
         self._cancel_sources()
         self._finish_hide()
 
-    def _set_text(self, text: str, *, typing: bool) -> None:
-        self._label.set_text(text)
-        self._popover_label.set_text(text)
+    def _set_text(self, text: str, *, typing: bool, markup: str | None = None) -> None:
         for label in (self._label, self._popover_label):
+            if markup is None:
+                label.set_text(text)
+            else:
+                label.set_markup(markup)
             if typing:
                 label.add_css_class("mochi-speech-typing")
             else:

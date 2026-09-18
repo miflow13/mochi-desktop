@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from mochi.care import BondState
 from mochi.config import ConfigStore, Position
 
 
@@ -22,6 +23,8 @@ class ConfigStoreTests(unittest.TestCase):
     def test_size_round_trip_and_clamping(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             store = ConfigStore(Path(directory) / "config.json")
+            self.assertEqual(ConfigStore.DEFAULT_SIZE, 112)
+            self.assertEqual(ConfigStore.SIZE_STEP, 16)
             self.assertEqual(store.load_size(), ConfigStore.DEFAULT_SIZE)
             store.save_size(192)
             self.assertEqual(store.load_size(), 192)
@@ -64,6 +67,49 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertTrue(store.load_edge_roam())
             store.save_edge_roam(False)
             self.assertFalse(store.load_edge_roam())
+
+    def test_startup_marker_distinguishes_first_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertFalse(store.has_started_before())
+            store.mark_started()
+            self.assertTrue(store.has_started_before())
+
+    def test_intro_marker_is_persisted_separately_from_startup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertFalse(store.has_seen_intro())
+            store.mark_intro_seen()
+            self.assertTrue(store.has_seen_intro())
+
+
+    def test_bond_state_defaults_round_trips_and_migrates_old_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            store = ConfigStore(path)
+
+            self.assertEqual(store.load_bond_state(), BondState())
+
+            store.save_bond_state(BondState(level=3, xp=210))
+            self.assertEqual(
+                store.load_bond_state(),
+                BondState(level=3, xp=210),
+            )
+
+            path.write_text(
+                '{"bond_level": 1, "bond_points": 2}\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                store.load_bond_state(),
+                BondState(level=1, xp=240),
+            )
+
+            path.write_text('{"bond_phases": 4}\n', encoding="utf-8")
+            self.assertEqual(
+                store.load_bond_state(),
+                BondState(level=2, xp=0),
+            )
 
 
 if __name__ == "__main__":

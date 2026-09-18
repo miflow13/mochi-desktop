@@ -1,7 +1,7 @@
 {
   "uuid": "mochi-typing@miflow13",
   "name": "Mochi Desktop Activity",
-  "description": "Sends privacy-safe activity signals to Mochi and owns Mochi's private developer shortcut. No typed content, key identity, file name, or path is transmitted.",
+  "description": "Sends privacy-safe activity signals to Mochi and owns Mochi's privacy-safe global shortcuts. No typed content, key identity, file name, or path is transmitted.",
   "shell-version": [
     "50"
   ],

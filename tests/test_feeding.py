@@ -36,6 +36,15 @@ class _FinishHarness(FeedMochiMixin, _FinishBase):
     pass
 
 
+class _CareHookBase:
+    def _on_feed_animation_completed(self) -> None:
+        self.care_hook_calls += 1
+
+
+class _CareHookHarness(FeedMochiMixin, _CareHookBase):
+    pass
+
+
 def _runtime_harness(state: MochiState):
     harness = object.__new__(FeedMochiMixin)
     harness.state = SimpleNamespace(current=state)
@@ -183,9 +192,69 @@ def test_interrupted_eat_does_not_award_completion_hook_or_start_heart() -> None
     harness._on_feed_animation_completed.assert_not_called()
 
 
+def test_feed_completion_hook_delegates_to_composed_care_layer() -> None:
+    harness = object.__new__(_CareHookHarness)
+    harness.care_hook_calls = 0
+
+    FeedMochiMixin._on_feed_animation_completed(harness)
+
+    assert harness.care_hook_calls == 1
+
+
 def test_eating_can_interrupt_ambient_but_not_critical_states() -> None:
     assert can_transition(MochiState.DANCING, MochiState.EATING)
     assert can_transition(MochiState.WATCHING, MochiState.EATING)
     assert can_transition(MochiState.BOUNCING, MochiState.EATING)
     assert not can_transition(MochiState.SLEEPING, MochiState.EATING)
     assert not can_transition(MochiState.DRAGGED, MochiState.EATING)
+
+
+class _TickBase:
+    def _tick(self):
+        self.player.tick(30)
+        return True
+
+
+class _TickHarness(FeedMochiMixin, _TickBase):
+    pass
+
+
+def test_candy_mouth_sound_follows_animation_once_per_feed() -> None:
+    from mochi.animation import Animation, AnimationFrame, AnimationPlayer
+    from mochi.sound import SoundEvent
+
+    harness = _TickHarness()
+    harness.player = AnimationPlayer()
+    harness.state = SimpleNamespace(current=MochiState.EATING)
+    harness._sound = Mock()
+    animation = Animation("eat", (AnimationFrame("sprite"),) * 16, 120)
+
+    for feeding in range(2):
+        harness.player.play(animation)
+        for _ in range(3):
+            assert harness._tick() is True
+        assert harness._sound.play.call_count == feeding
+        harness._tick()
+        assert harness.player.frame_index == 1
+        assert harness._sound.play.call_count == feeding + 1
+        for _ in range(60):
+            harness._tick()
+        assert harness._sound.play.call_count == feeding + 1
+    harness._sound.play.assert_called_with(SoundEvent.EAT)
+
+
+def test_interruption_before_candy_reaches_mouth_stays_silent() -> None:
+    from mochi.animation import Animation, AnimationFrame, AnimationPlayer
+
+    harness = _TickHarness()
+    harness.player = AnimationPlayer()
+    harness.state = SimpleNamespace(current=MochiState.EATING)
+    harness._sound = Mock()
+    harness.player.play(Animation("eat", (AnimationFrame("sprite"),) * 16, 120))
+    for _ in range(3):
+        harness._tick()
+    harness.state.current = MochiState.PICKUP
+    harness.player.play(Animation("pickup", (AnimationFrame("sprite"),) * 16, 120))
+    for _ in range(64):
+        harness._tick()
+    harness._sound.play.assert_not_called()

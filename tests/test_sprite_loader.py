@@ -42,6 +42,25 @@ class AnimationAssetSetTests(unittest.TestCase):
 
         self.assertTrue(assets.animations)
         for animation in assets.animations.values():
+            if animation.spritesheet_path is not None:
+                path = assets.root / animation.spritesheet_path
+                surface = cairo.ImageSurface.create_from_png(str(path))
+                expected_size = (
+                    animation.source_cell_size[0] * len(animation.frame_paths),
+                    animation.source_cell_size[1],
+                )
+                self.assertEqual(
+                    (surface.get_width(), surface.get_height()),
+                    expected_size,
+                    path.relative_to(assets.root),
+                )
+                self.assertEqual(
+                    surface.get_content(),
+                    cairo.CONTENT_COLOR_ALPHA,
+                    path.relative_to(assets.root),
+                )
+                continue
+
             for relative_path in animation.frame_paths:
                 path = assets.root / relative_path
                 surface = cairo.ImageSurface.create_from_png(str(path))
@@ -72,11 +91,15 @@ class AnimationAssetSetTests(unittest.TestCase):
 
     def test_manifest_is_the_complete_runtime_png_inventory(self) -> None:
         assets = AnimationAssetSet()
-        declared = {
-            Path(path).as_posix()
-            for animation in assets.animations.values()
-            for path in animation.frame_paths
-        }
+        declared: set[str] = set()
+        for animation in assets.animations.values():
+            if animation.spritesheet_path is not None:
+                declared.add(Path(animation.spritesheet_path).as_posix())
+            else:
+                declared.update(
+                    Path(path).as_posix()
+                    for path in animation.frame_paths
+                )
         actual = {
             path.relative_to(assets.root).as_posix()
             for path in assets.root.rglob("*.png")
@@ -127,3 +150,14 @@ class AnimationAssetSetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_spritesheet_frames_are_virtual_runtime_keys() -> None:
+        assets = AnimationAssetSet()
+        side_eye = assets.animations["side_eye"]
+
+        assert side_eye.spritesheet_path == "side_eye/side_eye.png"
+        assert all("#" in key for key in side_eye.frame_paths)
+        assert not any((assets.root / key).exists() for key in side_eye.frame_paths)
+        loaded = assets.load_frames("side_eye")
+        assert set(loaded) == set(side_eye.frame_paths)

@@ -16,6 +16,7 @@ CLICK_REACTION_STATES = frozenset(
 REACTION_STATES = CLICK_REACTION_STATES | frozenset(
     (
         MochiState.EXCITED,
+        MochiState.IDLE_EMOTE,
         MochiState.HEART,
         MochiState.EATING,
         MochiState.COMPUTER,
@@ -102,17 +103,19 @@ def can_transition(current: MochiState, requested: MochiState) -> bool:
             MochiState.WATCHING,
             MochiState.DANCING,
             MochiState.SEARCHING,
+            MochiState.IDLE_EMOTE,
         )
     if requested is MochiState.WATCHING:
         return current in (
             MochiState.IDLE,
             MochiState.DANCING,
             MochiState.SEARCHING,
+            MochiState.IDLE_EMOTE,
         )
     if requested is MochiState.DANCING:
         return current in (MochiState.IDLE, MochiState.SEARCHING)
     if requested is MochiState.SEARCHING:
-        return current is MochiState.IDLE
+        return current in (MochiState.IDLE, MochiState.IDLE_EMOTE)
     if requested in (MochiState.HEART, MochiState.COMPUTER):
         return current is MochiState.IDLE
     if requested in REACTION_STATES:

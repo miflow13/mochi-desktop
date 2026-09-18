@@ -8,6 +8,8 @@ import logging
 import os
 from pathlib import Path
 
+from mochi.care import BondState
+
 
 @dataclass(frozen=True)
 class Position:
@@ -16,9 +18,10 @@ class Position:
 
 
 class ConfigStore:
-    DEFAULT_SIZE = 128
+    DEFAULT_SIZE = 112
     MIN_SIZE = 64
     MAX_SIZE = 256
+    SIZE_STEP = 16
     DEFAULT_VOLUME = 0.6
 
     def __init__(self, path: Path | None = None) -> None:
@@ -112,6 +115,79 @@ class ConfigStore:
         data["edge_roam"] = bool(enabled)
         self._save(data)
         self._logger.debug("Edge roam: %s", bool(enabled))
+
+    def load_bond_state(self) -> BondState:
+        """Return Mochi's persisted, non-decaying bond progress."""
+        try:
+            data = self._load()
+        except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError):
+            return BondState()
+
+        if "bond_xp" in data:
+            return BondState(
+                level=data.get("bond_level", 1),
+                xp=data.get("bond_xp", 0),
+            )
+
+        # Migrate the earlier four-step care preview proportionally into the
+        # smooth XP bar so local testers do not lose relationship progress.
+        if "bond_points" in data or "bond_phases" in data:
+            try:
+                level = max(1, int(data.get("bond_level", 1)))
+            except (TypeError, ValueError):
+                level = 1
+            raw_steps = data.get("bond_points", data.get("bond_phases", 0))
+            try:
+                steps = max(0, min(4, int(raw_steps)))
+            except (TypeError, ValueError):
+                steps = 0
+            base = BondState(level=level)
+            migrated_xp = round(base.xp_required * (steps / 4))
+            return BondState(level=level, xp=migrated_xp)
+
+        return BondState()
+
+    def save_bond_state(self, state: BondState) -> None:
+        """Persist bond level/XP without storing animation state."""
+        normalized = BondState(level=state.level, xp=state.xp)
+        data = self._load_or_empty()
+        data["bond_level"] = normalized.level
+        data["bond_xp"] = normalized.xp
+        data.pop("bond_points", None)
+        data.pop("bond_phases", None)
+        self._save(data)
+        self._logger.debug(
+            "Bond saved: level=%d progress=%d/%d XP",
+            normalized.level,
+            normalized.xp,
+            normalized.xp_required,
+        )
+
+    def has_started_before(self) -> bool:
+        """Whether Mochi has completed at least one non-preview startup."""
+        try:
+            started = self._load()["has_started_before"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+        return started if isinstance(started, bool) else False
+
+    def mark_started(self) -> None:
+        """Persist the first-launch boundary without retaining session events."""
+        data = self._load_or_empty()
+        data["has_started_before"] = True
+        self._save(data)
+
+    def has_seen_intro(self) -> bool:
+        """Only a successfully displayed introduction counts as seen."""
+        try:
+            return self._load().get("has_seen_intro") is True
+        except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+    def mark_intro_seen(self) -> None:
+        data = self._load_or_empty()
+        data["has_seen_intro"] = True
+        self._save(data)
 
     def reset_position(self) -> None:
         try:

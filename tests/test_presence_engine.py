@@ -125,6 +125,40 @@ def test_event_priority_prefers_system_reaction():
     assert action.priority == 40
 
 
+def test_network_restoration_invalidates_queued_offline_reaction():
+    clock = Clock()
+    engine = PresenceEngine(tuning=generous_tuning(), rng=random.Random(1), clock=clock)
+    engine.emit("network_lost", now=0)
+    engine.emit("network_restored", now=1)
+
+    action = engine.evaluate(AmbientContext(network_connected=True), now=1)
+
+    assert action is not None
+    assert action.event == "network_restored"
+
+
+def test_network_event_is_dropped_when_current_baseline_disagrees():
+    clock = Clock()
+    engine = PresenceEngine(
+        tuning=generous_tuning(ambient_min_seconds=9999, ambient_max_seconds=9999),
+        rng=random.Random(1),
+        clock=clock,
+    )
+    engine.emit("network_lost", now=0)
+
+    action = engine.evaluate(AmbientContext(network_connected=True), now=1)
+
+    assert action is None
+
+
+def test_pending_system_event_can_defer_startup_greeting():
+    engine = PresenceEngine(tuning=generous_tuning(), rng=random.Random(1), clock=Clock())
+    engine.emit("media_started")
+    assert engine.has_pending_event_at_least(40) is False
+    engine.emit("network_lost")
+    assert engine.has_pending_event_at_least(40) is True
+
+
 def test_silence_probability_can_choose_silence():
     clock = Clock()
     tuning = generous_tuning(ambient_silence_probability=1)

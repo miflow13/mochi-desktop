@@ -3,12 +3,117 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#ffffff" />
+  <title>Mochi — Handcrafted Linux Desktop Companion</title>
   <meta
     name="description"
-    content="Mochi is a tiny handcrafted Linux desktop companion for Fedora GNOME."
+    content="Mochi is a handcrafted Linux desktop companion for Fedora, GNOME, and Wayland—a privacy-first pixel-art pet that reacts locally to your activity."
   />
-  <title>Mochi 🌱</title>
+  <meta
+    name="robots"
+    content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+  />
+  <meta name="author" content="Mika Flowers" />
+  <meta name="theme-color" content="#ffffff" />
+
+  <link rel="canonical" href="https://miflow13.github.io/mochi-desktop/" />
+  <link rel="icon" type="image/png" sizes="256x256" href="assets/mochi/idle/idle_01.png" />
+  <link rel="apple-touch-icon" href="assets/mochi_original_set/mochi_default.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Mochi" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:url" content="https://miflow13.github.io/mochi-desktop/" />
+  <meta property="og:title" content="Mochi — Handcrafted Linux Desktop Companion" />
+  <meta
+    property="og:description"
+    content="A privacy-first pixel-art companion for Fedora, GNOME, and Wayland that reacts locally to your desktop activity."
+  />
+  <meta
+    property="og:image"
+    content="https://miflow13.github.io/mochi-desktop/assets/mochi_original_set/mochi_default.png"
+  />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1254" />
+  <meta property="og:image:height" content="1254" />
+  <meta property="og:image:alt" content="Mochi, a handcrafted green pixel-art Linux desktop companion" />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Mochi — Handcrafted Linux Desktop Companion" />
+  <meta
+    name="twitter:description"
+    content="A privacy-first pixel-art companion for Fedora, GNOME, and Wayland."
+  />
+  <meta
+    name="twitter:image"
+    content="https://miflow13.github.io/mochi-desktop/assets/mochi_original_set/mochi_default.png"
+  />
+  <meta name="twitter:image:alt" content="Mochi, a handcrafted green pixel-art Linux desktop companion" />
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://miflow13.github.io/mochi-desktop/#website",
+          "url": "https://miflow13.github.io/mochi-desktop/",
+          "name": "Mochi",
+          "alternateName": "Mochi Desktop Companion",
+          "description": "A handcrafted, privacy-first pixel-art companion for the Linux desktop.",
+          "inLanguage": "en-US"
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://miflow13.github.io/mochi-desktop/#webpage",
+          "url": "https://miflow13.github.io/mochi-desktop/",
+          "name": "Mochi — Handcrafted Linux Desktop Companion",
+          "description": "Mochi is a handcrafted Linux desktop companion for Fedora, GNOME, and Wayland—a privacy-first pixel-art pet that reacts locally to your activity.",
+          "inLanguage": "en-US",
+          "isPartOf": {
+            "@id": "https://miflow13.github.io/mochi-desktop/#website"
+          },
+          "about": {
+            "@id": "https://miflow13.github.io/mochi-desktop/#project"
+          },
+          "author": {
+            "@id": "https://github.com/miflow13#person"
+          },
+          "primaryImageOfPage": {
+            "@id": "https://miflow13.github.io/mochi-desktop/#primaryimage"
+          }
+        },
+        {
+          "@type": "ImageObject",
+          "@id": "https://miflow13.github.io/mochi-desktop/#primaryimage",
+          "url": "https://miflow13.github.io/mochi-desktop/assets/mochi_original_set/mochi_default.png",
+          "contentUrl": "https://miflow13.github.io/mochi-desktop/assets/mochi_original_set/mochi_default.png",
+          "width": 1254,
+          "height": 1254,
+          "caption": "Mochi, a handcrafted green pixel-art Linux desktop companion"
+        },
+        {
+          "@type": "SoftwareSourceCode",
+          "@id": "https://miflow13.github.io/mochi-desktop/#project",
+          "name": "Mochi",
+          "description": "A handcrafted, privacy-first Linux desktop companion built with Python and GTK4.",
+          "codeRepository": "https://github.com/miflow13/mochi-desktop",
+          "license": "https://github.com/miflow13/mochi-desktop/blob/main/LICENSE",
+          "programmingLanguage": "Python",
+          "runtimePlatform": "Fedora Linux, GNOME, Wayland and XWayland",
+          "author": {
+            "@id": "https://github.com/miflow13#person"
+          }
+        },
+        {
+          "@type": "Person",
+          "@id": "https://github.com/miflow13#person",
+          "name": "Mika Flowers",
+          "url": "https://github.com/miflow13"
+        }
+      ]
+    }
+  </script>
+
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -29,35 +134,34 @@
   <hr />
 
   <main>
-    <section class="intro">
+    <div class="intro">
       <p><strong>Early public alpha.</strong> Fedora + GNOME on Wayland is the main tested setup.</p>
       <p>
-        Mochi is a small pixel creature that lives on your desktop. He wanders,
-        sleeps, reacts to what you're doing, and occasionally has something to say.
+        mochi is a small pixel creature that lives on your desktop. he has personality. he wanders and talks to you as you code.
       </p>
 
       <p class="preview">
         <img
           src="https://github.com/user-attachments/assets/d64b6900-3120-4174-9ec6-a40688fe921a"
-          alt="Mochi desktop preview"
+          alt="Recorded demo of Mochi beside a terminal window"
         />
       </p>
-    </section>
+    </div>
 
     <hr />
 
     <section id="about">
-      <h2>What is Mochi?</h2>
+      <h2>What is mochi?</h2>
       <p>
-        Mochi is a handcrafted Linux desktop companion built with Python, GTK4,
-        Cairo, and a lot of tiny PNGs.
+        mochi is a handcrafted Linux desktop companion built with Python, GTK4,
+        Cairo, and a lot of tiny handcrafted PNGs.
       </p>
       <ul>
         <li>Hand-drawn pixel art and animations.</li>
         <li>Reacts to typing, terminal use, coding, music, video, idle time, and more.</li>
-        <li>AmbiSense uses broad desktop signals instead of reading what you type.</li>
+        <li>state engine that uses broad desktop signals instead of reading what you type.</li>
         <li>Built primarily for Fedora GNOME with Wayland/XWayland.</li>
-        <li>Still alpha software. Bugs are part of the deal.</li>
+        <li>Still alpha software! Bugs are part of the deal!!!</li>
       </ul>
     </section>
 
@@ -65,7 +169,7 @@
 
     <section id="install">
       <h2>Install</h2>
-      <p>Clone the repository:</p>
+      <p>On Fedora, clone the repository (this installs current main, not a pinned release):</p>
       <pre><code>git clone https://github.com/miflow13/mochi-desktop.git</code></pre>
 
       <p>Then run:</p>
@@ -74,12 +178,22 @@
 
       <p>
         After installation, open <strong>Mochi</strong> from the GNOME app grid.
+        You can also run <code>~/.local/bin/mochi</code>.
+      </p>
+      <p>
+        The installer may use <code>sudo dnf</code> for missing Fedora packages.
+        On first GNOME Wayland installation, log out and back in once so the
+        desktop-awareness helper can load. Without it, some reactions may be unavailable.
+      </p>
+      <p>
+        To update, quit Mochi, run <code>git pull --ff-only</code> from your clean
+        main checkout, rerun <code>./install.sh</code>, then relaunch Mochi.
       </p>
 
       <p>
-        <a href="https://github.com/miflow13/mochi-desktop#install-mochi">full install notes</a>
+        <a href="https://github.com/miflow13/mochi-desktop#install">full install notes</a>
         ·
-        <a href="https://github.com/miflow13/mochi-desktop/issues">report a bug</a>
+        <a href="https://github.com/miflow13/mochi-desktop#reporting-bugs">how to report a bug</a>
       </p>
     </section>
 
@@ -89,6 +203,18 @@
       <h2>Status</h2>
       <p><strong>Stage:</strong> early public alpha</p>
       <p><strong>Platform:</strong> Fedora + GNOME + Wayland/XWayland</p>
+      <p>Niri is experimental. Other desktops, multi-monitor layouts, and fractional scaling receive less testing.</p>
+      <p>
+        Known issues remain open: a GNOME Overview/workspace freeze during emotes
+        (<a href="https://github.com/miflow13/mochi-desktop/issues/45">#45, alpha blocker</a>)
+        and delayed drag-direction poses
+        (<a href="https://github.com/miflow13/mochi-desktop/issues/68">#68, under investigation</a>).
+      </p>
+      <p>
+        See the <a href="https://github.com/miflow13/mochi-desktop/issues/37">alpha QA checklist</a>
+        and <a href="https://github.com/miflow13/mochi-desktop/blob/main/CHANGELOG.md#release-metadata-note">release/version notes</a>.
+        This is not a stable release.
+      </p>
       <p><strong>Source:</strong> <a href="https://github.com/miflow13/mochi-desktop">github.com/miflow13/mochi-desktop</a></p>
     </section>
   </main>
@@ -96,7 +222,7 @@
   <hr />
 
   <footer>
-    <p>Mochi is made by Mika. Handcrafted with love and too many sprite frames.</p>
+    <p>mochi is made by Mika. Handcrafted with love and too many sprite frames.</p>
     <p class="small">last updated: september 2026</p>
   </footer>
 </body>

@@ -250,6 +250,7 @@ class NetworkSignalAdapter:
                 None,
             )
             self._refresh(emit=False)
+            self._logger.debug("[connectivity] baseline=%s", self._state_label())
             self._handler_id = int(
                 self._proxy.connect("g-properties-changed", self._on_properties_changed)
             )
@@ -289,6 +290,11 @@ class NetworkSignalAdapter:
         else:
             self._on_lost()
 
+    def _state_label(self) -> str:
+        if self.connected is None:
+            return "unknown"
+        return "online" if self.connected else "offline"
+
 
 class AppCategorySignalAdapter:
     """Receive only a coarse focused-application category from GNOME Shell.
@@ -320,6 +326,7 @@ class AppCategorySignalAdapter:
         self.available = False
         self.category = "unknown"
         self.last_error: str | None = None
+        self._received_initial_state = False
 
     @staticmethod
     def _load_gio():
@@ -333,7 +340,10 @@ class AppCategorySignalAdapter:
         self._helper = HelperConnection(
             self._gio_loader,
             {self.SIGNAL_NAME: self._on_category_signal},
-            on_state=lambda state: self._set_category(state[3]),
+            # Helper state is a startup baseline, not a focus transition. In
+            # particular, do not enter VS Code/terminal coworking merely
+            # because one was focused before Mochi subscribed.
+            on_state=self._on_state,
             on_lost=lambda: self._set_category("unknown"),
         )
         self.available = self._helper.start()
@@ -346,6 +356,12 @@ class AppCategorySignalAdapter:
             self._helper = None
         self.available = False
         self.category = "unknown"
+        self._received_initial_state = False
+
+    def _on_state(self, state) -> None:
+        """Apply the first helper state as a baseline, later ones as changes."""
+        self._set_category(state[3], emit=self._received_initial_state)
+        self._received_initial_state = True
 
     def _on_category_signal(
         self,
@@ -363,12 +379,15 @@ class AppCategorySignalAdapter:
             return
         self._set_category(category)
 
-    def _set_category(self, category) -> None:
+    def _set_category(self, category, *, emit: bool = True) -> None:
         if category not in self.ALLOWED or category == self.category:
             return
         self.category = category
-        self._logger.debug("[presence] app category -> %s", category)
-        self._on_category_changed(category)
+        if emit:
+            self._logger.debug("[presence] app category -> %s", category)
+            self._on_category_changed(category)
+        else:
+            self._logger.debug("[presence] app category baseline=%s", category)
 
 
 class SystemSignalMonitor:

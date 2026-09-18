@@ -1,3 +1,4 @@
+import hashlib
 import unittest
 
 import cairo
@@ -39,7 +40,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
-            "watch", "dance", "searching", "drop",
+            "watch", "dance", "searching", "drop", "side_eye", "table_flip",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -120,6 +121,31 @@ class SpriteDefinitionsTests(unittest.TestCase):
             ),
         )
 
+    def test_directional_drag_art_has_distinct_loaded_pixels(self) -> None:
+        frames = ASSET_SET.load_frames("dragged")
+        for left, right in (
+            ("drag_left_soft", "drag_right_soft"),
+            ("drag_left_medium", "drag_right_medium"),
+            ("drag_settle_left", "drag_settle_right"),
+        ):
+            with self.subTest(pair=(left, right)):
+                self.assertTrue(
+                    bytes(frames[f"drag/{left}.png"].get_data())
+                    != bytes(frames[f"drag/{right}.png"].get_data()),
+                    f"{left} and {right} must display different artwork",
+                )
+
+    def test_soft_drag_assets_preserve_the_last_distinct_authored_pair(self) -> None:
+        # Exact 256px files from d9d3db7, before 493788b duplicated the pair.
+        # The 128px mochi_original_set drag files predate this hand-drawn art.
+        expected = {
+            "left": "30a84a149e456b801049d69e554bf98925f5933501df0c13fb440913e4372a27",
+            "right": "232f7101dac99ccf3e90b410bf0661bc6b6bd442a4a9de0819470604b0a54a09",
+        }
+        for direction, digest in expected.items():
+            path = ASSET_SET.root / f"drag/drag_{direction}_soft.png"
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest)
+
     def test_walk_uses_the_manifest_directional_frames(self) -> None:
         self.assertTrue(ANIMATIONS["walk"].looping)
         self.assertTrue(ANIMATIONS["walk_left"].looping)
@@ -180,3 +206,26 @@ class SpriteDefinitionsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_bond_idle_emotes_preserve_authored_timing() -> None:
+    assert tuple(frame.duration_ms for frame in ANIMATIONS["side_eye"].frames) == (
+        (120,) * 12 + (500,)
+    )
+    assert tuple(frame.duration_ms for frame in ANIMATIONS["table_flip"].frames) == (
+        (120,) * 16
+    )
+    assert ANIMATIONS["side_eye"].looping is False
+    assert ANIMATIONS["table_flip"].looping is False
+
+
+def test_bond_idle_emotes_use_authored_64px_spritesheets() -> None:
+    side_eye = ASSET_SET.animations["side_eye"]
+    table_flip = ASSET_SET.animations["table_flip"]
+
+    assert side_eye.spritesheet_path == "side_eye/side_eye.png"
+    assert side_eye.source_cell_size == (64, 64)
+    assert len(side_eye.frame_paths) == 13
+    assert table_flip.spritesheet_path == "table_flip/table_flip.png"
+    assert table_flip.source_cell_size == (64, 64)
+    assert len(table_flip.frame_paths) == 16

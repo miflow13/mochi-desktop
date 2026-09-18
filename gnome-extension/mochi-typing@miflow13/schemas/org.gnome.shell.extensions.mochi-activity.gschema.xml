@@ -11,5 +11,13 @@
         extension to request the developer-tuning popover.
       </description>
     </key>
+    <key name="emote-catalogue-shortcut" type="as">
+      <default>['&lt;Ctrl&gt;&lt;Alt&gt;e']</default>
+      <summary>Open Mochi emote catalogue</summary>
+      <description>
+        User-facing global shortcut that requests Mochi's emote collection
+        window without transmitting key identity or typed content.
+      </description>
+    </key>
   </schema>
 </schemalist>

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import random
 
-from gi.repository import GLib
-
 from mochi.quick_start import QuickStartMixin
 from mochi.sound import SoundEvent
 
+from .bond_meter import BondMeterMixin
 from .clicks import ClickBurstDetector
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
+from .emote_catalogue import EmoteCatalogueMixin
 from .fedora_mode import FedoraModeMixin
 from .feeding import FeedMochiMixin
 from .idle_look import IdleLookMixin
@@ -31,7 +31,6 @@ CLICK_BURST_PHRASES = (
     "eep!",
     "tiny creature here!",
 )
-
 
 class ClickDialogueMixin:
     """Add immediate click audio and a playful three-click response."""
@@ -121,36 +120,6 @@ class ClickDialogueMixin:
             self._logger.debug("[presence] triple-click dialogue text=%r", text)
         return shown
 
-    def _show_startup_greeting(self) -> bool:
-        """Show startup speech with the same visible typing beat as ambient lines."""
-        self._presence_startup_source_id = None
-        if self._presence_shutting_down or self._preview_mode:
-            return GLib.SOURCE_REMOVE
-
-        tuning = self._ambient_presence_engine.tuning
-        bubble = self._presence_bubble
-        if (
-            not tuning.speech_enabled
-            or not tuning.ambient_reactions_enabled
-            or tuning.quiet_mode
-            or self._user_idle
-            or bubble is None
-        ):
-            return GLib.SOURCE_REMOVE
-
-        text = self._ambient_presence_engine.phrases.choose(
-            "startup",
-            exclude_recent=True,
-        )
-        presentation = SpeechText(text, typing_preview=True)
-        if bubble.show(
-            presentation,
-            duration_seconds=speech_display_seconds(text),
-        ):
-            self._ambient_presence_engine.phrases.remember(text)
-            self._logger.debug("[presence] startup greeting typing-preview text=%r", text)
-        return GLib.SOURCE_REMOVE
-
     def _preview_presence_category(self, category: str) -> None:
         """Preview production-style typing presentation from Mochi Lab on demand."""
         bubble = self._presence_bubble
@@ -193,6 +162,8 @@ class PresenceBuddy(
     TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
+    EmoteCatalogueMixin,
+    BondMeterMixin,
     FeedMochiMixin,
     NameplateMixin,
     BasePresenceBuddy,
@@ -208,6 +179,8 @@ class PresenceX11Buddy(
     TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
+    EmoteCatalogueMixin,
+    BondMeterMixin,
     FeedMochiMixin,
     NameplateMixin,
     BasePresenceX11Buddy,
