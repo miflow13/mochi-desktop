@@ -140,14 +140,13 @@ def test_canvas_has_no_scroll_path_or_pointer_motion_repaint() -> None:
     assert "def _on_motion" not in source
 
 
-def test_canvas_renders_one_card_per_paced_low_priority_slice() -> None:
+def test_canvas_renders_static_surface_in_one_pass() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas)
 
-    assert "GLib.timeout_add" in source
-    assert "16," in source
-    assert "priority=GLib.PRIORITY_LOW" in source
-    assert "def _render_next_card" in source
-    assert "self._render_index += 1" in source
+    assert "GLib.timeout_add" not in source
+    assert "def _render_surface" in source
+    assert "for index, emote in enumerate(EMOTE_CATALOGUE)" in source
+    assert source.count("self.queue_draw()") == 1
 
 
 def test_canvas_is_a_read_only_collection_view() -> None:
@@ -252,7 +251,7 @@ def test_visible_catalogue_refreshes_with_live_bond_progress() -> None:
     )
 
 
-def test_show_catalogue_lazy_creates_then_forces_current_state_refresh() -> None:
+def test_show_catalogue_lazy_creates_and_reuses_cached_state_when_unchanged() -> None:
     buddy = object.__new__(EmoteCatalogueMixin)
     buddy._preview_mode = False
     buddy._bond_state = BondState(level=3, xp=12)
@@ -262,7 +261,7 @@ def test_show_catalogue_lazy_creates_then_forces_current_state_refresh() -> None
     EmoteCatalogueMixin._show_emote_catalogue(buddy)
 
     buddy._ensure_emote_catalogue_window.assert_called_once_with()
-    window.refresh.assert_called_once_with(buddy._bond_state, force=True)
+    window.refresh.assert_called_once_with(buddy._bond_state)
     window.present.assert_called_once_with()
 
 
