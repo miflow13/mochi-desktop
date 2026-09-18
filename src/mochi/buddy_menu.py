@@ -6,6 +6,7 @@ dragging, activity detection, and behavior state remain outside this module.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import time
 
 import gi
@@ -17,6 +18,7 @@ from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 from mochi.config import ConfigStore
 from mochi.menu_window import MenuWindow
 from mochi.sound import SoundEvent
+from mochi.state import MochiState
 
 
 class BuddyMenuMixin:
