@@ -635,6 +635,22 @@ class BuddySearchingTests(unittest.TestCase):
         buddy._transition_to.assert_called_once_with(MochiState.SEARCHING)
         buddy._play_animation.assert_called_once_with("searching", after=None)
 
+    def test_file_activity_can_interrupt_unlocked_idle_emote(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE_EMOTE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["side_eye"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_searching_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.SEARCHING)
+        buddy._play_animation.assert_called_once_with("searching", after=None)
+
     def test_searching_does_not_override_watching(self) -> None:
         buddy = SimpleNamespace(
             state=SimpleNamespace(current=MochiState.WATCHING),

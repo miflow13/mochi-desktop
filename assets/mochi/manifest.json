@@ -475,6 +475,26 @@
       "frame_count": 13,
       "fps": 8.333333333333334,
       "loop": false
+    },
+    "side_eye": {
+      "spritesheet": "side_eye/side_eye.png",
+      "frame_count": 13,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "table_flip": {
+      "spritesheet": "table_flip/table_flip.png",
+      "frame_count": 16,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
     }
   }
 }

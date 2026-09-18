@@ -14,6 +14,11 @@ from mochi.care import (
     BondState,
 )
 from mochi.bond_orbs import XpOrbField
+from mochi.emotes import (
+    EmoteDefinition,
+    newly_unlocked_emotes,
+    unlocked_idle_animation_names,
+)
 from mochi.state import MochiState, PresentationState
 
 from .bond_progress_overlay import BondProgressOverlay
@@ -56,6 +61,9 @@ class BondMeterMixin:
         self._bond_progress_overlay: BondProgressOverlay | None = None
         self._bond_typing_source_id: int | None = None
         self._bond_unsaved_xp = 0
+        self._dev_unlock_all_emotes = False
+        self._dev_unlock_all_label: Gtk.Label | None = None
+        self._pending_emote_unlocks: list[EmoteDefinition] = []
         super().__init__(*args, **kwargs)
         self._restore_bond_state()
 
@@ -66,6 +74,7 @@ class BondMeterMixin:
                 anchor_widget=self,
                 logger=self._logger,
                 on_level_up_finished=self._on_bond_level_up_finished,
+                atlas=self.atlas,
             )
 
     def _build_context_menu(self):
@@ -112,9 +121,11 @@ class BondMeterMixin:
             self._bond_progress_overlay.update(self._bond_state)
 
     def _bond_dev_status_text(self) -> str:
+        suffix = "  ·  EMOTES UNLOCKED (DEV)" if self._dev_unlock_all_emotes else ""
         return (
             f"Lv. {self._bond_state.level}  ·  "
             f"{self._bond_state.xp}/{self._bond_state.xp_required} XP"
+            f"{suffix}"
         )
 
     def _build_developer_menu(self):
@@ -187,6 +198,17 @@ class BondMeterMixin:
         card.append(real_level_button)
         animated_rows.append(real_level_button)
 
+        unlock_button, self._dev_unlock_all_label = self._make_menu_button(
+            "Unlock all emotes",
+            "changes-allow-symbolic",
+            self._test_unlock_all_emotes,
+        )
+        unlock_button.set_tooltip_text(
+            "Session-only QA override; does not change saved bond level or XP"
+        )
+        card.append(unlock_button)
+        animated_rows.append(unlock_button)
+
         reset_button, _ = self._make_menu_button(
             "Reset test bond",
             "edit-undo-symbolic",
@@ -234,8 +256,37 @@ class BondMeterMixin:
         self._persist_bond_state()
         self._award_bond(1, persist=True)
 
+    def _test_unlock_all_emotes(self, _button=None) -> None:
+        """Toggle all available emotes for this developer session only."""
+        self._dev_unlock_all_emotes = not self._dev_unlock_all_emotes
+        if self._dev_unlock_all_label is not None:
+            self._dev_unlock_all_label.set_text(
+                "Restore bond locks"
+                if self._dev_unlock_all_emotes
+                else "Unlock all emotes"
+            )
+        if self._bond_dev_status_label is not None:
+            self._bond_dev_status_label.set_text(self._bond_dev_status_text())
+        refresh = getattr(self, "_refresh_emote_catalogue", None)
+        if callable(refresh):
+            refresh(force=True)
+        self._logger.info(
+            "Developer emote unlock override: %s",
+            self._dev_unlock_all_emotes,
+        )
+
+    def _available_idle_emote_animations(self) -> tuple[str, ...]:
+        return unlocked_idle_animation_names(
+            self._bond_state,
+            unlock_all=self._dev_unlock_all_emotes,
+        )
+
     def _test_bond_reset(self, _button=None) -> None:
         """Restore a predictable Level 1 baseline after developer testing."""
+        self._dev_unlock_all_emotes = False
+        self._pending_emote_unlocks.clear()
+        if self._dev_unlock_all_label is not None:
+            self._dev_unlock_all_label.set_text("Unlock all emotes")
         self._set_bond_state_for_ui(BondState())
         self._persist_bond_state()
         if self._bond_progress_overlay is not None:
@@ -335,12 +386,34 @@ class BondMeterMixin:
             queue_draw()
 
     def _on_bond_level_up_finished(self) -> None:
-        if self.state.presentation is PresentationState.LEVEL_UP:
+        overlay = self._bond_progress_overlay
+        if self._pending_emote_unlocks and overlay is not None:
+            emote = self._pending_emote_unlocks.pop(0)
+            self.state.transition_presentation(PresentationState.EMOTE_UNLOCK)
+            overlay.show_emote_unlock(emote)
+            self._logger.info(
+                "Emote unlocked: %s at bond level %d",
+                emote.label,
+                emote.required_bond_level,
+            )
+            return
+
+        if self.state.presentation in (
+            PresentationState.LEVEL_UP,
+            PresentationState.EMOTE_UNLOCK,
+        ):
             self.state.transition_presentation(PresentationState.NORMAL)
 
     def _on_bond_level_up(self, previous_level: int, new_level: int) -> None:
-        """Celebrate clearly without taking over Mochi's behavior state."""
+        """Celebrate the bond milestone, then reveal newly learned idle emotes."""
         self._logger.info("Bond level increased: %d -> %d", previous_level, new_level)
+        self._pending_emote_unlocks.extend(
+            newly_unlocked_emotes(
+                previous_level,
+                new_level,
+                reveal_only=True,
+            )
+        )
         self._begin_bond_level_up_presentation(
             self._bond_state,
             previous_level=previous_level,
@@ -374,7 +447,7 @@ class BondMeterMixin:
         # stays ambient through orbs and floating XP markers, never the HUD.
         if (
             self._bond_progress_overlay is not None
-            and not self._bond_progress_overlay.level_up_active
+            and not self._bond_progress_overlay.presentation_active
         ):
             self._bond_progress_overlay.dismiss()
         if self._bond_typing_source_id is None:

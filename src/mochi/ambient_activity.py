@@ -38,6 +38,7 @@ class AmbientActivityController:
                 MochiState.IDLE,
                 MochiState.WATCHING,
                 MochiState.SEARCHING,
+                MochiState.IDLE_EMOTE,
             )
             or self._buddy._context_menu_open
             or (
@@ -88,7 +89,11 @@ class AmbientActivityController:
 
     def _start_watching_emote(self) -> bool:
         if (
-            self._buddy.state.current not in (MochiState.IDLE, MochiState.SEARCHING)
+            self._buddy.state.current not in (
+                MochiState.IDLE,
+                MochiState.SEARCHING,
+                MochiState.IDLE_EMOTE,
+            )
             or self._buddy._context_menu_open
             or (
                 self._buddy.state.current is MochiState.IDLE
@@ -132,9 +137,12 @@ class AmbientActivityController:
 
     def _start_searching_emote(self) -> bool:
         if (
-            self._buddy.state.current is not MochiState.IDLE
+            self._buddy.state.current not in (MochiState.IDLE, MochiState.IDLE_EMOTE)
             or self._buddy._context_menu_open
-            or self._buddy.player.animation is not ANIMATIONS["idle"]
+            or (
+                self._buddy.state.current is MochiState.IDLE
+                and self._buddy.player.animation is not ANIMATIONS["idle"]
+            )
         ):
             return False
         if not self._buddy._transition_to(MochiState.SEARCHING):
@@ -167,6 +175,7 @@ class AmbientActivityController:
         self._buddy._user_idle = True
         if self._buddy._preview_mode or self._buddy.state.current not in (
             MochiState.IDLE, MochiState.BLINKING, MochiState.WALKING,
+            MochiState.IDLE_EMOTE,
         ):
             return
         if self._buddy._context_menu_open:
@@ -192,6 +201,7 @@ class AmbientActivityController:
             MochiState.TYPING,
             MochiState.WATCHING,
             MochiState.SEARCHING,
+            MochiState.IDLE_EMOTE,
         ):
             return False
         if self._buddy.state.current is MochiState.TYPING and self._buddy._typing_monitor is not None:

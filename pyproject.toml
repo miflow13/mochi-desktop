@@ -50,6 +50,8 @@ where = ["src"]
 "share/mochi/searching" = ["assets/mochi/searching/*.png"]
 "share/mochi/sway_idle" = ["assets/mochi/sway_idle/*.png"]
 "share/mochi/drop" = ["assets/mochi/drop/*.png"]
+"share/mochi/side_eye" = ["assets/mochi/side_eye/*.png"]
+"share/mochi/table_flip" = ["assets/mochi/table_flip/*.png"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

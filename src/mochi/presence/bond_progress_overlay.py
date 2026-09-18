@@ -13,8 +13,38 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.care import BondState
-from mochi.sprites import ANIMATIONS
+from mochi.emotes import EmoteDefinition
+from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.x11 import get_window_position, move_window, request_keep_above
+
+
+class EmoteUnlockPreview(Gtk.DrawingArea):
+    """Static authored-frame preview used only by the unlock reward card."""
+
+    SIZE = 92
+
+    def __init__(self, atlas: SpriteAtlas) -> None:
+        super().__init__()
+        self._atlas = atlas
+        self._emote: EmoteDefinition | None = None
+        self.set_content_width(self.SIZE)
+        self.set_content_height(self.SIZE)
+        self.set_can_target(False)
+        self.add_css_class("mochi-emote-unlock-preview")
+        self.set_draw_func(self._draw)
+
+    def set_emote(self, emote: EmoteDefinition | None) -> None:
+        self._emote = emote
+        self.set_visible(emote is not None)
+        self.queue_draw()
+
+    def _draw(self, _area, context, width: int, height: int) -> None:
+        emote = self._emote
+        if emote is None or emote.animation is None:
+            return
+        animation = ANIMATIONS[emote.animation]
+        frame = animation.frames[min(len(animation.frames) - 1, len(animation.frames) // 2)]
+        self._atlas.draw(context, frame, width, height)
 
 
 class BondProgressOverlay:
@@ -24,6 +54,7 @@ class BondProgressOverlay:
     MONITOR_PADDING_PX = 12
     GAIN_FLASH_MS = 650
     LEVEL_UP_DISPLAY_MS = 3200
+    EMOTE_UNLOCK_DISPLAY_MS = 3400
     LEVEL_UP_MIN_HOLD_SECONDS = 3.2
 
     def __init__(
@@ -33,6 +64,7 @@ class BondProgressOverlay:
         anchor_widget: Gtk.Widget,
         logger: logging.Logger | None = None,
         on_level_up_finished: Callable[[], None] | None = None,
+        atlas: SpriteAtlas | None = None,
     ) -> None:
         self._owner = owner
         self._anchor = anchor_widget
@@ -46,8 +78,10 @@ class BondProgressOverlay:
         self._activity = "bonding"
         self._gain_text = ""
         self._level_up_active = False
+        self._emote_unlock_active = False
         self._level_up_previous_level: int | None = None
         self._state = BondState()
+        self._atlas = atlas
 
         (
             self._content,
@@ -77,6 +111,17 @@ class BondProgressOverlay:
             self._popover_level_up_level,
             self._popover_level_up_subtitle,
         ) = self._make_content()
+
+        self._unlock_previews: list[EmoteUnlockPreview] = []
+        if self._atlas is not None:
+            for celebration in (
+                self._level_up_content,
+                self._popover_level_up_content,
+            ):
+                preview = EmoteUnlockPreview(self._atlas)
+                preview.set_visible(False)
+                celebration.prepend(preview)
+                self._unlock_previews.append(preview)
 
         self._window = Gtk.Window()
         self._window.set_decorated(False)
@@ -237,6 +282,14 @@ class BondProgressOverlay:
     def level_up_active(self) -> bool:
         return self._level_up_active
 
+    @property
+    def emote_unlock_active(self) -> bool:
+        return self._emote_unlock_active
+
+    @property
+    def presentation_active(self) -> bool:
+        return self._level_up_active or self._emote_unlock_active
+
     def show_activity(self, state: BondState, activity: str) -> None:
         self._cancel_hide_timer()
         self._active = True
@@ -256,7 +309,7 @@ class BondProgressOverlay:
         self._gain_text = ""
         self.update(state)
 
-        if not self._level_up_active:
+        if not self.presentation_active:
             self._set_gain_highlight(True)
             self._cancel_gain_timer()
             self._gain_source_id = GLib.timeout_add(
@@ -272,8 +325,15 @@ class BondProgressOverlay:
         self._cancel_level_up_timer()
         self._set_gain_highlight(False)
         self._level_up_active = True
+        self._emote_unlock_active = False
         self._level_up_previous_level = previous_level
         self._active = True
+        for label in (self._level_up_title, self._popover_level_up_title):
+            label.set_text("✦  LEVEL UP!  ✦")
+        for label in (self._level_up_subtitle, self._popover_level_up_subtitle):
+            label.set_text("Your bond grew stronger")
+        for preview in self._unlock_previews:
+            preview.set_emote(None)
         self._set_level_up_content(True)
         self._set_level_up_highlight(True)
         self.update(state)
@@ -281,6 +341,38 @@ class BondProgressOverlay:
         self._level_up_source_id = GLib.timeout_add(
             self.LEVEL_UP_DISPLAY_MS,
             self._finish_level_up,
+        )
+
+    def show_emote_unlock(self, emote: EmoteDefinition) -> None:
+        """Reveal a newly learned idle emote after the level-up card."""
+        self._cancel_hide_timer()
+        self._cancel_gain_timer()
+        self._cancel_level_up_timer()
+        self._set_gain_highlight(False)
+        self._level_up_active = False
+        self._emote_unlock_active = True
+        self._level_up_previous_level = None
+        self._active = True
+        self._set_level_up_content(True)
+        self._set_level_up_highlight(True)
+
+        for label in (self._level_up_title, self._popover_level_up_title):
+            label.set_text("✦  NEW EMOTE UNLOCKED!  ✦")
+        for label in (self._level_up_level, self._popover_level_up_level):
+            label.set_text(emote.label)
+        subtitle = (
+            f"{emote.rarity.upper()} · Bond Lv. {emote.required_bond_level} · "
+            "now part of Mochi's idle moods"
+        )
+        for label in (self._level_up_subtitle, self._popover_level_up_subtitle):
+            label.set_text(subtitle)
+        for preview in self._unlock_previews:
+            preview.set_emote(emote)
+
+        self.resume()
+        self._level_up_source_id = GLib.timeout_add(
+            self.EMOTE_UNLOCK_DISPLAY_MS,
+            self._finish_emote_unlock,
         )
 
     def update(self, state: BondState, activity: str | None = None) -> None:
@@ -293,9 +385,10 @@ class BondProgressOverlay:
         xp_text = f"{self._state.xp} / {self._state.xp_required} XP"
         gain_text = self._gain_text
 
-        level_up_level_text = f"Bond Level {self._state.level}"
-        for label in (self._level_up_level, self._popover_level_up_level):
-            label.set_text(level_up_level_text)
+        if not self._emote_unlock_active:
+            level_up_level_text = f"Bond Level {self._state.level}"
+            for label in (self._level_up_level, self._popover_level_up_level):
+                label.set_text(level_up_level_text)
 
         for label in (self._level_label, self._popover_level_label):
             label.set_text(level_text)
@@ -318,19 +411,20 @@ class BondProgressOverlay:
 
     def dismiss(self) -> None:
         """Immediately retire the HUD without changing bond progression."""
-        was_level_up = self._level_up_active
+        was_presentation = self.presentation_active
         self._cancel_hide_timer()
         self._cancel_gain_timer()
         self._cancel_level_up_timer()
         self._active = False
         self._level_up_active = False
+        self._emote_unlock_active = False
         self._level_up_previous_level = None
         self._gain_text = ""
         self._set_gain_highlight(False)
         self._set_level_up_highlight(False)
         self._set_level_up_content(False)
         self._hide_surfaces()
-        if was_level_up:
+        if was_presentation:
             self._notify_level_up_finished()
 
     def finish_activity(self, delay_seconds: float = 1.6) -> None:
@@ -338,7 +432,7 @@ class BondProgressOverlay:
             return
         # The level-up timer already owns the celebration lifetime. Avoid a
         # second GLib hide timer racing the same presentation.
-        if self._level_up_active:
+        if self.presentation_active:
             return
         self._cancel_hide_timer()
         delay = max(0.0, delay_seconds)
@@ -375,14 +469,15 @@ class BondProgressOverlay:
             self._position_wayland_anchor()
 
     def destroy(self) -> None:
-        was_level_up = self._level_up_active
+        was_presentation = self.presentation_active
         self._cancel_hide_timer()
         self._cancel_gain_timer()
         self._cancel_level_up_timer()
         self._active = False
         self._level_up_active = False
+        self._emote_unlock_active = False
         self._hide_surfaces()
-        if was_level_up:
+        if was_presentation:
             self._notify_level_up_finished()
         self._window.destroy()
         self._popover.unparent()
@@ -396,7 +491,7 @@ class BondProgressOverlay:
     def _finish_gain_flash(self) -> bool:
         self._gain_source_id = None
         self._set_gain_highlight(False)
-        if not self._level_up_active:
+        if not self.presentation_active:
             self._gain_text = ""
             self.update(self._state)
         return GLib.SOURCE_REMOVE
@@ -404,7 +499,19 @@ class BondProgressOverlay:
     def _finish_level_up(self) -> bool:
         self._level_up_source_id = None
         self._level_up_active = False
+        self._emote_unlock_active = False
         self._level_up_previous_level = None
+        self._set_level_up_highlight(False)
+        self._set_level_up_content(False)
+        self._gain_text = ""
+        self._active = False
+        self._hide_surfaces()
+        self._notify_level_up_finished()
+        return GLib.SOURCE_REMOVE
+
+    def _finish_emote_unlock(self) -> bool:
+        self._level_up_source_id = None
+        self._emote_unlock_active = False
         self._set_level_up_highlight(False)
         self._set_level_up_content(False)
         self._gain_text = ""
@@ -666,6 +773,10 @@ class BondProgressOverlay:
             .mochi-level-up-level {
                 font-size: 17px;
                 font-weight: 800;
+            }
+            .mochi-emote-unlock-preview {
+                margin-top: 2px;
+                margin-bottom: 2px;
             }
             .mochi-level-up-subtitle {
                 color: alpha(@window_fg_color, 0.68);

@@ -12,6 +12,7 @@ class MochiState(Enum):
     BOUNCING = auto()
     SQUISHING = auto()
     EXCITED = auto()
+    IDLE_EMOTE = auto()
     WALKING = auto()
     SLEEPING = auto()
     WAKING = auto()
@@ -31,6 +32,7 @@ class MochiState(Enum):
 class PresentationState(Enum):
     NORMAL = auto()
     LEVEL_UP = auto()
+    EMOTE_UNLOCK = auto()
 
 
 class StateMachine:

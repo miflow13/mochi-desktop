@@ -914,12 +914,18 @@ class Buddy(Gtk.DrawingArea):
             # Automatic sleep is driven by the GNOME Shell presence monitor.
             # Local Mochi interaction timestamps are not a proxy for whether the
             # user is actually present at the computer.
-            action = random.choice(("walk", "squish", None, None))
+            unlocked_idle = tuple(
+                getattr(self, "_available_idle_emote_animations", lambda: ())()
+            )
+            action = random.choice(("walk", "squish", None, None, *unlocked_idle))
             if action == "squish":
                 self._transition_to(MochiState.SQUISHING)
                 self._play_animation("squish")
             elif action == "walk":
                 self._start_walk()
+            elif action in unlocked_idle:
+                if self._transition_to(MochiState.IDLE_EMOTE):
+                    self._play_animation(action)
             return GLib.SOURCE_REMOVE
         finally:
             self._schedule_idle_action()
