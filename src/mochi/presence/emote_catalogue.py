@@ -148,8 +148,8 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
 
     Eight long cards fit in four rows, so a scroller and dozens of independently
     measured GTK widgets are unnecessary. The canvas is rendered into one cached
-    surface only when bond state or display scale changes. Opening an unchanged
-    catalogue reuses that surface immediately.
+    surface only when bond level or display scale changes. XP-only updates belong
+    to the lightweight GTK progress header and never re-rasterize the cards.
     """
 
     COLUMNS = 2
@@ -174,9 +174,14 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
 
     def refresh(self, state: BondState) -> None:
         state = BondState(level=state.level, xp=state.xp)
-        if state == self._state and self._surface is not None:
-            return
+        previous = self._state
         self._state = state
+        if (
+            previous is not None
+            and state.level == previous.level
+            and self._surface is not None
+        ):
+            return
         self._render_surface()
 
     def _on_scale_factor_changed(self, *_args) -> None:
@@ -326,8 +331,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             return "A future little mood."
         if unlocked:
             return "A little mood Mochi has learned."
-        remaining = bond_xp_until_level(self._state, emote.required_bond_level or self._state.level)
-        return f"{remaining:,} bond XP remaining"
+        return "Keep bonding to discover this mood."
 
     @staticmethod
     def _draw_text(context, text: str, x: float, y: float, size: float, colour, *, bold: bool = False) -> None:

@@ -135,9 +135,32 @@ def test_canvas_has_no_scroll_path_or_pointer_motion_repaint() -> None:
 
     assert "Gtk.ScrolledWindow" not in source
     assert "def refresh" in source
-    assert "if state == self._state" in source
+    assert "state.level == previous.level" in source
     assert "EventControllerMotion" not in source
     assert "def _on_motion" not in source
+
+
+def test_canvas_xp_only_refresh_does_not_rerasterize_cards() -> None:
+    canvas = object.__new__(EmoteCatalogueCanvas)
+    canvas._state = BondState(level=2, xp=10)
+    canvas._surface = object()
+    canvas._render_surface = Mock()
+
+    EmoteCatalogueCanvas.refresh(canvas, BondState(level=2, xp=11))
+
+    assert canvas._state == BondState(level=2, xp=11)
+    canvas._render_surface.assert_not_called()
+
+
+def test_canvas_level_change_rerasterizes_cards() -> None:
+    canvas = object.__new__(EmoteCatalogueCanvas)
+    canvas._state = BondState(level=2, xp=10)
+    canvas._surface = object()
+    canvas._render_surface = Mock()
+
+    EmoteCatalogueCanvas.refresh(canvas, BondState(level=3, xp=0))
+
+    canvas._render_surface.assert_called_once_with()
 
 
 def test_canvas_renders_static_surface_in_one_pass() -> None:
@@ -302,3 +325,15 @@ def test_window_refreshes_only_the_single_canvas() -> None:
     source = inspect.getsource(EmoteCatalogueWindow.refresh)
 
     assert "self._canvas.refresh(self._state)" in source
+
+
+def test_locked_card_detail_is_static_across_xp_ticks() -> None:
+    canvas = object.__new__(EmoteCatalogueCanvas)
+    canvas._state = BondState(level=1, xp=0)
+    emote = EMOTES_BY_ID["look"]
+
+    first = EmoteCatalogueCanvas._detail(canvas, emote, False)
+    canvas._state = BondState(level=1, xp=200)
+    second = EmoteCatalogueCanvas._detail(canvas, emote, False)
+
+    assert first == second == "Keep bonding to discover this mood."
