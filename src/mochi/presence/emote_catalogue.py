@@ -112,11 +112,12 @@ window.mochi-emote-catalogue {
 
 
 class EmoteCatalogueCanvas(Gtk.DrawingArea):
-    """Cached card catalogue with hover-only dynamic presentation.
+    """Cached card catalogue with lightweight animated hover previews.
 
-    Card artwork is rasterized once per bond level/display scale. Pointer hover
-    never rebuilds those surfaces: it only moves cached cards a few pixels and
-    paints lightweight rarity/outline overlays for the short transition.
+    Card chrome and resting preview art are rasterized once per bond
+    level/display scale. Hovering a real emote advances that emote's existing
+    sprite sequence with its authored frame timings while placeholders remain
+    static. Pointer hover never rebuilds the cached surfaces.
     """
 
     COLUMNS = 2
@@ -146,11 +147,15 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         self._atlas = atlas
         self._state: BondState | None = None
         self._card_surfaces: list[cairo.ImageSurface] = []
+        self._preview_surfaces: list[cairo.ImageSurface] = []
         self._render_scale = 0
         self._unlock_all = False
         self._hovered_index: int | None = None
         self._hover_progress = [0.0 for _ in EMOTE_CATALOGUE]
         self._hover_source_id: int | None = None
+        self._hover_preview_source_id: int | None = None
+        self._hover_preview_emote_id: str | None = None
+        self._hover_preview_frame_index = 0
 
         self.set_content_width(self.WIDTH)
         self.set_content_height(self.HEIGHT)
@@ -194,6 +199,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             and state.level == previous.level
             and self._unlock_all == previous_unlock_all
             and len(self._card_surfaces) == len(EMOTE_CATALOGUE)
+            and len(self._preview_surfaces) == len(EMOTE_CATALOGUE)
         ):
             return
         self._render_card_surfaces()
@@ -209,6 +215,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
 
         scale = max(1, self.get_scale_factor())
         surfaces: list[cairo.ImageSurface] = []
+        preview_surfaces: list[cairo.ImageSurface] = []
         for emote in EMOTE_CATALOGUE:
             surface = cairo.ImageSurface(
                 cairo.FORMAT_ARGB32,
@@ -223,10 +230,31 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             self._draw_card(context, emote, 0, 0)
             surface.flush()
             surfaces.append(surface)
+            preview_surfaces.append(self._render_preview_surface(emote, scale))
 
         self._card_surfaces = surfaces
+        self._preview_surfaces = preview_surfaces
         self._render_scale = scale
         self.queue_draw()
+
+    def _render_preview_surface(
+        self,
+        emote: EmoteDefinition,
+        scale: int,
+    ) -> cairo.ImageSurface:
+        surface = cairo.ImageSurface(
+            cairo.FORMAT_ARGB32,
+            self.PREVIEW_SIZE * scale,
+            self.PREVIEW_SIZE * scale,
+        )
+        surface.set_device_scale(scale, scale)
+        context = cairo.Context(surface)
+        context.set_operator(cairo.OPERATOR_CLEAR)
+        context.paint()
+        context.set_operator(cairo.OPERATOR_OVER)
+        self._draw_preview_frame(context, emote, self._preview_frame(emote))
+        surface.flush()
+        return surface
 
     def _on_motion(
         self,
@@ -238,13 +266,17 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         if hovered == self._hovered_index:
             return
         self._hovered_index = hovered
+        self._start_hover_preview(hovered)
         self._ensure_hover_animation()
+        self.queue_draw()
 
     def _on_leave(self, _controller: Gtk.EventControllerMotion) -> None:
         if self._hovered_index is None:
             return
         self._hovered_index = None
+        self._stop_hover_preview()
         self._ensure_hover_animation()
+        self.queue_draw()
 
     def _ensure_hover_animation(self) -> None:
         if self._hover_source_id is not None:
@@ -254,6 +286,74 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             self._tick_hover,
             priority=GLib.PRIORITY_LOW,
         )
+
+    @staticmethod
+    def _preview_animation_enabled(emote: EmoteDefinition) -> bool:
+        if not emote.available or emote.animation is None:
+            return False
+        animation = ANIMATIONS[emote.animation]
+        return len(animation.frames) > 1
+
+    def _start_hover_preview(self, index: int | None) -> None:
+        self._stop_hover_preview()
+        if index is None:
+            return
+
+        emote = EMOTE_CATALOGUE[index]
+        if not self._preview_animation_enabled(emote):
+            return
+
+        self._hover_preview_emote_id = emote.id
+        self._hover_preview_frame_index = 0
+        self._schedule_hover_preview_tick()
+
+    def _stop_hover_preview(self) -> None:
+        source_id = self._hover_preview_source_id
+        self._hover_preview_source_id = None
+        if source_id is not None:
+            try:
+                GLib.source_remove(source_id)
+            except Exception:
+                pass
+        self._hover_preview_emote_id = None
+        self._hover_preview_frame_index = 0
+
+    def _schedule_hover_preview_tick(self) -> None:
+        if (
+            self._hover_preview_source_id is not None
+            or self._hover_preview_emote_id is None
+        ):
+            return
+
+        emote = EMOTES_BY_ID[self._hover_preview_emote_id]
+        animation = ANIMATIONS[emote.animation]
+        frame = animation.frames[self._hover_preview_frame_index]
+        delay_ms = max(16, frame.duration_ms or animation.frame_duration_ms)
+        self._hover_preview_source_id = GLib.timeout_add(
+            delay_ms,
+            self._advance_hover_preview,
+            priority=GLib.PRIORITY_LOW,
+        )
+
+    def _advance_hover_preview(self) -> bool:
+        self._hover_preview_source_id = None
+        emote_id = self._hover_preview_emote_id
+        hovered_index = self._hovered_index
+        if emote_id is None or hovered_index is None:
+            return GLib.SOURCE_REMOVE
+
+        emote = EMOTE_CATALOGUE[hovered_index]
+        if emote.id != emote_id or not self._preview_animation_enabled(emote):
+            self._stop_hover_preview()
+            return GLib.SOURCE_REMOVE
+
+        animation = ANIMATIONS[emote.animation]
+        self._hover_preview_frame_index = (
+            self._hover_preview_frame_index + 1
+        ) % len(animation.frames)
+        self.queue_draw()
+        self._schedule_hover_preview_tick()
+        return GLib.SOURCE_REMOVE
 
     @classmethod
     def _advance_hover_progress(
@@ -298,6 +398,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             except Exception:
                 pass
 
+        self._stop_hover_preview()
         had_hover = self._hovered_index is not None or any(self._hover_progress)
         self._hovered_index = None
         if had_hover:
@@ -346,15 +447,6 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         context.fill()
 
         self._draw_ornaments(context, rarity)
-
-        frame = self._preview_frame(emote)
-        context.save()
-        context.translate(16, 12)
-        if unlocked:
-            self._atlas.draw(context, frame, self.PREVIEW_SIZE, self.PREVIEW_SIZE)
-        else:
-            self._draw_silhouette(context, frame)
-        context.restore()
 
         self._draw_text(
             context,
@@ -515,6 +607,21 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             min(len(animation.frames) - 1, len(animation.frames) // 2)
         ]
 
+    def _draw_preview_frame(
+        self,
+        context: cairo.Context,
+        emote: EmoteDefinition,
+        frame,
+    ) -> None:
+        unlocked = emote.is_unlocked(
+            self._state,
+            unlock_all=self._unlock_all,
+        )
+        if unlocked:
+            self._atlas.draw(context, frame, self.PREVIEW_SIZE, self.PREVIEW_SIZE)
+        else:
+            self._draw_silhouette(context, frame)
+
     def _draw_silhouette(self, context: cairo.Context, frame) -> None:
         sprite = self._atlas.frames[frame.sprite]
         source_width, source_height = self._atlas.CANVAS_SIZE
@@ -568,11 +675,18 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         _width: int,
         _height: int,
     ) -> None:
-        if len(self._card_surfaces) != len(EMOTE_CATALOGUE):
+        if (
+            len(self._card_surfaces) != len(EMOTE_CATALOGUE)
+            or len(self._preview_surfaces) != len(EMOTE_CATALOGUE)
+        ):
             return
 
-        for index, (emote, surface) in enumerate(
-            zip(EMOTE_CATALOGUE, self._card_surfaces)
+        for index, (emote, surface, preview_surface) in enumerate(
+            zip(
+                EMOTE_CATALOGUE,
+                self._card_surfaces,
+                self._preview_surfaces,
+            )
         ):
             x, y = self._card_origin(index)
             hover = self._ease_out(self._hover_progress[index])
@@ -581,6 +695,28 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             self._draw_rarity_glow(context, emote, x, lifted_y, hover)
             context.set_source_surface(surface, x, lifted_y)
             context.paint()
+
+            preview_x = x + 16
+            preview_y = lifted_y + 12
+            if (
+                index == self._hovered_index
+                and self._hover_preview_emote_id == emote.id
+                and self._preview_animation_enabled(emote)
+            ):
+                animation = ANIMATIONS[emote.animation]
+                frame = animation.frames[self._hover_preview_frame_index]
+                context.save()
+                context.translate(preview_x, preview_y)
+                self._draw_preview_frame(context, emote, frame)
+                context.restore()
+            else:
+                context.set_source_surface(
+                    preview_surface,
+                    preview_x,
+                    preview_y,
+                )
+                context.paint()
+
             self._draw_hover_outline(context, emote, x, lifted_y, hover)
 
 

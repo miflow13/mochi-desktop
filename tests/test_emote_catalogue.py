@@ -406,3 +406,48 @@ def test_developer_unlock_override_reaches_catalogue_window() -> None:
         buddy._bond_state,
         unlock_all=True,
     )
+
+
+
+def test_hover_preview_animates_all_real_emotes_but_not_placeholders() -> None:
+    for emote in EMOTE_CATALOGUE:
+        enabled = EmoteCatalogueCanvas._preview_animation_enabled(emote)
+        if emote.available and emote.animation is not None:
+            assert enabled is True, emote.id
+        else:
+            assert enabled is False, emote.id
+
+
+def test_hover_preview_uses_authored_frame_timing_and_loops() -> None:
+    schedule_source = inspect.getsource(
+        EmoteCatalogueCanvas._schedule_hover_preview_tick
+    )
+    advance_source = inspect.getsource(
+        EmoteCatalogueCanvas._advance_hover_preview
+    )
+
+    assert "frame.duration_ms or animation.frame_duration_ms" in schedule_source
+    assert "% len(animation.frames)" in advance_source
+    assert "self.queue_draw()" in advance_source
+
+
+def test_hover_preview_does_not_rebuild_catalogue_surfaces() -> None:
+    start_source = inspect.getsource(EmoteCatalogueCanvas._start_hover_preview)
+    advance_source = inspect.getsource(
+        EmoteCatalogueCanvas._advance_hover_preview
+    )
+
+    assert "_render_card_surfaces" not in start_source
+    assert "_render_card_surfaces" not in advance_source
+
+
+def test_catalogue_keeps_static_preview_cache_separate_from_card_chrome() -> None:
+    render_source = inspect.getsource(
+        EmoteCatalogueCanvas._render_card_surfaces
+    )
+    draw_source = inspect.getsource(EmoteCatalogueCanvas._draw)
+
+    assert "self._preview_surfaces" in render_source
+    assert "self._render_preview_surface(emote, scale)" in render_source
+    assert "self._preview_surfaces" in draw_source
+    assert "self._hover_preview_frame_index" in draw_source
