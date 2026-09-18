@@ -36,7 +36,7 @@ def test_buddy_ambient_hooks_are_thin_controller_delegates() -> None:
 def test_buddy_transition_method_delegates_to_state_controller() -> None:
     source = inspect.getsource(Buddy._transition_to)
 
-    assert "self.state_controller.request(next_state)" in source
+    assert "_state_controller_for(self).request(next_state)" in source
     assert "can_transition" not in source
 
 

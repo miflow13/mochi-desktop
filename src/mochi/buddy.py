@@ -65,6 +65,16 @@ def _ambient_activity_for(owner):
     return controller
 
 
+def _state_controller_for(owner):
+    controller = getattr(owner, "state_controller", None)
+    if controller is None:
+        controller = BehaviorStateController(
+            owner.state,
+            logger=getattr(owner, "_logger", None),
+        )
+    return controller
+
+
 class Buddy(Gtk.DrawingArea):
     SIZE = 112
     TICK_MS = 16
@@ -795,11 +805,10 @@ class Buddy(Gtk.DrawingArea):
         self._cancel_active_emote()
         if not can_begin_sleep(self.state.current):
             return
-        if not can_transition(self.state.current, MochiState.SLEEPING):
-            return
         self._cancel_walk()
         self._click_reactions.clear()
-        self._transition_to(MochiState.SLEEPING)
+        if not self._transition_to(MochiState.SLEEPING):
+            return
         self._play_animation("sleep")
         self._logger.debug("Mochi sleeping")
 
@@ -1114,7 +1123,7 @@ class Buddy(Gtk.DrawingArea):
         self._walk_elapsed_ms = 0
 
     def _transition_to(self, next_state: MochiState) -> bool:
-        return self.state_controller.request(next_state)
+        return _state_controller_for(self).request(next_state)
 
     def _draw(
         self, _area: Gtk.DrawingArea, context: cairo.Context, width: int, height: int
