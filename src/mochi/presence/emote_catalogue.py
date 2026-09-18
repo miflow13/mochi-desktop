@@ -202,7 +202,10 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         self._surface = surface
         self._render_context = context
         self._render_index = 0
-        self._render_source = GLib.idle_add(
+        # A repeating idle source remains immediately ready and can starve new
+        # Wayland pointer events. Pace slices at one display frame instead.
+        self._render_source = GLib.timeout_add(
+            16,
             self._render_next_card,
             priority=GLib.PRIORITY_LOW,
         )
