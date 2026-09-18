@@ -10,6 +10,13 @@ and would like to support continued development, you can support the project on 
 
 [![Tests](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml/badge.svg)](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml)
 
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![GTK4](https://img.shields.io/badge/GTK-4-7FE719?logo=gtk&logoColor=black)
+![PyGObject](https://img.shields.io/badge/PyGObject-GI-4A86CF)
+![Cairo](https://img.shields.io/badge/Cairo-rendering-F39914)
+![Linux](https://img.shields.io/badge/Linux-desktop-FCC624?logo=linux&logoColor=black)
+![Wayland](https://img.shields.io/badge/Wayland-primary-FFBC00)
+
 <img width="800" height="428" alt="ezgif-2e6aaeb139cf0fe7" src="https://github.com/user-attachments/assets/9f3e0ca5-8454-4e22-a3d1-70d7e27c23fe" />
 
 A Linux desktop companion that idles, walks, responds to interaction, and can
