@@ -48,19 +48,45 @@ It should not become the main behavior engine.
 
 ### `buddy.py`
 
-The high-level interaction coordinator.
+The high-level interaction coordinator and compatibility surface for feature mixins.
 
 Typical responsibilities:
 
 - mouse input
 - click/double-click arbitration
 - drag lifecycle
-- movement
-- idle timers
-- context-menu actions
+- movement and idle timers
+- animation lifecycle
+- delegating menu and ambient-activity work to owned controllers
 - handing animation completion back to the state system
 
+`Buddy` should coordinate subsystems rather than absorb their implementations.
+Long-lived subsystems should prefer composition-owned controllers over adding
+another class to the runtime MRO.
+
 Because this module touches many systems, changes here deserve focused regression testing.
+
+### `buddy_menu.py`
+
+Owns context-menu and developer-menu construction, layout, actions, and menu
+animation. `Buddy` keeps thin compatibility hooks because existing feature
+mixins extend menu builders cooperatively, but the GTK menu implementation lives
+in `BuddyMenuController`.
+
+### `ambient_activity.py`
+
+Owns the core routing from typing, YouTube/media, file browsing, and user
+presence callbacks into Mochi behavior. Detector implementations remain
+separate; this controller only translates their semantic events into behavior.
+
+### `state_controller.py`
+
+Owns guarded behavior-state transition requests.
+
+Feature code should request state changes through `Buddy._transition_to()`.
+That compatibility hook delegates to `BehaviorStateController`, which applies
+the shared transition policy and owns rejection logging before mutating
+`StateMachine`.
 
 ### `state.py`
 
@@ -148,6 +174,15 @@ Decode and prepare textures/surfaces once. Do not create new textures every anim
 
 There should be one authoritative interaction/state path.
 
+Behavior state has three distinct responsibilities:
+
+1. `StateMachine` stores the current observable behavior/presentation state.
+2. `behavior.can_transition()` defines transition policy.
+3. `BehaviorStateController` is the single request boundary that applies that
+   policy before state mutation.
+
+Feature modules should not call `StateMachine.transition_to()` directly.
+
 Avoid:
 
 - a second animation controller for one new feature
@@ -207,6 +242,25 @@ Runtime data files include the Mochi asset manifest, sprite art, and audio asset
 
 Before release, audit the built wheel rather than assuming working-tree assets were packaged correctly.
 
+## Composition and extension rules
+
+Prefer **composition** when a subsystem has its own lifecycle, timers, cached
+state, GTK objects, monitors, or multiple related methods. The parent object
+should own that subsystem and expose only the compatibility hooks that other
+features genuinely need.
+
+Use a **mixin** only for a narrow cross-cutting feature that intentionally
+participates in Mochi's cooperative `super()` chain. A new feature should not
+become a mixin merely to avoid passing dependencies.
+
+When overriding a cooperative hook such as `_tick()`, `_draw()`,
+`_build_context_menu()`, or an activity callback, preserve the `super()`
+chain unless the feature explicitly owns termination of that chain.
+
+If a feature needs to inspect several unrelated mixins to decide whether a
+transition is allowed, move that decision toward the shared behavior/state
+controller instead of adding another local exception.
+
 ## Architecture rules of thumb
 
 When deciding where new code belongs:
@@ -215,7 +269,10 @@ When deciding where new code belongs:
 - **frame timing/playback** → animation layer
 - **behavior state** → state layer
 - **reaction choice** → behavior layer
-- **mouse/timer/window coordination** → buddy layer
+- **mouse/drag/animation coordination** → buddy layer
+- **menu UI/lifecycle** → buddy menu controller
+- **ambient detector event routing** → ambient activity controller
+- **guarded state mutation** → state controller
 - **GTK application/window creation** → app layer
 - **persistent settings** → config layer
 
