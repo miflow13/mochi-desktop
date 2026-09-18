@@ -30,8 +30,8 @@ from mochi.developer_shortcut import DeveloperShortcutMonitor
 from mochi.drag_motion import DragMotionModel, DragPoseSelector
 from mochi.file_activity import FileActivityMonitor
 from mochi.media_activity import MediaActivityMonitor
-from mochi.buddy_menu import BuddyMenuMixin
-from mochi.ambient_activity import AmbientActivityMixin
+from mochi.buddy_menu import BuddyMenuController
+from mochi.ambient_activity import AmbientActivityController
 from mochi.interaction_tuning import (
     COMPUTER_IDLE_DELAY_SECONDS,
     DRAG_BODY_SWAY_PX,
@@ -51,7 +51,21 @@ from mochi.typing_activity import TypingActivityMonitor
 from mochi.windowing import WindowPlacement
 
 
-class Buddy(BuddyMenuMixin, AmbientActivityMixin, Gtk.DrawingArea):
+def _menu_ui_for(owner):
+    controller = getattr(owner, "_menu_ui", None)
+    if controller is None:
+        controller = BuddyMenuController(owner)
+    return controller
+
+
+def _ambient_activity_for(owner):
+    controller = getattr(owner, "_ambient_activity", None)
+    if controller is None:
+        controller = AmbientActivityController(owner)
+    return controller
+
+
+class Buddy(Gtk.DrawingArea):
     SIZE = 112
     TICK_MS = 16
     CONTEXT_MENU_WIDTH = 244
@@ -108,6 +122,8 @@ class Buddy(BuddyMenuMixin, AmbientActivityMixin, Gtk.DrawingArea):
             self.state,
             logger=self._logger,
         )
+        self._menu_ui = BuddyMenuController(self)
+        self._ambient_activity = AmbientActivityController(self)
         self.atlas = SpriteAtlas()
         self.player = AnimationPlayer(on_finished=self._finish_reaction)
         self.player.play(ANIMATIONS["idle"])
@@ -234,6 +250,157 @@ class Buddy(BuddyMenuMixin, AmbientActivityMixin, Gtk.DrawingArea):
             self._schedule_computer_idle_emote()
 
 , press, pickup, and drag.
+        # Apply it to both the drawing area and the toplevel because XWayland
+        # hands an active window move to the compositor, which can otherwise
+        # override a child-widget cursor.
+        held = (
+            self._hovered
+            or self._press is not None
+            or self._drag_started
+            or self.state.current in (MochiState.PICKUP, MochiState.DRAGGED)
+        )
+        cursor_name = "pointer" if held else None
+        self.set_cursor_from_name(cursor_name)
+        self._window.set_cursor_from_name(cursor_name)
+
+
+    # Compatibility seams for feature mixins and GTK callbacks. The behavior
+    # lives in composition-owned controllers rather than additional MRO layers.
+    def _initialize_context_menu_layout(self, *args, **kwargs):
+        return _menu_ui_for(self)._initialize_context_menu_layout(*args, **kwargs)
+
+    def _register_context_menu_row(self, *args, **kwargs):
+        return _menu_ui_for(self)._register_context_menu_row(*args, **kwargs)
+
+    def _get_context_menu_row(self, *args, **kwargs):
+        return _menu_ui_for(self)._get_context_menu_row(*args, **kwargs)
+
+    def _recalculate_context_menu_layout(self, *args, **kwargs):
+        return _menu_ui_for(self)._recalculate_context_menu_layout(*args, **kwargs)
+
+    def _build_context_menu(self, *args, **kwargs):
+        return _menu_ui_for(self)._build_context_menu(*args, **kwargs)
+
+    def _build_developer_menu(self, *args, **kwargs):
+        return _menu_ui_for(self)._build_developer_menu(*args, **kwargs)
+
+    def _make_menu_button(self, *args, **kwargs):
+        return _menu_ui_for(self)._make_menu_button(*args, **kwargs)
+
+    def _append_tuning_control(self, *args, **kwargs):
+        return _menu_ui_for(self)._append_tuning_control(*args, **kwargs)
+
+    def _change_tuning(self, *args, **kwargs):
+        return _menu_ui_for(self)._change_tuning(*args, **kwargs)
+
+    def _change_size(self, *args, **kwargs):
+        return _menu_ui_for(self)._change_size(*args, **kwargs)
+
+    def _change_volume(self, *args, **kwargs):
+        return _menu_ui_for(self)._change_volume(*args, **kwargs)
+
+    def _change_muted(self, *args, **kwargs):
+        return _menu_ui_for(self)._change_muted(*args, **kwargs)
+
+    def _change_sound_enabled(self, *args, **kwargs):
+        return _menu_ui_for(self)._change_sound_enabled(*args, **kwargs)
+
+    def _show_context_menu(self, *args, **kwargs):
+        return _menu_ui_for(self)._show_context_menu(*args, **kwargs)
+
+    def _show_developer_menu(self, *args, **kwargs):
+        return _menu_ui_for(self)._show_developer_menu(*args, **kwargs)
+
+    def _animate_menu_open(self, *args, **kwargs):
+        return _menu_ui_for(self)._animate_menu_open(*args, **kwargs)
+
+    def _quit_from_context_menu(self, *args, **kwargs):
+        return _menu_ui_for(self)._quit_from_context_menu(*args, **kwargs)
+
+    def _toggle_sleep(self, *args, **kwargs):
+        return _menu_ui_for(self)._toggle_sleep(*args, **kwargs)
+
+    def _test_walk(self, *args, **kwargs):
+        return _menu_ui_for(self)._test_walk(*args, **kwargs)
+
+    def _test_heart_emote(self, *args, **kwargs):
+        return _menu_ui_for(self)._test_heart_emote(*args, **kwargs)
+
+    def _test_computer_emote(self, *args, **kwargs):
+        return _menu_ui_for(self)._test_computer_emote(*args, **kwargs)
+
+    def _reset_position(self, *args, **kwargs):
+        return _menu_ui_for(self)._reset_position(*args, **kwargs)
+
+    def _close_context_menu_then(self, *args, **kwargs):
+        return _menu_ui_for(self)._close_context_menu_then(*args, **kwargs)
+
+    def _close_developer_menu_then(self, *args, **kwargs):
+        return _menu_ui_for(self)._close_developer_menu_then(*args, **kwargs)
+
+    def _on_context_menu_closed(self, *args, **kwargs):
+        return _menu_ui_for(self)._on_context_menu_closed(*args, **kwargs)
+
+    def _on_developer_menu_closed(self, *args, **kwargs):
+        return _menu_ui_for(self)._on_developer_menu_closed(*args, **kwargs)
+
+    def _dispatch_context_action(self, *args, **kwargs):
+        return _menu_ui_for(self)._dispatch_context_action(*args, **kwargs)
+
+    def _quit_application(self, *args, **kwargs):
+        return _menu_ui_for(self)._quit_application(*args, **kwargs)
+
+    def _quit(self, *args, **kwargs):
+        return _menu_ui_for(self)._quit(*args, **kwargs)
+
+    def _on_typing_activity(self, *args, **kwargs):
+        return _ambient_activity_for(self)._on_typing_activity(*args, **kwargs)
+
+    def _start_typing_emote(self, *args, **kwargs):
+        return _ambient_activity_for(self)._start_typing_emote(*args, **kwargs)
+
+    def _on_typing_stopped(self, *args, **kwargs):
+        return _ambient_activity_for(self)._on_typing_stopped(*args, **kwargs)
+
+    def _on_youtube_started(self, *args, **kwargs):
+        return _ambient_activity_for(self)._on_youtube_started(*args, **kwargs)
+
+    def _on_youtube_stopped(self, *args, **kwargs):
+        return _ambient_activity_for(self)._on_youtube_stopped(*args, **kwargs)
+
+    def _start_watching_emote(self, *args, **kwargs):
+        return _ambient_activity_for(self)._start_watching_emote(*args, **kwargs)
+
+    def _maybe_resume_watching(self, *args, **kwargs):
+        return _ambient_activity_for(self)._maybe_resume_watching(*args, **kwargs)
+
+    def _on_file_activity_started(self, *args, **kwargs):
+        return _ambient_activity_for(self)._on_file_activity_started(*args, **kwargs)
+
+    def _on_file_activity_stopped(self, *args, **kwargs):
+        return _ambient_activity_for(self)._on_file_activity_stopped(*args, **kwargs)
+
+    def _start_searching_emote(self, *args, **kwargs):
+        return _ambient_activity_for(self)._start_searching_emote(*args, **kwargs)
+
+    def _maybe_resume_searching(self, *args, **kwargs):
+        return _ambient_activity_for(self)._maybe_resume_searching(*args, **kwargs)
+
+    def _maybe_resume_ambient_activity(self, *args, **kwargs):
+        return _ambient_activity_for(self)._maybe_resume_ambient_activity(*args, **kwargs)
+
+    def _on_user_idle(self, *args, **kwargs):
+        return _ambient_activity_for(self)._on_user_idle(*args, **kwargs)
+
+    def _on_user_active(self, *args, **kwargs):
+        return _ambient_activity_for(self)._on_user_active(*args, **kwargs)
+
+    def _cancel_active_emote(self, *args, **kwargs):
+        return _ambient_activity_for(self)._cancel_active_emote(*args, **kwargs)
+
+
+    def _update_pointer_cursor(self) -> None:
+        # Keep a visible hand cursor through hover, press, pickup, and drag.
         # Apply it to both the drawing area and the toplevel because XWayland
         # hands an active window move to the compositor, which can otherwise
         # override a child-widget cursor.

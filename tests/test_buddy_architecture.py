@@ -6,30 +6,31 @@ import inspect
 import logging
 from unittest.mock import Mock
 
-from mochi.ambient_activity import AmbientActivityMixin
+from mochi.ambient_activity import AmbientActivityController
 from mochi.buddy import Buddy
-from mochi.buddy_menu import BuddyMenuMixin
+from mochi.buddy_menu import BuddyMenuController
 from mochi.state import MochiState, StateMachine
 from mochi.state_controller import BehaviorStateController
 
 
-def test_buddy_composes_menu_and_ambient_modules() -> None:
-    assert issubclass(Buddy, BuddyMenuMixin)
-    assert issubclass(Buddy, AmbientActivityMixin)
+def test_buddy_uses_composition_instead_of_more_behavior_mixins() -> None:
+    assert BuddyMenuController not in Buddy.__mro__
+    assert AmbientActivityController not in Buddy.__mro__
+    source = inspect.getsource(Buddy.__init__)
+    assert "self._menu_ui = BuddyMenuController(self)" in source
+    assert "self._ambient_activity = AmbientActivityController(self)" in source
 
 
-def test_menu_responsibilities_are_not_declared_on_buddy_anymore() -> None:
-    assert "_build_context_menu" not in Buddy.__dict__
-    assert "_build_developer_menu" not in Buddy.__dict__
-    assert "_show_context_menu" not in Buddy.__dict__
-    assert "_show_developer_menu" not in Buddy.__dict__
+def test_buddy_menu_hooks_are_thin_controller_delegates() -> None:
+    source = inspect.getsource(Buddy._build_context_menu)
+    assert "_menu_ui_for(self)._build_context_menu" in source
+    assert "Gtk." not in source
 
 
-def test_ambient_activity_routing_is_not_declared_on_buddy_anymore() -> None:
-    assert "_on_typing_activity" not in Buddy.__dict__
-    assert "_on_youtube_started" not in Buddy.__dict__
-    assert "_on_file_activity_started" not in Buddy.__dict__
-    assert "_on_user_idle" not in Buddy.__dict__
+def test_buddy_ambient_hooks_are_thin_controller_delegates() -> None:
+    source = inspect.getsource(Buddy._start_typing_emote)
+    assert "_ambient_activity_for(self)._start_typing_emote" in source
+    assert "ANIMATIONS" not in source
 
 
 def test_buddy_transition_method_delegates_to_state_controller() -> None:

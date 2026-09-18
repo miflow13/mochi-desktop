@@ -21,8 +21,11 @@ from mochi.sound import SoundEvent
 from mochi.state import MochiState
 
 
-class BuddyMenuMixin:
+class BuddyMenuController:
     """Build and coordinate Mochi's context and developer menus."""
+
+    def __init__(self, buddy) -> None:
+        self._buddy = buddy
 
     def _initialize_context_menu_layout(
         self,
@@ -30,12 +33,12 @@ class BuddyMenuMixin:
         content: Gtk.Box,
     ) -> None:
         """Create the single owner for user-menu ordering and layout metadata."""
-        self._context_menu_layout_window = menu
-        self._context_menu_content = content
-        self._context_menu_rows: dict[str, Gtk.Widget] = {}
-        self._context_menu_row_order: list[str] = []
-        self._context_menu_animated_row_ids: set[str] = set()
-        self._context_menu_animated_rows: tuple[Gtk.Widget, ...] = ()
+        self._buddy._context_menu_layout_window = menu
+        self._buddy._context_menu_content = content
+        self._buddy._context_menu_rows: dict[str, Gtk.Widget] = {}
+        self._buddy._context_menu_row_order: list[str] = []
+        self._buddy._context_menu_animated_row_ids: set[str] = set()
+        self._buddy._context_menu_animated_rows: tuple[Gtk.Widget, ...] = ()
 
     def _register_context_menu_row(
         self,
@@ -49,7 +52,7 @@ class BuddyMenuMixin:
         """Register and place one user-menu row through the shared layout seam."""
         if not row_id:
             raise ValueError("Context-menu row ID must not be empty")
-        if row_id in self._context_menu_rows:
+        if row_id in self._buddy._context_menu_rows:
             raise ValueError(f"Context-menu row already registered: {row_id!r}")
         if after is not None and before is not None:
             raise ValueError(
@@ -57,75 +60,75 @@ class BuddyMenuMixin:
             )
 
         anchor_id = after if after is not None else before
-        if anchor_id is not None and anchor_id not in self._context_menu_rows:
+        if anchor_id is not None and anchor_id not in self._buddy._context_menu_rows:
             raise KeyError(f"Unknown context-menu row: {anchor_id!r}")
 
         if after is not None:
-            insert_at = self._context_menu_row_order.index(after) + 1
+            insert_at = self._buddy._context_menu_row_order.index(after) + 1
         elif before is not None:
-            insert_at = self._context_menu_row_order.index(before)
+            insert_at = self._buddy._context_menu_row_order.index(before)
         else:
-            insert_at = len(self._context_menu_row_order)
+            insert_at = len(self._buddy._context_menu_row_order)
 
-        if insert_at == len(self._context_menu_row_order):
-            self._context_menu_content.append(widget)
+        if insert_at == len(self._buddy._context_menu_row_order):
+            self._buddy._context_menu_content.append(widget)
         elif insert_at == 0:
-            self._context_menu_content.prepend(widget)
+            self._buddy._context_menu_content.prepend(widget)
         else:
-            previous_id = self._context_menu_row_order[insert_at - 1]
-            previous_widget = self._context_menu_rows[previous_id]
-            self._context_menu_content.insert_child_after(widget, previous_widget)
+            previous_id = self._buddy._context_menu_row_order[insert_at - 1]
+            previous_widget = self._buddy._context_menu_rows[previous_id]
+            self._buddy._context_menu_content.insert_child_after(widget, previous_widget)
 
-        self._context_menu_rows[row_id] = widget
-        self._context_menu_row_order.insert(insert_at, row_id)
+        self._buddy._context_menu_rows[row_id] = widget
+        self._buddy._context_menu_row_order.insert(insert_at, row_id)
         if animated:
-            self._context_menu_animated_row_ids.add(row_id)
-        self._recalculate_context_menu_layout()
+            self._buddy._context_menu_animated_row_ids.add(row_id)
+        self._buddy._recalculate_context_menu_layout()
 
     def _get_context_menu_row(self, row_id: str) -> Gtk.Widget:
         """Return a registered user-menu row by its stable layout ID."""
-        return self._context_menu_rows[row_id]
+        return self._buddy._context_menu_rows[row_id]
 
     def _recalculate_context_menu_layout(self) -> None:
         """Synchronize animation order and the menu's pre-allocation size."""
-        self._context_menu_animated_rows = tuple(
-            self._context_menu_rows[row_id]
-            for row_id in self._context_menu_row_order
-            if row_id in self._context_menu_animated_row_ids
+        self._buddy._context_menu_animated_rows = tuple(
+            self._buddy._context_menu_rows[row_id]
+            for row_id in self._buddy._context_menu_row_order
+            if row_id in self._buddy._context_menu_animated_row_ids
         )
 
         preferred_height = max(
             (
-                self.CONTEXT_MENU_MIN_HEIGHTS.get(
+                self._buddy.CONTEXT_MENU_MIN_HEIGHTS.get(
                     row_id,
-                    self.CONTEXT_MENU_BASE_HEIGHT,
+                    self._buddy.CONTEXT_MENU_BASE_HEIGHT,
                 )
-                for row_id in self._context_menu_row_order
+                for row_id in self._buddy._context_menu_row_order
             ),
-            default=self.CONTEXT_MENU_BASE_HEIGHT,
+            default=self._buddy.CONTEXT_MENU_BASE_HEIGHT,
         )
-        unknown_rows = set(self._context_menu_row_order).difference(
-            self.CONTEXT_MENU_BASE_SIZED_ROWS,
-            self.CONTEXT_MENU_MIN_HEIGHTS,
+        unknown_rows = set(self._buddy._context_menu_row_order).difference(
+            self._buddy.CONTEXT_MENU_BASE_SIZED_ROWS,
+            self._buddy.CONTEXT_MENU_MIN_HEIGHTS,
         )
         preferred_height += (
-            len(unknown_rows) * self.CONTEXT_MENU_UNKNOWN_ROW_HEIGHT
+            len(unknown_rows) * self._buddy.CONTEXT_MENU_UNKNOWN_ROW_HEIGHT
         )
-        self._context_menu_layout_window.set_preferred_size(
-            self.CONTEXT_MENU_WIDTH,
+        self._buddy._context_menu_layout_window.set_preferred_size(
+            self._buddy.CONTEXT_MENU_WIDTH,
             preferred_height,
         )
 
     def _build_context_menu(self) -> MenuWindow:
         """Build Mochi's intentionally tiny user-facing right-click menu."""
         popover = MenuWindow(
-            owner=self._window,
+            owner=self._buddy._window,
             anchor_widget=self,
-            preferred_width=self.CONTEXT_MENU_WIDTH,
-            preferred_height=self.CONTEXT_MENU_BASE_HEIGHT,
+            preferred_width=self._buddy.CONTEXT_MENU_WIDTH,
+            preferred_height=self._buddy.CONTEXT_MENU_BASE_HEIGHT,
             follow_owner=True,
             dismiss_on_focus_loss=True,
-            logger=self._logger,
+            logger=self._buddy._logger,
         )
         popover.add_css_class("mochi-user-menu")
 
@@ -152,26 +155,26 @@ class BuddyMenuMixin:
         header_text.append(title)
         header_text.append(subtitle)
         header.append(header_text)
-        self._initialize_context_menu_layout(popover, card)
-        self._register_context_menu_row("header", header, animated=False)
+        self._buddy._initialize_context_menu_layout(popover, card)
+        self._buddy._register_context_menu_row("header", header, animated=False)
 
         separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        self._register_context_menu_row("separator", separator, animated=False)
+        self._buddy._register_context_menu_row("separator", separator, animated=False)
 
-        self._sleep_button, self._sleep_label = self._make_menu_button(
+        self._buddy._sleep_button, self._buddy._sleep_label = self._buddy._make_menu_button(
             "Sleep",
             "weather-clear-night-symbolic",
-            self._toggle_sleep,
+            self._buddy._toggle_sleep,
         )
-        self._register_context_menu_row("sleep", self._sleep_button)
+        self._buddy._register_context_menu_row("sleep", self._buddy._sleep_button)
 
-        close_button, _ = self._make_menu_button(
+        close_button, _ = self._buddy._make_menu_button(
             "Close",
             "window-close-symbolic",
-            self._quit_from_context_menu,
+            self._buddy._quit_from_context_menu,
         )
         close_button.add_css_class("mochi-menu-secondary")
-        self._register_context_menu_row("close", close_button)
+        self._buddy._register_context_menu_row("close", close_button)
 
         popover.set_child(card)
         return popover
@@ -179,12 +182,12 @@ class BuddyMenuMixin:
     def _build_developer_menu(self) -> MenuWindow:
         """Developer-only controls opened by Mochi's private global shortcut."""
         popover = MenuWindow(
-            owner=self._window,
+            owner=self._buddy._window,
             anchor_widget=self,
             preferred_width=332,
             preferred_height=680,
             follow_owner=False,
-            logger=self._logger,
+            logger=self._buddy._logger,
         )
         popover.add_css_class("mochi-dev-menu")
 
@@ -219,15 +222,15 @@ class BuddyMenuMixin:
         actions_label.add_css_class("mochi-menu-section")
         card.append(actions_label)
 
-        walk_button, _ = self._make_menu_button("Take a stroll", "go-next-symbolic", self._test_walk)
+        walk_button, _ = self._buddy._make_menu_button("Take a stroll", "go-next-symbolic", self._buddy._test_walk)
         card.append(walk_button)
         animated_rows.append(walk_button)
 
-        heart_button, _ = self._make_menu_button("Say hi", "emblem-favorite-symbolic", self._test_heart_emote)
+        heart_button, _ = self._buddy._make_menu_button("Say hi", "emblem-favorite-symbolic", self._buddy._test_heart_emote)
         card.append(heart_button)
         animated_rows.append(heart_button)
 
-        computer_button, _ = self._make_menu_button("Laptop time", "computer-symbolic", self._test_computer_emote)
+        computer_button, _ = self._buddy._make_menu_button("Laptop time", "computer-symbolic", self._buddy._test_computer_emote)
         card.append(computer_button)
         animated_rows.append(computer_button)
 
@@ -244,7 +247,7 @@ class BuddyMenuMixin:
         size_label.set_xalign(0)
         size_label.set_hexpand(True)
         size_row.append(size_label)
-        size_value = Gtk.Label(label=f"{self._size}px")
+        size_value = Gtk.Label(label=f"{self._buddy._size}px")
         size_value.add_css_class("mochi-menu-value")
         size_row.append(size_value)
         card.append(size_row)
@@ -256,11 +259,11 @@ class BuddyMenuMixin:
             ConfigStore.MAX_SIZE,
             ConfigStore.SIZE_STEP,
         )
-        size_scale.set_value(self._size)
+        size_scale.set_value(self._buddy._size)
         size_scale.set_draw_value(False)
         size_scale.set_hexpand(True)
         size_scale.add_css_class("mochi-menu-scale")
-        size_scale.connect("value-changed", self._change_size)
+        size_scale.connect("value-changed", self._buddy._change_size)
         size_scale.connect("value-changed", lambda scale: size_value.set_text(
                 f"{round(scale.get_value() / ConfigStore.SIZE_STEP) * ConfigStore.SIZE_STEP}px"
             ))
@@ -284,17 +287,17 @@ class BuddyMenuMixin:
         sound_row.append(sound_label)
         sound_switch = Gtk.Switch()
         sound_switch.set_valign(Gtk.Align.CENTER)
-        sound_switch.set_active(not self._sound.muted)
-        sound_switch.connect("notify::active", self._change_sound_enabled)
+        sound_switch.set_active(not self._buddy._sound.muted)
+        sound_switch.connect("notify::active", self._buddy._change_sound_enabled)
         sound_row.append(sound_switch)
         card.append(sound_row)
         animated_rows.append(sound_row)
 
         volume_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
-        volume_scale.set_value(self._sound.volume * 100)
+        volume_scale.set_value(self._buddy._sound.volume * 100)
         volume_scale.set_draw_value(False)
         volume_scale.add_css_class("mochi-menu-scale")
-        volume_scale.connect("value-changed", self._change_volume)
+        volume_scale.connect("value-changed", self._buddy._change_volume)
         card.append(volume_scale)
         animated_rows.append(volume_scale)
 
@@ -319,7 +322,7 @@ class BuddyMenuMixin:
         )
         for row, values in enumerate(tuning_values):
             label, attribute, lower, upper, step, digits = values
-            self._append_tuning_control(tuning_grid, row, label, attribute, lower, upper, step, digits)
+            self._buddy._append_tuning_control(tuning_grid, row, label, attribute, lower, upper, step, digits)
         card.append(tuning_grid)
         animated_rows.append(tuning_grid)
 
@@ -330,11 +333,11 @@ class BuddyMenuMixin:
         system_label.add_css_class("mochi-menu-section")
         card.append(system_label)
 
-        reset_button, _ = self._make_menu_button("Reset position", "view-refresh-symbolic", self._reset_position)
+        reset_button, _ = self._buddy._make_menu_button("Reset position", "view-refresh-symbolic", self._buddy._reset_position)
         card.append(reset_button)
         animated_rows.append(reset_button)
 
-        quit_button, _ = self._make_menu_button("Quit Mochi", "application-exit-symbolic", self._quit, destructive=True)
+        quit_button, _ = self._buddy._make_menu_button("Quit Mochi", "application-exit-symbolic", self._buddy._quit, destructive=True)
         card.append(quit_button)
         animated_rows.append(quit_button)
 
@@ -344,8 +347,8 @@ class BuddyMenuMixin:
         card.append(hint)
         animated_rows.append(hint)
 
-        self._developer_menu_content = card
-        self._developer_menu_animated_rows = tuple(animated_rows)
+        self._buddy._developer_menu_content = card
+        self._buddy._developer_menu_animated_rows = tuple(animated_rows)
         popover.set_child(card)
         return popover
 
@@ -388,135 +391,135 @@ class BuddyMenuMixin:
         value_label.set_xalign(0)
         spin = Gtk.SpinButton.new_with_range(lower, upper, step)
         spin.set_digits(digits)
-        spin.set_value(float(getattr(self._tuning, attribute)))
+        spin.set_value(float(getattr(self._buddy._tuning, attribute)))
         spin.connect(
             "value-changed",
-            lambda control, name=attribute: self._change_tuning(
+            lambda control, name=attribute: self._buddy._change_tuning(
                 name, control.get_value()
             ),
         )
-        self._tuning_controls[attribute] = spin
+        self._buddy._tuning_controls[attribute] = spin
         grid.attach(value_label, 0, row, 1, 1)
         grid.attach(spin, 1, row, 1, 1)
 
     def _change_tuning(self, attribute: str, value: float) -> None:
         if attribute in ("drag_state_dwell_ms", "pickup_frame_duration_ms"):
             value = round(value)
-        setattr(self._tuning, attribute, value)
-        selector = self._drag_motion.pose_selector
+        setattr(self._buddy._tuning, attribute, value)
+        selector = self._buddy._drag_motion.pose_selector
         if attribute == "drag_soft_enter_threshold":
             selector.soft_enter_threshold = value
         elif attribute == "drag_medium_enter_threshold":
             selector.medium_enter_threshold = value
-            self._tuning_controls[
+            self._buddy._tuning_controls[
                 "drag_medium_exit_threshold"
             ].get_adjustment().set_upper(max(0.0, value - 0.01))
         elif attribute == "drag_medium_exit_threshold":
             selector.medium_exit_threshold = value
-            self._tuning_controls[
+            self._buddy._tuning_controls[
                 "drag_medium_enter_threshold"
             ].get_adjustment().set_lower(min(1.0, value + 0.01))
         elif attribute == "drag_heavy_velocity_px_per_second":
-            self._drag_motion.max_velocity = value
+            self._buddy._drag_motion.max_velocity = value
         elif attribute == "drag_state_dwell_ms":
             selector.dwell_ms = value
-        self._logger.debug("Tuning changed: %s=%s", attribute, value)
+        self._buddy._logger.debug("Tuning changed: %s=%s", attribute, value)
 
     def _change_size(self, scale: Gtk.Scale) -> None:
         size = (
             round(scale.get_value() / ConfigStore.SIZE_STEP)
             * ConfigStore.SIZE_STEP
         )
-        if size == self._size:
+        if size == self._buddy._size:
             return
-        self._size = size
-        self.set_content_width(size)
-        self.set_content_height(size)
-        self._window.set_default_size(size, size)
-        self._config.save_size(size)
-        self._placement.move_to(self._placement.position.x, self._placement.position.y)
-        self.queue_draw()
+        self._buddy._size = size
+        self._buddy.set_content_width(size)
+        self._buddy.set_content_height(size)
+        self._buddy._window.set_default_size(size, size)
+        self._buddy._config.save_size(size)
+        self._buddy._placement.move_to(self._buddy._placement.position.x, self._buddy._placement.position.y)
+        self._buddy.queue_draw()
 
     def _change_volume(self, scale: Gtk.Scale) -> None:
         volume = scale.get_value() / 100
-        self._sound.set_volume(volume)
-        self._config.save_volume(volume)
+        self._buddy._sound.set_volume(volume)
+        self._buddy._config.save_volume(volume)
 
     def _change_muted(self, toggle: Gtk.CheckButton) -> None:
         muted = toggle.get_active()
-        self._sound.set_muted(muted)
-        self._config.save_muted(muted)
+        self._buddy._sound.set_muted(muted)
+        self._buddy._config.save_muted(muted)
 
     def _change_sound_enabled(self, switch: Gtk.Switch, _pspec=None) -> None:
         muted = not switch.get_active()
-        self._sound.set_muted(muted)
-        self._config.save_muted(muted)
+        self._buddy._sound.set_muted(muted)
+        self._buddy._config.save_muted(muted)
 
     def _show_context_menu(
         self, _gesture: Gtk.GestureClick, _presses: int, x: float, y: float
     ) -> None:
         # Right-click is a true toggle: a second right-click on Mochi closes
         # the already-open user menu instead of re-presenting/repositioning it.
-        if self._context_menu.get_visible():
-            self._context_menu.popdown()
+        if self._buddy._context_menu.get_visible():
+            self._buddy._context_menu.popdown()
             return
-        if self._developer_menu.get_visible():
-            self._developer_menu.popdown()
+        if self._buddy._developer_menu.get_visible():
+            self._buddy._developer_menu.popdown()
         # Secondary-click is UI-only. It must never trigger/cancel a Mochi
         # emote, stop walking, force idle, or feed the primary-click reaction
         # pipeline. The popover may animate; Mochi himself does not.
-        self._cancel_hover_heart()
-        self._sleep_label.set_text(
-            "Wake up" if self.state.current is MochiState.SLEEPING else "Sleep"
+        self._buddy._cancel_hover_heart()
+        self._buddy._sleep_label.set_text(
+            "Wake up" if self._buddy.state.current is MochiState.SLEEPING else "Sleep"
         )
         rectangle = Gdk.Rectangle()
         rectangle.x = round(x)
         rectangle.y = round(y)
         rectangle.width = 1
         rectangle.height = 1
-        self._context_menu.set_pointing_to(rectangle)
-        self._context_menu_open = True
-        self._context_menu.popup()
-        self._sound.play(SoundEvent.MENU_OPEN)
-        self._animate_menu_open(
-            self._context_menu_content, self._context_menu_animated_rows
+        self._buddy._context_menu.set_pointing_to(rectangle)
+        self._buddy._context_menu_open = True
+        self._buddy._context_menu.popup()
+        self._buddy._sound.play(SoundEvent.MENU_OPEN)
+        self._buddy._animate_menu_open(
+            self._buddy._context_menu_content, self._buddy._context_menu_animated_rows
         )
-        self._logger.debug("Context menu opened at (%d, %d)", rectangle.x, rectangle.y)
+        self._buddy._logger.debug("Context menu opened at (%d, %d)", rectangle.x, rectangle.y)
 
     def _show_developer_menu(self) -> None:
-        if self._preview_mode:
+        if self._buddy._preview_mode:
             return
-        if self._developer_menu.get_visible():
-            self._developer_menu.popdown()
+        if self._buddy._developer_menu.get_visible():
+            self._buddy._developer_menu.popdown()
             return
-        if self._context_menu.get_visible():
-            self._context_menu.popdown()
-        self._mark_interaction()
-        self._cancel_active_emote()
-        if self.state.current is MochiState.WALKING:
-            self._cancel_walk()
-            self._transition_to(MochiState.IDLE)
-            self._play_animation("idle")
+        if self._buddy._context_menu.get_visible():
+            self._buddy._context_menu.popdown()
+        self._buddy._mark_interaction()
+        self._buddy._cancel_active_emote()
+        if self._buddy.state.current is MochiState.WALKING:
+            self._buddy._cancel_walk()
+            self._buddy._transition_to(MochiState.IDLE)
+            self._buddy._play_animation("idle")
 
         rectangle = Gdk.Rectangle()
-        rectangle.x = max(1, self.get_width() // 2)
-        rectangle.y = max(1, self.get_height() // 2)
+        rectangle.x = max(1, self._buddy.get_width() // 2)
+        rectangle.y = max(1, self._buddy.get_height() // 2)
         rectangle.width = 1
         rectangle.height = 1
-        self._developer_menu.set_pointing_to(rectangle)
-        self._context_menu_open = True
-        self._developer_menu.popup()
-        self._animate_menu_open(
-            self._developer_menu_content, self._developer_menu_animated_rows
+        self._buddy._developer_menu.set_pointing_to(rectangle)
+        self._buddy._context_menu_open = True
+        self._buddy._developer_menu.popup()
+        self._buddy._animate_menu_open(
+            self._buddy._developer_menu_content, self._buddy._developer_menu_animated_rows
         )
-        self._logger.debug("Developer menu opened from secret shortcut")
+        self._buddy._logger.debug("Developer menu opened from secret shortcut")
 
     def _animate_menu_open(
         self, content: Gtk.Widget, rows: tuple[Gtk.Widget, ...]
     ) -> None:
         """Quick ease-out lift + staggered fade without resizing the popover."""
-        self._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
-        serial = self._menu_animation_serial
+        self._buddy._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
+        serial = self._buddy._menu_animation_serial
         started = time.monotonic()
         duration = 0.18
         start_margin = 20
@@ -527,7 +530,7 @@ class BuddyMenuMixin:
             row.set_opacity(0.0)
 
         def animate() -> bool:
-            if serial != self._menu_animation_serial:
+            if serial != self._buddy._menu_animation_serial:
                 return GLib.SOURCE_REMOVE
             progress = min(1.0, (time.monotonic() - started) / duration)
             eased = 1.0 - (1.0 - progress) ** 3
@@ -549,76 +552,76 @@ class BuddyMenuMixin:
 
     def _quit_from_context_menu(self, _button: Gtk.Button) -> None:
         """Close the user menu first, then quit Mochi on the next idle turn."""
-        self._close_context_menu_then(self._quit_application)
+        self._buddy._close_context_menu_then(self._buddy._quit_application)
 
     def _toggle_sleep(self, _button: Gtk.Button) -> None:
         def toggle() -> None:
-            if self.state.current is MochiState.SLEEPING:
-                self._wake_up()
+            if self._buddy.state.current is MochiState.SLEEPING:
+                self._buddy._wake_up()
             else:
-                self._begin_sleep()
-            self.queue_draw()
+                self._buddy._begin_sleep()
+            self._buddy.queue_draw()
 
-        self._close_context_menu_then(toggle)
+        self._buddy._close_context_menu_then(toggle)
 
     def _test_walk(self, _button: Gtk.Button) -> None:
         def start_walk() -> None:
-            if self.state.current is MochiState.IDLE:
-                self._start_walk()
+            if self._buddy.state.current is MochiState.IDLE:
+                self._buddy._start_walk()
 
-        self._close_developer_menu_then(start_walk)
+        self._buddy._close_developer_menu_then(start_walk)
 
     def _test_heart_emote(self, _button: Gtk.Button) -> None:
-        self._close_developer_menu_then(
-            lambda: self._start_heart_emote(ignore_cooldown=True)
+        self._buddy._close_developer_menu_then(
+            lambda: self._buddy._start_heart_emote(ignore_cooldown=True)
         )
 
     def _test_computer_emote(self, _button: Gtk.Button) -> None:
-        self._close_developer_menu_then(self._start_computer_emote)
+        self._buddy._close_developer_menu_then(self._buddy._start_computer_emote)
 
     def _reset_position(self, _button: Gtk.Button) -> None:
         def reset_position() -> None:
-            self._config.reset_position()
+            self._buddy._config.reset_position()
             default = WindowPlacement.DEFAULT_POSITION
-            self._placement.move_to(default.x, default.y)
+            self._buddy._placement.move_to(default.x, default.y)
 
-        self._close_developer_menu_then(reset_position)
+        self._buddy._close_developer_menu_then(reset_position)
 
     def _close_context_menu_then(self, action: Callable[[], None]) -> None:
-        self._pending_context_action = action
-        self._context_menu.popdown()
+        self._buddy._pending_context_action = action
+        self._buddy._context_menu.popdown()
 
     def _close_developer_menu_then(self, action: Callable[[], None]) -> None:
-        self._pending_developer_action = action
-        self._developer_menu.popdown()
+        self._buddy._pending_developer_action = action
+        self._buddy._developer_menu.popdown()
 
     def _on_context_menu_closed(self, _popover: MenuWindow) -> None:
-        self._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
-        self._context_menu_open = False
-        self._logger.debug("Context menu closed")
-        action = self._pending_context_action
-        self._pending_context_action = None
+        self._buddy._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
+        self._buddy._context_menu_open = False
+        self._buddy._logger.debug("Context menu closed")
+        action = self._buddy._pending_context_action
+        self._buddy._pending_context_action = None
         if action is not None:
-            GLib.idle_add(self._dispatch_context_action, action)
+            GLib.idle_add(self._buddy._dispatch_context_action, action)
 
     def _on_developer_menu_closed(self, _popover: MenuWindow) -> None:
-        self._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
-        self._context_menu_open = False
-        self._logger.debug("Developer menu closed")
-        action = self._pending_developer_action
-        self._pending_developer_action = None
+        self._buddy._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
+        self._buddy._context_menu_open = False
+        self._buddy._logger.debug("Developer menu closed")
+        action = self._buddy._pending_developer_action
+        self._buddy._pending_developer_action = None
         if action is not None:
-            GLib.idle_add(self._dispatch_context_action, action)
+            GLib.idle_add(self._buddy._dispatch_context_action, action)
 
     def _dispatch_context_action(self, action: Callable[[], None]) -> bool:
         action()
         return GLib.SOURCE_REMOVE
 
     def _quit_application(self) -> None:
-        application = self._window.get_application()
+        application = self._buddy._window.get_application()
         if application is not None:
             application.quit()
 
     def _quit_from_context_menu(self, _button: Gtk.Button) -> None:
         """Close the user menu first, then quit Mochi on the next idle turn."""
-        self._close_context_menu_then(self._quit_application)
+        self._buddy._close_context_menu_then(self._buddy._quit_application)
