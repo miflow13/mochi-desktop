@@ -8,7 +8,9 @@ from mochi.bond_orbs import (
     GAIN_MARKER_DURATION_SECONDS,
     DENSE_ORB_THRESHOLD,
     LEVEL_UP_BLOOM_DURATION_SECONDS,
+    MAX_ACTIVE_GAIN_MARKERS,
     MAX_ACTIVE_ORBS,
+    MAX_ACTIVE_PULSES,
     ORB_EMIT_INTERVAL_SECONDS,
     XpOrb,
     XpOrbField,
@@ -210,4 +212,34 @@ def test_invalid_or_negative_awards_do_not_queue_particles() -> None:
 
     assert field.queue_xp(-10) == 0
     assert field.queue_xp("bad") == 0
+    assert field.has_activity is False
+
+
+def test_feed_sized_feedback_stays_bounded_through_full_lifecycle() -> None:
+    field = XpOrbField(rng=random.Random(23))
+    field.queue_xp(60)
+    field.show_gain_marker(60)
+
+    peak_orbs = 0
+    peak_pulses = 0
+    peak_markers = 0
+    for _ in range(600):
+        field.advance(
+            0.016,
+            width=112,
+            height=112,
+            target_x=56,
+            target_y=64,
+        )
+        peak_orbs = max(peak_orbs, field.active_count)
+        peak_pulses = max(peak_pulses, field.pulse_count)
+        peak_markers = max(peak_markers, field.marker_count)
+        if not field.has_activity:
+            break
+
+    assert field.total_emitted == 60
+    assert field.pending_xp == 0
+    assert peak_orbs <= MAX_ACTIVE_ORBS
+    assert peak_pulses <= MAX_ACTIVE_PULSES
+    assert peak_markers <= MAX_ACTIVE_GAIN_MARKERS
     assert field.has_activity is False

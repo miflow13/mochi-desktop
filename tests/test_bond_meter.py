@@ -10,7 +10,7 @@ from mochi.presence.bond_meter import (
     BOND_PERSIST_INTERVAL_XP,
     BondMeterMixin,
 )
-from mochi.state import MochiState
+from mochi.state import MochiState, PresentationState, StateMachine
 
 
 class _LayoutBase:
@@ -67,11 +67,14 @@ def _runtime_harness(state: BondState | None = None):
     harness._bond_dev_status_label = None
     harness._bond_progress_overlay = Mock()
     harness._bond_progress_overlay.active = True
+    harness._bond_progress_overlay.level_up_active = False
     harness._bond_typing_source_id = None
     harness._bond_unsaved_xp = 0
     harness._config = Mock()
     harness._logger = Mock()
-    harness.state = SimpleNamespace(current=MochiState.TYPING)
+    harness.state = StateMachine()
+    harness.state.current = MochiState.TYPING
+    harness._dismiss_presence_bubble = Mock()
     harness._on_bond_level_up = Mock()
     return harness
 
@@ -194,6 +197,9 @@ def test_level_up_shows_dedicated_card_even_while_typing() -> None:
 
     BondMeterMixin._on_bond_level_up(harness, 1, 2)
 
+    assert harness.state.presentation is PresentationState.LEVEL_UP
+    assert harness.state.dialogue_allowed is False
+    harness._dismiss_presence_bubble.assert_called_once_with(user_initiated=False)
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
     harness._bond_progress_overlay.show_level_up.assert_called_once_with(
         harness._bond_state,
@@ -207,6 +213,8 @@ def test_level_up_still_uses_card_outside_typing() -> None:
 
     BondMeterMixin._on_bond_level_up(harness, 1, 2)
 
+    assert harness.state.presentation is PresentationState.LEVEL_UP
+    harness._dismiss_presence_bubble.assert_called_once_with(user_initiated=False)
     harness._bond_progress_overlay.show_level_up.assert_called_once_with(
         harness._bond_state,
         previous_level=1,
@@ -244,6 +252,8 @@ def test_dev_level_up_card_previews_next_level_without_mutating_state() -> None:
     BondMeterMixin._test_bond_level_up_card(harness)
 
     assert harness._bond_state == original
+    assert harness.state.presentation is PresentationState.LEVEL_UP
+    harness._dismiss_presence_bubble.assert_called_once_with(user_initiated=False)
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
     harness._bond_progress_overlay.show_level_up.assert_called_once_with(
         BondState(level=5, xp=0),
@@ -280,3 +290,27 @@ def test_dev_reset_restores_level_one_and_dismisses_overlay() -> None:
     harness._set_bond_state_for_ui.assert_called_once_with(BondState())
     harness._persist_bond_state.assert_called_once_with()
     harness._bond_progress_overlay.dismiss.assert_called_once_with()
+
+
+def test_typing_refresh_does_not_dismiss_active_level_up_card() -> None:
+    harness = _runtime_harness(BondState(level=2, xp=0))
+    harness._bond_progress_overlay.level_up_active = True
+
+    with patch(
+        "mochi.presence.bond_meter.GLib.timeout_add_seconds",
+        return_value=55,
+    ):
+        BondMeterMixin._start_bond_typing_session(harness)
+
+    harness._bond_progress_overlay.dismiss.assert_not_called()
+    assert harness._bond_typing_source_id == 55
+
+
+def test_level_up_finish_releases_dialogue_priority() -> None:
+    harness = _runtime_harness(BondState(level=2, xp=0))
+    harness.state.transition_presentation(PresentationState.LEVEL_UP)
+
+    BondMeterMixin._on_bond_level_up_finished(harness)
+
+    assert harness.state.presentation is PresentationState.NORMAL
+    assert harness.state.dialogue_allowed is True

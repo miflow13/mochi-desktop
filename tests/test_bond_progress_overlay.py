@@ -20,6 +20,7 @@ def _overlay_harness() -> BondProgressOverlay:
     overlay._level_up_active = False
     overlay._level_up_previous_level = None
     overlay._state = BondState()
+    overlay._on_level_up_finished = Mock()
 
     overlay._window = Mock()
     overlay._window.get_visible.return_value = False
@@ -98,7 +99,7 @@ def test_level_up_switches_to_dedicated_celebration_card() -> None:
     assert overlay.level_up_active is True
 
 
-def test_finish_activity_holds_long_enough_for_level_up_message() -> None:
+def test_finish_activity_does_not_create_duplicate_level_up_hide_timer() -> None:
     overlay = _overlay_harness()
     overlay._level_up_active = True
 
@@ -108,10 +109,8 @@ def test_finish_activity_holds_long_enough_for_level_up_message() -> None:
     ) as timeout:
         overlay.finish_activity(1.0)
 
-    timeout.assert_called_once_with(
-        round(BondProgressOverlay.LEVEL_UP_MIN_HOLD_SECONDS * 1000),
-        overlay._finish_hide,
-    )
+    timeout.assert_not_called()
+    assert overlay._hide_source_id is None
 
 
 def test_dismiss_immediately_retires_hud_and_level_up_state() -> None:
@@ -134,6 +133,7 @@ def test_dismiss_immediately_retires_hud_and_level_up_state() -> None:
     overlay._set_gain_highlight.assert_called_once_with(False)
     overlay._set_level_up_highlight.assert_called_once_with(False)
     overlay._set_level_up_content.assert_called_once_with(False)
+    overlay._on_level_up_finished.assert_called_once_with()
 
 
 def test_level_up_card_finishes_by_hiding_instead_of_restoring_meter() -> None:
@@ -151,3 +151,24 @@ def test_level_up_card_finishes_by_hiding_instead_of_restoring_meter() -> None:
     assert overlay.level_up_active is False
     overlay._set_level_up_content.assert_called_once_with(False)
     overlay._hide_surfaces.assert_called_once_with()
+    overlay._on_level_up_finished.assert_called_once_with()
+
+
+def test_level_up_cancels_stale_gain_timer_before_celebration() -> None:
+    overlay = _overlay_harness()
+    overlay._gain_source_id = 77
+    overlay.resume = Mock()
+    overlay._set_gain_highlight = Mock()
+
+    with patch(
+        "mochi.presence.bond_progress_overlay.GLib.source_remove"
+    ) as remove, patch(
+        "mochi.presence.bond_progress_overlay.GLib.timeout_add",
+        return_value=94,
+    ):
+        overlay.show_level_up(BondState(level=2, xp=0), previous_level=1)
+
+    remove.assert_called_once_with(77)
+    overlay._set_gain_highlight.assert_called_with(False)
+    assert overlay._gain_source_id is None
+    assert overlay._level_up_source_id == 94

@@ -23,7 +23,7 @@ class ConfigStoreTests(unittest.TestCase):
     def test_size_round_trip_and_clamping(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             store = ConfigStore(Path(directory) / "config.json")
-            self.assertEqual(ConfigStore.DEFAULT_SIZE, 96)
+            self.assertEqual(ConfigStore.DEFAULT_SIZE, 112)
             self.assertEqual(ConfigStore.SIZE_STEP, 16)
             self.assertEqual(store.load_size(), ConfigStore.DEFAULT_SIZE)
             store.save_size(192)
