@@ -13,6 +13,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.care import BondState
+from mochi.emotes import EmoteDefinition
 from mochi.sprites import ANIMATIONS
 from mochi.x11 import get_window_position, move_window, request_keep_above
 
@@ -24,6 +25,7 @@ class BondProgressOverlay:
     MONITOR_PADDING_PX = 12
     GAIN_FLASH_MS = 650
     LEVEL_UP_DISPLAY_MS = 3200
+    EMOTE_UNLOCK_DISPLAY_MS = 3400
     LEVEL_UP_MIN_HOLD_SECONDS = 3.2
 
     def __init__(
@@ -46,6 +48,7 @@ class BondProgressOverlay:
         self._activity = "bonding"
         self._gain_text = ""
         self._level_up_active = False
+        self._emote_unlock_active = False
         self._level_up_previous_level: int | None = None
         self._state = BondState()
 
@@ -237,6 +240,14 @@ class BondProgressOverlay:
     def level_up_active(self) -> bool:
         return self._level_up_active
 
+    @property
+    def emote_unlock_active(self) -> bool:
+        return self._emote_unlock_active
+
+    @property
+    def presentation_active(self) -> bool:
+        return self._level_up_active or self._emote_unlock_active
+
     def show_activity(self, state: BondState, activity: str) -> None:
         self._cancel_hide_timer()
         self._active = True
@@ -256,7 +267,7 @@ class BondProgressOverlay:
         self._gain_text = ""
         self.update(state)
 
-        if not self._level_up_active:
+        if not self.presentation_active:
             self._set_gain_highlight(True)
             self._cancel_gain_timer()
             self._gain_source_id = GLib.timeout_add(
@@ -272,8 +283,13 @@ class BondProgressOverlay:
         self._cancel_level_up_timer()
         self._set_gain_highlight(False)
         self._level_up_active = True
+        self._emote_unlock_active = False
         self._level_up_previous_level = previous_level
         self._active = True
+        for label in (self._level_up_title, self._popover_level_up_title):
+            label.set_text("✦  LEVEL UP!  ✦")
+        for label in (self._level_up_subtitle, self._popover_level_up_subtitle):
+            label.set_text("Your bond grew stronger")
         self._set_level_up_content(True)
         self._set_level_up_highlight(True)
         self.update(state)
@@ -281,6 +297,33 @@ class BondProgressOverlay:
         self._level_up_source_id = GLib.timeout_add(
             self.LEVEL_UP_DISPLAY_MS,
             self._finish_level_up,
+        )
+
+    def show_emote_unlock(self, emote: EmoteDefinition) -> None:
+        """Reveal a newly learned idle emote after the level-up card."""
+        self._cancel_hide_timer()
+        self._cancel_gain_timer()
+        self._cancel_level_up_timer()
+        self._set_gain_highlight(False)
+        self._level_up_active = False
+        self._emote_unlock_active = True
+        self._level_up_previous_level = None
+        self._active = True
+        self._set_level_up_content(True)
+        self._set_level_up_highlight(True)
+
+        for label in (self._level_up_title, self._popover_level_up_title):
+            label.set_text("✦  NEW EMOTE UNLOCKED!  ✦")
+        for label in (self._level_up_level, self._popover_level_up_level):
+            label.set_text(emote.label)
+        subtitle = f"{emote.rarity.upper()} · Mochi learned a new idle mood"
+        for label in (self._level_up_subtitle, self._popover_level_up_subtitle):
+            label.set_text(subtitle)
+
+        self.resume()
+        self._level_up_source_id = GLib.timeout_add(
+            self.EMOTE_UNLOCK_DISPLAY_MS,
+            self._finish_emote_unlock,
         )
 
     def update(self, state: BondState, activity: str | None = None) -> None:
@@ -293,9 +336,10 @@ class BondProgressOverlay:
         xp_text = f"{self._state.xp} / {self._state.xp_required} XP"
         gain_text = self._gain_text
 
-        level_up_level_text = f"Bond Level {self._state.level}"
-        for label in (self._level_up_level, self._popover_level_up_level):
-            label.set_text(level_up_level_text)
+        if not self._emote_unlock_active:
+            level_up_level_text = f"Bond Level {self._state.level}"
+            for label in (self._level_up_level, self._popover_level_up_level):
+                label.set_text(level_up_level_text)
 
         for label in (self._level_label, self._popover_level_label):
             label.set_text(level_text)
@@ -318,19 +362,20 @@ class BondProgressOverlay:
 
     def dismiss(self) -> None:
         """Immediately retire the HUD without changing bond progression."""
-        was_level_up = self._level_up_active
+        was_presentation = self.presentation_active
         self._cancel_hide_timer()
         self._cancel_gain_timer()
         self._cancel_level_up_timer()
         self._active = False
         self._level_up_active = False
+        self._emote_unlock_active = False
         self._level_up_previous_level = None
         self._gain_text = ""
         self._set_gain_highlight(False)
         self._set_level_up_highlight(False)
         self._set_level_up_content(False)
         self._hide_surfaces()
-        if was_level_up:
+        if was_presentation:
             self._notify_level_up_finished()
 
     def finish_activity(self, delay_seconds: float = 1.6) -> None:
@@ -338,7 +383,7 @@ class BondProgressOverlay:
             return
         # The level-up timer already owns the celebration lifetime. Avoid a
         # second GLib hide timer racing the same presentation.
-        if self._level_up_active:
+        if self.presentation_active:
             return
         self._cancel_hide_timer()
         delay = max(0.0, delay_seconds)
@@ -375,14 +420,14 @@ class BondProgressOverlay:
             self._position_wayland_anchor()
 
     def destroy(self) -> None:
-        was_level_up = self._level_up_active
+        was_presentation = self.presentation_active
         self._cancel_hide_timer()
         self._cancel_gain_timer()
         self._cancel_level_up_timer()
         self._active = False
         self._level_up_active = False
         self._hide_surfaces()
-        if was_level_up:
+        if was_presentation:
             self._notify_level_up_finished()
         self._window.destroy()
         self._popover.unparent()
@@ -396,7 +441,7 @@ class BondProgressOverlay:
     def _finish_gain_flash(self) -> bool:
         self._gain_source_id = None
         self._set_gain_highlight(False)
-        if not self._level_up_active:
+        if not self.presentation_active:
             self._gain_text = ""
             self.update(self._state)
         return GLib.SOURCE_REMOVE
@@ -404,7 +449,19 @@ class BondProgressOverlay:
     def _finish_level_up(self) -> bool:
         self._level_up_source_id = None
         self._level_up_active = False
+        self._emote_unlock_active = False
         self._level_up_previous_level = None
+        self._set_level_up_highlight(False)
+        self._set_level_up_content(False)
+        self._gain_text = ""
+        self._active = False
+        self._hide_surfaces()
+        self._notify_level_up_finished()
+        return GLib.SOURCE_REMOVE
+
+    def _finish_emote_unlock(self) -> bool:
+        self._level_up_source_id = None
+        self._emote_unlock_active = False
         self._set_level_up_highlight(False)
         self._set_level_up_content(False)
         self._gain_text = ""
