@@ -27,6 +27,7 @@ class EmoteDefinition:
     animation: str | None
     required_bond_level: int | None
     available: bool = True
+    rarity: str = "common"
 
     def is_unlocked(self, state: BondState) -> bool:
         return bool(
@@ -37,16 +38,32 @@ class EmoteDefinition:
 
 
 EMOTE_CATALOGUE = (
-    EmoteDefinition("heart", "Heart", "heart", 1),
-    EmoteDefinition("bounce", "Bounce", "bounce", 1),
-    EmoteDefinition("squish", "Squish", "squish", 1),
-    EmoteDefinition("look", "Look Around", "look", 3),
-    EmoteDefinition("dance", "Dance", "dance", 5),
-    EmoteDefinition("mystery-1", "Mystery Emote I", None, None, False),
-    EmoteDefinition("mystery-2", "Mystery Emote II", None, None, False),
-    EmoteDefinition("mystery-3", "Mystery Emote III", None, None, False),
+    EmoteDefinition("heart", "Heart", "heart", 1, rarity="common"),
+    EmoteDefinition("bounce", "Bounce", "bounce", 1, rarity="common"),
+    EmoteDefinition("squish", "Squish", "squish", 1, rarity="uncommon"),
+    EmoteDefinition("look", "Look Around", "look", 3, rarity="rare"),
+    EmoteDefinition("dance", "Dance", "dance", 5, rarity="epic"),
+    EmoteDefinition("mystery-1", "Mystery Emote I", None, None, False, "legendary"),
+    EmoteDefinition("mystery-2", "Mystery Emote II", None, None, False, "legendary"),
+    EmoteDefinition("mystery-3", "Mystery Emote III", None, None, False, "legendary"),
 )
 EMOTES_BY_ID = {emote.id: emote for emote in EMOTE_CATALOGUE}
+
+
+@dataclass(frozen=True, slots=True)
+class RarityStyle:
+    label: str
+    colour: tuple[float, float, float]
+    ornament_count: int
+
+
+RARITY_STYLES = {
+    "common": RarityStyle("COMMON", (0.42, 0.50, 0.48), 1),
+    "uncommon": RarityStyle("UNCOMMON", (0.25, 0.67, 0.42), 2),
+    "rare": RarityStyle("RARE", (0.27, 0.53, 0.88), 3),
+    "epic": RarityStyle("EPIC", (0.66, 0.38, 0.87), 4),
+    "legendary": RarityStyle("LEGENDARY", (0.88, 0.62, 0.19), 5),
+}
 
 
 @lru_cache(maxsize=64)
@@ -129,16 +146,16 @@ window.mochi-emote-catalogue {
 class EmoteCatalogueCanvas(Gtk.DrawingArea):
     """One retained Cairo canvas for all catalogue cards.
 
-    Eight cards fit in two rows, so a scroller and dozens of independently
+    Eight long cards fit in four rows, so a scroller and dozens of independently
     measured GTK widgets are unnecessary. The canvas only re-rasterizes on a
     bond-state or display-scale change; pointer movement does not redraw it.
     """
 
-    COLUMNS = 3
-    CARD_WIDTH = 268
-    CARD_HEIGHT = 178
+    COLUMNS = 2
+    CARD_WIDTH = 410
+    CARD_HEIGHT = 112
     GAP = 16
-    PREVIEW_SIZE = 104
+    PREVIEW_SIZE = 88
     WIDTH = COLUMNS * CARD_WIDTH + (COLUMNS - 1) * GAP
     ROWS = (len(EMOTE_CATALOGUE) + COLUMNS - 1) // COLUMNS
     HEIGHT = ROWS * CARD_HEIGHT + (ROWS - 1) * GAP
@@ -193,38 +210,72 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         y: int,
     ) -> None:
         unlocked = emote.is_unlocked(self._state)
+        rarity = RARITY_STYLES[emote.rarity]
+        red, green, blue = rarity.colour
         context.save()
         context.translate(x, y)
-        self._rounded_rectangle(context, 0.5, 0.5, self.CARD_WIDTH - 1, self.CARD_HEIGHT - 1, 14)
+        self._rounded_rectangle(
+            context, 0.5, 0.5, self.CARD_WIDTH - 1, self.CARD_HEIGHT - 1, 14
+        )
         background = cairo.LinearGradient(0, 0, 0, self.CARD_HEIGHT)
-        background.add_color_stop_rgba(0, 0.32, 0.70, 0.41, 0.085 if unlocked else 0.035)
-        background.add_color_stop_rgba(1, 0.32, 0.70, 0.41, 0.025)
+        background.add_color_stop_rgba(
+            0, red, green, blue, 0.16 if unlocked else 0.055
+        )
+        background.add_color_stop_rgba(1, red, green, blue, 0.025)
         context.set_source(background)
         context.fill()
-        context.set_source_rgba(0.32, 0.70, 0.41, 0.16)
+        context.set_source_rgba(red, green, blue, 0.54 if unlocked else 0.20)
         context.set_line_width(1)
-        self._rounded_rectangle(context, 0.5, 0.5, self.CARD_WIDTH - 1, self.CARD_HEIGHT - 1, 14)
+        self._rounded_rectangle(
+            context, 0.5, 0.5, self.CARD_WIDTH - 1, self.CARD_HEIGHT - 1, 14
+        )
         context.stroke()
 
-        context.set_source_rgba(0.32, 0.70, 0.41, 0.08)
-        self._rounded_rectangle(context, 12, 10, self.CARD_WIDTH - 24, self.PREVIEW_SIZE + 4, 10)
+        context.set_source_rgba(red, green, blue, 0.10)
+        self._rounded_rectangle(context, 12, 12, 96, 88, 10)
         context.fill()
+
+        self._draw_ornaments(context, rarity)
 
         frame = self._preview_frame(emote)
         context.save()
-        context.translate((self.CARD_WIDTH - self.PREVIEW_SIZE) / 2, 8)
+        context.translate(16, 12)
         if unlocked:
             self._atlas.draw(context, frame, self.PREVIEW_SIZE, self.PREVIEW_SIZE)
         else:
             self._draw_silhouette(context, frame)
         context.restore()
 
-        self._draw_text(context, emote.label, 16, 126, 15, (0.12, 0.12, 0.12, 1), bold=True)
+        self._draw_text(context, emote.label, 126, 42, 17, (0.12, 0.12, 0.12, 1), bold=True)
         status = emote_status_text(emote, self._state)
-        colour = (0.18, 0.52, 0.28, 1) if unlocked else (0.38, 0.38, 0.38, 1)
-        self._draw_text(context, status, 16, 145, 10, colour, bold=True)
-        self._draw_text(context, self._detail(emote, unlocked), 16, 164, 10, (0.40, 0.40, 0.40, 1))
+        status_colour = rarity.colour if unlocked else (0.38, 0.38, 0.38)
+        self._draw_text(context, status, 126, 62, 10, status_colour, bold=True)
+        self._draw_text(context, self._detail(emote, unlocked), 126, 88, 10, (0.40, 0.40, 0.40, 1))
+
+        badge_width = 92
+        badge_x = self.CARD_WIDTH - badge_width - 14
+        context.set_source_rgba(red, green, blue, 0.14)
+        self._rounded_rectangle(context, badge_x, 14, badge_width, 24, 12)
+        context.fill()
+        context.set_source_rgba(red, green, blue, 0.62)
+        context.set_line_width(1)
+        self._rounded_rectangle(context, badge_x, 14, badge_width, 24, 12)
+        context.stroke()
+        self._draw_text(context, rarity.label, badge_x + 12, 30, 9, rarity.colour, bold=True)
         context.restore()
+
+    def _draw_ornaments(self, context: cairo.Context, rarity: RarityStyle) -> None:
+        red, green, blue = rarity.colour
+        for index in range(rarity.ornament_count):
+            context.set_source_rgba(red, green, blue, 0.30 + index * 0.08)
+            context.arc(
+                self.CARD_WIDTH - 24 - index * 12,
+                self.CARD_HEIGHT - 18,
+                2.5,
+                0,
+                6.2832,
+            )
+            context.fill()
 
     @staticmethod
     def _rounded_rectangle(
@@ -285,7 +336,7 @@ class EmoteCatalogueWindow:
     """Large reusable collection window opened by Mochi's global shortcut."""
 
     DEFAULT_WIDTH = 900
-    DEFAULT_HEIGHT = 680
+    DEFAULT_HEIGHT = 780
 
     def __init__(
         self,
@@ -306,7 +357,7 @@ class EmoteCatalogueWindow:
         self.window.connect("close-request", self._on_close_request)
         self.window.set_resizable(True)
         self.window.set_default_size(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
-        self.window.set_size_request(680, 500)
+        self.window.set_size_request(880, 680)
         self.window.add_css_class("mochi-emote-catalogue")
 
         # Keep this a native header-bar decoration. GTK reserves the remaining

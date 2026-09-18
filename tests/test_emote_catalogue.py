@@ -10,6 +10,7 @@ from mochi.care import BondState, bond_xp_required
 from mochi.presence.emote_catalogue import (
     EMOTE_CATALOGUE,
     EMOTES_BY_ID,
+    RARITY_STYLES,
     EmoteCatalogueCanvas,
     EmoteCatalogueMixin,
     EmoteCatalogueWindow,
@@ -68,6 +69,21 @@ def test_catalogue_contains_unlocked_locked_and_future_placeholder_emotes() -> N
     assert emote_status_text(EMOTES_BY_ID["mystery-1"], state) == "COMING SOON"
 
 
+def test_catalogue_assigns_progressive_rarity_tiers() -> None:
+    assert tuple(emote.rarity for emote in EMOTE_CATALOGUE) == (
+        "common",
+        "common",
+        "uncommon",
+        "rare",
+        "epic",
+        "legendary",
+        "legendary",
+        "legendary",
+    )
+    assert RARITY_STYLES["legendary"].ornament_count > RARITY_STYLES["epic"].ornament_count
+    assert RARITY_STYLES["epic"].ornament_count > RARITY_STYLES["common"].ornament_count
+
+
 def test_exact_xp_remaining_to_level_three_uses_current_progress() -> None:
     state = BondState(level=1, xp=100)
 
@@ -88,11 +104,20 @@ def test_catalogue_uses_single_compact_canvas_without_scrolling() -> None:
 
     assert "_build_context_menu" not in mixin_source
     assert "DEFAULT_WIDTH = 900" in window_source
-    assert "DEFAULT_HEIGHT = 680" in window_source
+    assert "DEFAULT_HEIGHT = 780" in window_source
     assert "EmoteCatalogueCanvas" in window_source
     assert "Gtk.Grid()" not in window_source
     assert "Gtk.GridView" not in window_source
     assert "Gtk.ScrolledWindow" not in window_source
+
+
+def test_canvas_uses_long_two_column_rarity_cards() -> None:
+    assert EmoteCatalogueCanvas.COLUMNS == 2
+    assert EmoteCatalogueCanvas.CARD_WIDTH > EmoteCatalogueCanvas.CARD_HEIGHT * 3
+    source = inspect.getsource(EmoteCatalogueCanvas)
+
+    assert "RARITY_STYLES[emote.rarity]" in source
+    assert "_draw_ornaments" in source
 
 
 def test_canvas_retains_one_surface_and_no_card_widget_tree() -> None:
