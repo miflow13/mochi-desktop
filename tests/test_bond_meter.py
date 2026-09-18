@@ -314,3 +314,32 @@ def test_level_up_finish_releases_dialogue_priority() -> None:
 
     assert harness.state.presentation is PresentationState.NORMAL
     assert harness.state.dialogue_allowed is True
+
+
+def test_real_xp_threshold_runs_complete_level_up_presentation_regression() -> None:
+    almost_level_two = BondState(
+        level=1,
+        xp=BondState(level=1).xp_required - 1,
+    )
+    harness = _runtime_harness(almost_level_two)
+    harness._on_bond_level_up = lambda previous, new: BondMeterMixin._on_bond_level_up(
+        harness,
+        previous,
+        new,
+    )
+
+    advance = BondMeterMixin._award_bond(harness, 1, persist=True)
+
+    assert advance.levelled_up is True
+    assert harness._bond_state == BondState(level=2, xp=0)
+    assert harness.state.presentation is PresentationState.LEVEL_UP
+    assert harness.state.dialogue_allowed is False
+    harness._config.save_bond_state.assert_called_once_with(BondState(level=2, xp=0))
+    harness._bond_orbs.queue_xp.assert_called_once_with(1)
+    harness._bond_orbs.show_gain_marker.assert_called_once_with(1)
+    harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    harness._dismiss_presence_bubble.assert_called_once_with(user_initiated=False)
+    harness._bond_progress_overlay.show_level_up.assert_called_once_with(
+        BondState(level=2, xp=0),
+        previous_level=1,
+    )
