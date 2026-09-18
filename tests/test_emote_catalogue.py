@@ -309,16 +309,18 @@ def test_catalogue_titlebar_uses_native_close_only_decoration() -> None:
     assert "header.set_show_title_buttons(True)" in source
     assert 'header.set_decoration_layout(":close")' in source
     assert "set_title_widget" not in source
-    assert 'self.window.connect("close-request", self._on_close_request)' in source
     assert "self.window.set_titlebar(header)" in source
 
 
-def test_native_close_request_hides_the_reusable_window() -> None:
-    window = object.__new__(EmoteCatalogueWindow)
-    window.hide = Mock()
+def test_catalogue_is_application_owned_not_transient_to_buddy() -> None:
+    source = inspect.getsource(EmoteCatalogueWindow.__init__)
 
-    assert EmoteCatalogueWindow._on_close_request(window, Mock()) is True
-    window.hide.assert_called_once_with()
+    assert "owner.get_application()" in source
+    assert "Gtk.ApplicationWindow(application=application)" in source
+    assert "set_transient_for" not in source
+    assert "set_destroy_with_parent" not in source
+    assert "self.window.set_hide_on_close(True)" in source
+    assert 'connect("close-request"' not in source
 
 
 def test_window_refreshes_only_the_single_canvas() -> None:
@@ -337,3 +339,20 @@ def test_locked_card_detail_is_static_across_xp_ticks() -> None:
     second = EmoteCatalogueCanvas._detail(canvas, emote, False)
 
     assert first == second == "Keep bonding to discover this mood."
+
+
+def test_scale_notification_rerenders_only_when_scale_really_changes() -> None:
+    canvas = object.__new__(EmoteCatalogueCanvas)
+    canvas._state = BondState(level=2, xp=10)
+    canvas._render_scale = 1
+    canvas.get_scale_factor = Mock(return_value=1)
+    canvas._render_surface = Mock()
+
+    EmoteCatalogueCanvas._on_scale_factor_changed(canvas)
+
+    canvas._render_surface.assert_not_called()
+
+    canvas.get_scale_factor.return_value = 2
+    EmoteCatalogueCanvas._on_scale_factor_changed(canvas)
+
+    canvas._render_surface.assert_called_once_with()

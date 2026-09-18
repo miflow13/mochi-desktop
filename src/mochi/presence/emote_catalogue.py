@@ -166,6 +166,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         self._atlas = atlas
         self._state: BondState | None = None
         self._surface: cairo.ImageSurface | None = None
+        self._render_scale = 0
         self.set_content_width(self.WIDTH)
         self.set_content_height(self.HEIGHT)
         self.set_halign(Gtk.Align.CENTER)
@@ -185,7 +186,8 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         self._render_surface()
 
     def _on_scale_factor_changed(self, *_args) -> None:
-        if self._state is not None:
+        scale = max(1, self.get_scale_factor())
+        if self._state is not None and scale != self._render_scale:
             self._render_surface()
 
     def _render_surface(self) -> None:
@@ -217,6 +219,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         # This avoids eight full-area paints and eight GLib timer callbacks for
         # a catalogue that contains only eight static cards.
         self._surface = surface
+        self._render_scale = scale
         self.queue_draw()
 
     def _draw_card(
@@ -364,13 +367,16 @@ class EmoteCatalogueWindow:
         self._logger = logger or logging.getLogger(__name__)
         self._state: BondState | None = None
 
-        self.window = Gtk.Window()
+        application = owner.get_application()
+        if application is not None:
+            self.window = Gtk.ApplicationWindow(application=application)
+        else:
+            # Fallback keeps isolated tests/embedders usable without coupling the
+            # catalogue to Mochi's tiny always-on-top buddy as a transient child.
+            self.window = Gtk.Window()
         self.window.set_title("Mochi Emote Catalogue")
-        self.window.set_transient_for(owner)
-        self.window.set_destroy_with_parent(True)
         self.window.set_modal(False)
         self.window.set_hide_on_close(True)
-        self.window.connect("close-request", self._on_close_request)
         self.window.set_resizable(True)
         self.window.set_default_size(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
         self.window.set_size_request(880, 680)
@@ -495,11 +501,6 @@ class EmoteCatalogueWindow:
 
     def destroy(self) -> None:
         self.window.destroy()
-
-    def _on_close_request(self, _window: Gtk.Window) -> bool:
-        """Keep the reusable catalogue alive when GTK's native X is clicked."""
-        self.hide()
-        return True
 
     def _on_key_pressed(
         self,
