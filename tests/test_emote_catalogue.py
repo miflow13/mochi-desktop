@@ -140,6 +140,15 @@ def test_canvas_has_no_scroll_path_or_pointer_motion_repaint() -> None:
     assert "def _on_motion" not in source
 
 
+def test_canvas_renders_one_card_per_low_priority_idle_slice() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas)
+
+    assert "GLib.idle_add" in source
+    assert "priority=GLib.PRIORITY_LOW" in source
+    assert "def _render_next_card" in source
+    assert "self._render_index += 1" in source
+
+
 def test_canvas_is_a_read_only_collection_view() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas)
 

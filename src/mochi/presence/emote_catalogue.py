@@ -11,7 +11,7 @@ import gi
 
 gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.care import BondState, bond_xp_required
 from mochi.emote_shortcut import EmoteCatalogueShortcutMonitor
@@ -165,6 +165,9 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         self._atlas = atlas
         self._state: BondState | None = None
         self._surface: cairo.ImageSurface | None = None
+        self._render_context: cairo.Context | None = None
+        self._render_index = 0
+        self._render_source = 0
         self.set_content_width(self.WIDTH)
         self.set_content_height(self.HEIGHT)
         self.set_halign(Gtk.Align.CENTER)
@@ -173,34 +176,58 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
 
     def refresh(self, state: BondState) -> None:
         state = BondState(level=state.level, xp=state.xp)
-        if state == self._state:
+        if state == self._state and self._surface is not None:
             return
         self._state = state
-        self._render()
-        self.queue_draw()
+        self._begin_render()
 
     def _on_scale_factor_changed(self, *_args) -> None:
         if self._state is not None:
-            self._render()
-            self.queue_draw()
+            self._begin_render()
 
-    def _render(self) -> None:
+    def _begin_render(self) -> None:
         if self._state is None:
             return
+        if self._render_source:
+            GLib.source_remove(self._render_source)
         scale = max(1, self.get_scale_factor())
-        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.WIDTH * scale, self.HEIGHT * scale)
+        surface = cairo.ImageSurface(
+            cairo.FORMAT_ARGB32, self.WIDTH * scale, self.HEIGHT * scale
+        )
         surface.set_device_scale(scale, scale)
         context = cairo.Context(surface)
-        for index, emote in enumerate(EMOTE_CATALOGUE):
-            column = index % self.COLUMNS
-            row = index // self.COLUMNS
-            self._draw_card(
-                context,
-                emote,
-                column * (self.CARD_WIDTH + self.GAP),
-                row * (self.CARD_HEIGHT + self.GAP),
-            )
+        context.set_operator(cairo.OPERATOR_CLEAR)
+        context.paint()
+        context.set_operator(cairo.OPERATOR_OVER)
         self._surface = surface
+        self._render_context = context
+        self._render_index = 0
+        self._render_source = GLib.idle_add(
+            self._render_next_card,
+            priority=GLib.PRIORITY_LOW,
+        )
+
+    def _render_next_card(self) -> bool:
+        if self._render_context is None or self._render_index >= len(EMOTE_CATALOGUE):
+            self._render_context = None
+            self._render_source = 0
+            if self._surface is not None:
+                self._surface.flush()
+            return GLib.SOURCE_REMOVE
+
+        index = self._render_index
+        emote = EMOTE_CATALOGUE[index]
+        column = index % self.COLUMNS
+        row = index // self.COLUMNS
+        self._draw_card(
+            self._render_context,
+            emote,
+            column * (self.CARD_WIDTH + self.GAP),
+            row * (self.CARD_HEIGHT + self.GAP),
+        )
+        self._render_index += 1
+        self.queue_draw()
+        return GLib.SOURCE_CONTINUE
 
     def _draw_card(
         self,
