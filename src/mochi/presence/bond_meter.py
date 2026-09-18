@@ -14,7 +14,11 @@ from mochi.care import (
     BondState,
 )
 from mochi.bond_orbs import XpOrbField
-from mochi.emotes import EmoteDefinition, newly_unlocked_emotes
+from mochi.emotes import (
+    EmoteDefinition,
+    newly_unlocked_emotes,
+    unlocked_idle_animation_names,
+)
 from mochi.state import MochiState, PresentationState
 
 from .bond_progress_overlay import BondProgressOverlay
@@ -58,6 +62,7 @@ class BondMeterMixin:
         self._bond_typing_source_id: int | None = None
         self._bond_unsaved_xp = 0
         self._dev_unlock_all_emotes = False
+        self._dev_unlock_all_label: Gtk.Label | None = None
         self._pending_emote_unlocks: list[EmoteDefinition] = []
         super().__init__(*args, **kwargs)
         self._restore_bond_state()
@@ -69,6 +74,7 @@ class BondMeterMixin:
                 anchor_widget=self,
                 logger=self._logger,
                 on_level_up_finished=self._on_bond_level_up_finished,
+                atlas=self.atlas,
             )
 
     def _build_context_menu(self):
@@ -192,7 +198,7 @@ class BondMeterMixin:
         card.append(real_level_button)
         animated_rows.append(real_level_button)
 
-        unlock_button, _ = self._make_menu_button(
+        unlock_button, self._dev_unlock_all_label = self._make_menu_button(
             "Unlock all emotes",
             "changes-allow-symbolic",
             self._test_unlock_all_emotes,
@@ -251,19 +257,36 @@ class BondMeterMixin:
         self._award_bond(1, persist=True)
 
     def _test_unlock_all_emotes(self, _button=None) -> None:
-        """Enable all available emotes for this developer session only."""
-        self._dev_unlock_all_emotes = True
+        """Toggle all available emotes for this developer session only."""
+        self._dev_unlock_all_emotes = not self._dev_unlock_all_emotes
+        if self._dev_unlock_all_label is not None:
+            self._dev_unlock_all_label.set_text(
+                "Restore bond locks"
+                if self._dev_unlock_all_emotes
+                else "Unlock all emotes"
+            )
         if self._bond_dev_status_label is not None:
             self._bond_dev_status_label.set_text(self._bond_dev_status_text())
         refresh = getattr(self, "_refresh_emote_catalogue", None)
         if callable(refresh):
             refresh(force=True)
-        self._logger.info("Developer emote unlock override enabled for this session")
+        self._logger.info(
+            "Developer emote unlock override: %s",
+            self._dev_unlock_all_emotes,
+        )
+
+    def _available_idle_emote_animations(self) -> tuple[str, ...]:
+        return unlocked_idle_animation_names(
+            self._bond_state,
+            unlock_all=self._dev_unlock_all_emotes,
+        )
 
     def _test_bond_reset(self, _button=None) -> None:
         """Restore a predictable Level 1 baseline after developer testing."""
         self._dev_unlock_all_emotes = False
         self._pending_emote_unlocks.clear()
+        if self._dev_unlock_all_label is not None:
+            self._dev_unlock_all_label.set_text("Unlock all emotes")
         self._set_bond_state_for_ui(BondState())
         self._persist_bond_state()
         if self._bond_progress_overlay is not None:

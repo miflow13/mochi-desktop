@@ -29,7 +29,6 @@ from mochi.config import ConfigStore
 from mochi.developer_shortcut import DeveloperShortcutMonitor
 from mochi.drag_motion import DragMotionModel, DragPoseSelector
 from mochi.file_activity import FileActivityMonitor
-from mochi.emotes import unlocked_idle_animation_names
 from mochi.media_activity import MediaActivityMonitor
 from mochi.buddy_menu import BuddyMenuController
 from mochi.ambient_activity import AmbientActivityController
@@ -915,9 +914,8 @@ class Buddy(Gtk.DrawingArea):
             # Automatic sleep is driven by the GNOME Shell presence monitor.
             # Local Mochi interaction timestamps are not a proxy for whether the
             # user is actually present at the computer.
-            unlocked_idle = unlocked_idle_animation_names(
-                getattr(self, "_bond_state", None),
-                unlock_all=getattr(self, "_dev_unlock_all_emotes", False),
+            unlocked_idle = tuple(
+                getattr(self, "_available_idle_emote_animations", lambda: ())()
             )
             action = random.choice(("walk", "squish", None, None, *unlocked_idle))
             if action == "squish":
@@ -926,7 +924,7 @@ class Buddy(Gtk.DrawingArea):
             elif action == "walk":
                 self._start_walk()
             elif action in unlocked_idle:
-                if self._transition_to(MochiState.EXCITED):
+                if self._transition_to(MochiState.IDLE_EMOTE):
                     self._play_animation(action)
             return GLib.SOURCE_REMOVE
         finally:

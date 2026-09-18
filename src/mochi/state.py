@@ -12,6 +12,7 @@ class MochiState(Enum):
     BOUNCING = auto()
     SQUISHING = auto()
     EXCITED = auto()
+    IDLE_EMOTE = auto()
     WALKING = auto()
     SLEEPING = auto()
     WAKING = auto()

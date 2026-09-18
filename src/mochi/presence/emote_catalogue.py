@@ -613,7 +613,7 @@ class EmoteCatalogueWindow:
         self.window.set_hide_on_close(True)
         self.window.set_resizable(True)
         self.window.set_default_size(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
-        self.window.set_size_request(880, 680)
+        self.window.set_size_request(880, 780)
         self.window.add_css_class("mochi-emote-catalogue")
 
         # Keep this a native header-bar decoration. GTK reserves the remaining
