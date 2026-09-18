@@ -7,9 +7,11 @@ import random
 from mochi.quick_start import QuickStartMixin
 from mochi.sound import SoundEvent
 
+from .bond_meter import BondMeterMixin
 from .clicks import ClickBurstDetector
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
+from .emote_catalogue import EmoteCatalogueMixin
 from .fedora_mode import FedoraModeMixin
 from .feeding import FeedMochiMixin
 from .idle_look import IdleLookMixin
@@ -160,6 +162,8 @@ class PresenceBuddy(
     TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
+    EmoteCatalogueMixin,
+    BondMeterMixin,
     FeedMochiMixin,
     NameplateMixin,
     BasePresenceBuddy,
@@ -175,6 +179,8 @@ class PresenceX11Buddy(
     TerminalCoworkMixin,
     MusicDanceMixin,
     EdgeRoamMixin,
+    EmoteCatalogueMixin,
+    BondMeterMixin,
     FeedMochiMixin,
     NameplateMixin,
     BasePresenceX11Buddy,

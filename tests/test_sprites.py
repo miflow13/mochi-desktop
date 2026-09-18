@@ -40,7 +40,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
-            "watch", "dance", "searching", "drop",
+            "watch", "dance", "searching", "drop", "side_eye", "table_flip",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -206,3 +206,26 @@ class SpriteDefinitionsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_bond_idle_emotes_preserve_authored_timing() -> None:
+    assert tuple(frame.duration_ms for frame in ANIMATIONS["side_eye"].frames) == (
+        (120,) * 12 + (500,)
+    )
+    assert tuple(frame.duration_ms for frame in ANIMATIONS["table_flip"].frames) == (
+        (120,) * 16
+    )
+    assert ANIMATIONS["side_eye"].looping is False
+    assert ANIMATIONS["table_flip"].looping is False
+
+
+def test_bond_idle_emotes_use_authored_64px_spritesheets() -> None:
+    side_eye = ASSET_SET.animations["side_eye"]
+    table_flip = ASSET_SET.animations["table_flip"]
+
+    assert side_eye.spritesheet_path == "side_eye/side_eye.png"
+    assert side_eye.source_cell_size == (64, 64)
+    assert len(side_eye.frame_paths) == 13
+    assert table_flip.spritesheet_path == "table_flip/table_flip.png"
+    assert table_flip.source_cell_size == (64, 64)
+    assert len(table_flip.frame_paths) == 16

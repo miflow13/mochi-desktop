@@ -21,6 +21,8 @@ const YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME = 'YouTubeFocusedStopped';
 const APP_CATEGORY_SIGNAL_NAME = 'AppCategoryChanged';
 const DEVELOPER_MENU_SIGNAL_NAME = 'DeveloperMenuRequested';
 const DEVELOPER_MENU_KEYBINDING = 'developer-menu-shortcut';
+const EMOTE_CATALOGUE_SIGNAL_NAME = 'EmoteCatalogueRequested';
+const EMOTE_CATALOGUE_KEYBINDING = 'emote-catalogue-shortcut';
 
 // These are application identifiers only. Window titles, folder names, file
 // names, and paths are never inspected or transmitted to Mochi.
@@ -153,6 +155,16 @@ export default class MochiTypingActivityExtension extends Extension {
                 // Diagnostic only: no key identity, typed data, or window data.
                 console.debug('[Mochi] Developer menu shortcut requested');
                 this._emitSignal(DEVELOPER_MENU_SIGNAL_NAME);
+            },
+        );
+        Main.wm.addKeybinding(
+            EMOTE_CATALOGUE_KEYBINDING,
+            this._settings,
+            Meta.KeyBindingFlags.NONE,
+            Shell.ActionMode.ALL,
+            () => {
+                // User-facing semantic action; no key identity crosses D-Bus.
+                this._emitSignal(EMOTE_CATALOGUE_SIGNAL_NAME);
             },
         );
 
@@ -531,6 +543,7 @@ export default class MochiTypingActivityExtension extends Extension {
 
     disable() {
         Main.wm.removeKeybinding(DEVELOPER_MENU_KEYBINDING);
+        Main.wm.removeKeybinding(EMOTE_CATALOGUE_KEYBINDING);
         this._settings = null;
 
         if (this._pollSourceId) {

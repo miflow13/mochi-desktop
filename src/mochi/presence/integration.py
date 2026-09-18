@@ -67,6 +67,7 @@ class PresenceBuddyMixin:
             owner=self._window,
             anchor_widget=self,
             logger=self._logger,
+            can_show=lambda: self.state.dialogue_allowed,
         )
         self._session_signal_monitor = SessionSignalMonitor(
             on_away=self._on_presence_session_away,

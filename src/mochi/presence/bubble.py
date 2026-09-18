@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 import random
 import time
@@ -39,10 +40,12 @@ class SpeechBubble:
         owner: Gtk.Window,
         anchor_widget: Gtk.Widget,
         logger: logging.Logger | None = None,
+        can_show: Callable[[], bool] | None = None,
     ) -> None:
         self._owner = owner
         self._anchor = anchor_widget
         self._logger = logger or logging.getLogger(__name__)
+        self._can_show = can_show
         self._hide_source_id: int | None = None
         self._follow_source_id: int | None = None
         self._animation_source_id: int | None = None
@@ -133,6 +136,10 @@ class SpeechBubble:
     def show(
         self, text: str, *, duration_seconds: float, markup: str | None = None
     ) -> bool:
+        if self._can_show is not None and not self._can_show():
+            self._logger.debug("Speech bubble suppressed by presentation priority")
+            return False
+
         # Rich introductory text is revealed immediately; ordinary speech
         # retains its typing beat. Markup is supplied only by trusted app copy.
         typing_preview = markup is None and bool(getattr(text, "typing_preview", False))

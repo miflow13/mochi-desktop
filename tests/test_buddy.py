@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from mochi.animation import Animation
 from mochi.buddy import Buddy
+from mochi.buddy_menu import BuddyMenuController
 from mochi.sprites import ANIMATIONS
 from mochi.sound import SoundEvent
 from mochi.state import MochiState
@@ -73,7 +74,7 @@ class BuddyDragReleaseTests(unittest.TestCase):
             _play_drag_pose=Mock(),
         )
 
-        with patch("mochi.buddy.time.monotonic", return_value=5.0):
+        with patch("mochi.ambient_activity.time.monotonic", return_value=5.0):
             Buddy._update_drag_visual(buddy, 10.0, 20.0)
 
         buddy._drag_motion.update.assert_called_once_with(10.0, 20.0, 5.0)
@@ -176,8 +177,8 @@ class BuddyContextMenuTests(unittest.TestCase):
     def test_user_menu_does_not_contain_developer_tuning(self) -> None:
         import inspect
 
-        user_source = inspect.getsource(Buddy._build_context_menu)
-        dev_source = inspect.getsource(Buddy._build_developer_menu)
+        user_source = inspect.getsource(BuddyMenuController._build_context_menu)
+        dev_source = inspect.getsource(BuddyMenuController._build_developer_menu)
 
         self.assertIn('"Sleep"', user_source)
         self.assertIn('"Close"', user_source)
@@ -198,15 +199,15 @@ class BuddyContextMenuTests(unittest.TestCase):
     def test_user_menu_follows_mochi_and_close_quits(self) -> None:
         import inspect
 
-        source = inspect.getsource(Buddy._build_context_menu)
+        source = inspect.getsource(BuddyMenuController._build_context_menu)
 
         self.assertIn("follow_owner=True", source)
-        self.assertIn("self._quit_from_context_menu", source)
+        self.assertIn("self._buddy._quit_from_context_menu", source)
 
     def test_developer_menu_is_independently_draggable(self) -> None:
         import inspect
 
-        source = inspect.getsource(Buddy._build_developer_menu)
+        source = inspect.getsource(BuddyMenuController._build_developer_menu)
 
         self.assertIn("follow_owner=False", source)
         self.assertIn("popover.set_drag_handle(drag_header)", source)
@@ -225,12 +226,12 @@ class BuddyContextMenuTests(unittest.TestCase):
     def test_user_context_menu_is_toggle_and_dismisses_on_focus_loss(self) -> None:
         import inspect
 
-        build_source = inspect.getsource(Buddy._build_context_menu)
-        show_source = inspect.getsource(Buddy._show_context_menu)
+        build_source = inspect.getsource(BuddyMenuController._build_context_menu)
+        show_source = inspect.getsource(BuddyMenuController._show_context_menu)
 
         self.assertIn("dismiss_on_focus_loss=True", build_source)
-        self.assertIn("self._context_menu.get_visible()", show_source)
-        self.assertIn("self._context_menu.popdown()", show_source)
+        self.assertIn("self._buddy._context_menu.get_visible()", show_source)
+        self.assertIn("self._buddy._context_menu.popdown()", show_source)
 
     def test_context_menu_open_plays_one_subtle_menu_sound(self) -> None:
         sound = SimpleNamespace(play=Mock())
@@ -339,10 +340,10 @@ class BuddyEmoteTests(unittest.TestCase):
             _play_animation=Mock(),
         )
 
-        with patch("mochi.buddy.time.monotonic", return_value=10.0):
+        with patch("mochi.ambient_activity.time.monotonic", return_value=10.0):
             self.assertFalse(Buddy._start_heart_emote(buddy))
         buddy.state.current = MochiState.DRAGGED
-        with patch("mochi.buddy.time.monotonic", return_value=12.0):
+        with patch("mochi.ambient_activity.time.monotonic", return_value=12.0):
             self.assertFalse(Buddy._start_heart_emote(buddy))
 
         buddy._play_animation.assert_not_called()
@@ -488,7 +489,7 @@ class BuddyTypingTests(unittest.TestCase):
             _logger=Mock(),
         )
 
-        with patch("mochi.buddy.time.monotonic", return_value=10.0):
+        with patch("mochi.ambient_activity.time.monotonic", return_value=10.0):
             Buddy._on_typing_stopped(buddy)
 
         self.assertEqual(buddy._last_interaction, 10.0)
@@ -623,6 +624,22 @@ class BuddySearchingTests(unittest.TestCase):
             state=SimpleNamespace(current=MochiState.IDLE),
             _context_menu_open=False,
             player=SimpleNamespace(animation=ANIMATIONS["idle"]),
+            _transition_to=Mock(return_value=True),
+            _computer_idle_source_id=None,
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        self.assertTrue(Buddy._start_searching_emote(buddy))
+
+        buddy._transition_to.assert_called_once_with(MochiState.SEARCHING)
+        buddy._play_animation.assert_called_once_with("searching", after=None)
+
+    def test_file_activity_can_interrupt_unlocked_idle_emote(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE_EMOTE),
+            _context_menu_open=False,
+            player=SimpleNamespace(animation=ANIMATIONS["side_eye"]),
             _transition_to=Mock(return_value=True),
             _computer_idle_source_id=None,
             _play_animation=Mock(),

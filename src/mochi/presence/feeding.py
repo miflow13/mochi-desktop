@@ -125,4 +125,7 @@ class FeedMochiMixin:
         """Extension hook for future feeding entry behavior."""
 
     def _on_feed_animation_completed(self) -> None:
-        """Extension hook for future fullness, XP, and progression updates."""
+        """Extension hook for care/progression layers composed after feeding."""
+        next_hook = getattr(super(), "_on_feed_animation_completed", None)
+        if callable(next_hook):
+            next_hook()
