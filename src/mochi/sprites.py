@@ -98,6 +98,25 @@ ANIMATIONS["squish"] = replace(
         )
     ),
 )
+side_eye_durations = (120,) * 12 + (500,)
+ANIMATIONS["side_eye"] = replace(
+    ANIMATIONS["side_eye"],
+    frames=tuple(
+        replace(frame, duration_ms=duration)
+        for frame, duration in zip(
+            ANIMATIONS["side_eye"].frames,
+            side_eye_durations,
+            strict=True,
+        )
+    ),
+)
+ANIMATIONS["table_flip"] = replace(
+    ANIMATIONS["table_flip"],
+    frames=tuple(
+        replace(frame, duration_ms=120)
+        for frame in ANIMATIONS["table_flip"].frames
+    ),
+)
 ANIMATIONS["excited"] = replace(ANIMATIONS["bounce"], name="excited")
 
 

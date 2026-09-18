@@ -19,6 +19,7 @@ class AnimationMetadata:
     fps: float
     looping: bool
     source_cell_size: tuple[int, int]
+    spritesheet_path: str | None = None
 
 
 class AnimationAssetSet:
@@ -56,37 +57,74 @@ class AnimationAssetSet:
 
     def load_frames(self, name: str) -> dict[str, cairo.ImageSurface]:
         metadata = self.animations[name]
-        for relative_path in metadata.frame_paths:
-            if relative_path in self.surfaces:
-                continue
-            path = self._safe_frame_path(relative_path)
-            surface = cairo.ImageSurface.create_from_png(str(path))
-            actual_size = (surface.get_width(), surface.get_height())
-            if actual_size != metadata.source_cell_size:
-                raise ValueError(
-                    f"Expected {metadata.source_cell_size} frame {relative_path}, "
-                    f"got {actual_size}"
-                )
-            if actual_size != self.cell_size:
-                source = surface
-                surface = cairo.ImageSurface(
-                    cairo.FORMAT_ARGB32,
-                    self.cell_size[0],
-                    self.cell_size[1],
-                )
-                context = cairo.Context(surface)
-                context.scale(
-                    self.cell_size[0] / actual_size[0],
-                    self.cell_size[1] / actual_size[1],
-                )
-                context.set_source_surface(source, 0, 0)
-                context.get_source().set_filter(cairo.FILTER_NEAREST)
-                context.paint()
-            self.surfaces[relative_path] = surface
-        return {
-            path: self.surfaces[path]
-            for path in metadata.frame_paths
-        }
+        if metadata.spritesheet_path is not None:
+            self._load_spritesheet(metadata)
+        else:
+            for relative_path in metadata.frame_paths:
+                if relative_path in self.surfaces:
+                    continue
+                path = self._safe_frame_path(relative_path)
+                source = cairo.ImageSurface.create_from_png(str(path))
+                actual_size = (source.get_width(), source.get_height())
+                if actual_size != metadata.source_cell_size:
+                    raise ValueError(
+                        f"Expected {metadata.source_cell_size} frame {relative_path}, "
+                        f"got {actual_size}"
+                    )
+                self.surfaces[relative_path] = self._scale_to_runtime_cell(source)
+        return {path: self.surfaces[path] for path in metadata.frame_paths}
+
+    def _load_spritesheet(self, metadata: AnimationMetadata) -> None:
+        if all(path in self.surfaces for path in metadata.frame_paths):
+            return
+
+        sheet_path = self._safe_frame_path(metadata.spritesheet_path or "")
+        sheet = cairo.ImageSurface.create_from_png(str(sheet_path))
+        cell_width, cell_height = metadata.source_cell_size
+        expected_size = (cell_width * len(metadata.frame_paths), cell_height)
+        actual_size = (sheet.get_width(), sheet.get_height())
+        if actual_size != expected_size:
+            raise ValueError(
+                f"Expected spritesheet {metadata.spritesheet_path} size "
+                f"{expected_size}, got {actual_size}"
+            )
+
+        for index, frame_key in enumerate(metadata.frame_paths):
+            source = cairo.ImageSurface(
+                cairo.FORMAT_ARGB32,
+                cell_width,
+                cell_height,
+            )
+            context = cairo.Context(source)
+            context.set_operator(cairo.OPERATOR_SOURCE)
+            context.set_source_surface(sheet, -(index * cell_width), 0)
+            context.paint()
+            source.flush()
+            self.surfaces[frame_key] = self._scale_to_runtime_cell(source)
+
+    def _scale_to_runtime_cell(
+        self,
+        source: cairo.ImageSurface,
+    ) -> cairo.ImageSurface:
+        actual_size = (source.get_width(), source.get_height())
+        if actual_size == self.cell_size:
+            return source
+
+        surface = cairo.ImageSurface(
+            cairo.FORMAT_ARGB32,
+            self.cell_size[0],
+            self.cell_size[1],
+        )
+        context = cairo.Context(surface)
+        context.scale(
+            self.cell_size[0] / actual_size[0],
+            self.cell_size[1] / actual_size[1],
+        )
+        context.set_source_surface(source, 0, 0)
+        context.get_source().set_filter(cairo.FILTER_NEAREST)
+        context.paint()
+        surface.flush()
+        return surface
 
     def _parse_animations(
         self, raw_animations: object
@@ -99,14 +137,31 @@ class AnimationAssetSet:
             if not isinstance(name, str) or not isinstance(raw_metadata, dict):
                 raise ValueError("Invalid animation metadata")
             frames = raw_metadata.get("frames")
+            spritesheet = raw_metadata.get("spritesheet")
+            frame_count = raw_metadata.get("frame_count")
             fps = raw_metadata.get("fps")
             looping = raw_metadata.get("loop")
-            if not isinstance(frames, list) or not frames:
-                raise ValueError(f"Animation {name} needs frames")
-            if not all(isinstance(path, str) for path in frames):
-                raise ValueError(f"Animation {name} has an invalid frame path")
-            if raw_metadata.get("frame_count") != len(frames):
-                raise ValueError(f"Animation {name} frame count does not match")
+            if spritesheet is not None:
+                if frames is not None:
+                    raise ValueError(
+                        f"Animation {name} cannot define both frames and spritesheet"
+                    )
+                if not isinstance(spritesheet, str) or not spritesheet:
+                    raise ValueError(f"Animation {name} has an invalid spritesheet")
+                if not isinstance(frame_count, int) or frame_count <= 0:
+                    raise ValueError(f"Animation {name} has an invalid frame count")
+                frame_paths = tuple(
+                    f"{spritesheet}#{index + 1:04d}"
+                    for index in range(frame_count)
+                )
+            else:
+                if not isinstance(frames, list) or not frames:
+                    raise ValueError(f"Animation {name} needs frames")
+                if not all(isinstance(path, str) for path in frames):
+                    raise ValueError(f"Animation {name} has an invalid frame path")
+                if frame_count != len(frames):
+                    raise ValueError(f"Animation {name} frame count does not match")
+                frame_paths = tuple(frames)
             if not isinstance(fps, (int, float)) or fps <= 0:
                 raise ValueError(f"Animation {name} has an invalid FPS")
             if not isinstance(looping, bool):
@@ -127,10 +182,11 @@ class AnimationAssetSet:
                 )
             animations[name] = AnimationMetadata(
                 name=name,
-                frame_paths=tuple(frames),
+                frame_paths=frame_paths,
                 fps=float(fps),
                 looping=looping,
                 source_cell_size=tuple(raw_source_cell_size),
+                spritesheet_path=spritesheet,
             )
         return animations
 
