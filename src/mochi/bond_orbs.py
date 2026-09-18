@@ -264,7 +264,17 @@ class XpOrbField:
         return shown
 
     def trigger_level_up(self) -> None:
-        """Start a celebratory bloom that does not add or imply extra XP."""
+        """Start a clean milestone bloom and retire stale dense-reward visual debt.
+
+        Bond XP is already committed by the caller. Any pending swarm is only
+        presentation debt, so carrying it into a milestone wastes frame budget
+        and makes the level-up visually compete with old rewards.
+        """
+        self._pending_xp = 0
+        self._active.clear()
+        self._pulses.clear()
+        self._gain_markers.clear()
+        self._emit_accumulator = 0.0
         self._level_up_age = 0.0
 
     def advance(

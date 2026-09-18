@@ -78,6 +78,7 @@ def _state_controller_for(owner):
 class Buddy(Gtk.DrawingArea):
     SIZE = 112
     TICK_MS = 16
+    MAX_TICK_CATCHUP_MS = 96
     CONTEXT_MENU_WIDTH = 244
     CONTEXT_MENU_BASE_HEIGHT = 176
     CONTEXT_MENU_UNKNOWN_ROW_HEIGHT = 44
@@ -144,6 +145,8 @@ class Buddy(Gtk.DrawingArea):
         self._idle_resume_position: tuple[int, int] | None = None
         self._recent_click_reactions: tuple[str, ...] = ()
         self._last_interaction = time.monotonic()
+        self._last_tick_monotonic = time.monotonic()
+        self._frame_elapsed_ms = self.TICK_MS
         self._tuning = InteractionTuning()
         self._tuning_controls: dict[str, Gtk.SpinButton] = {}
         self._walk_motion: WalkMotion | None = None
@@ -957,10 +960,11 @@ class Buddy(Gtk.DrawingArea):
             choose_walk_animation((origin.x, origin.y), (target.x, target.y))
         )
 
-    def _advance_walk(self) -> None:
+    def _advance_walk(self, elapsed_ms: int | None = None) -> None:
         if self._walk_motion is None:
             return
-        self._walk_elapsed_ms += self.TICK_MS
+        step_ms = self.TICK_MS if elapsed_ms is None else max(1, elapsed_ms)
+        self._walk_elapsed_ms += step_ms
         motion = self._walk_motion
         progress = motion.progress(self._walk_elapsed_ms)
         x, y = motion.position_at(self._walk_elapsed_ms)
@@ -974,10 +978,30 @@ class Buddy(Gtk.DrawingArea):
             self._play_animation("idle")
             self._maybe_resume_ambient_activity()
 
+    def _measure_tick_elapsed_ms(self) -> int:
+        """Measure real frame time so missed GTK callbacks do not slow lifecycle time."""
+        now = time.monotonic()
+        previous = getattr(self, "_last_tick_monotonic", None)
+        self._last_tick_monotonic = now
+        tick_ms = getattr(self, "TICK_MS", Buddy.TICK_MS)
+        catchup_ms = getattr(
+            self,
+            "MAX_TICK_CATCHUP_MS",
+            Buddy.MAX_TICK_CATCHUP_MS,
+        )
+        if previous is None:
+            return tick_ms
+
+        elapsed_ms = max(1, round((now - previous) * 1000))
+        return min(elapsed_ms, catchup_ms)
+
     def _tick(self) -> bool:
+        elapsed_ms = Buddy._measure_tick_elapsed_ms(self)
+        self._frame_elapsed_ms = elapsed_ms
+
         walking = self.state.current is MochiState.WALKING and not self._preview_mode
         if walking:
-            self._advance_walk()
+            self._advance_walk(elapsed_ms)
         picking_up = self.state.current is MochiState.PICKUP
         dragging = self.state.current is MochiState.DRAGGED
 
@@ -998,7 +1022,7 @@ class Buddy(Gtk.DrawingArea):
         if (
             not walking
             and (not dragging or held_sway)
-            and self.player.tick(self.TICK_MS)
+            and self.player.tick(elapsed_ms)
         ):
             self.queue_draw()
         return GLib.SOURCE_CONTINUE

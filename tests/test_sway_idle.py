@@ -121,6 +121,23 @@ class BuddyHeldSwayTests(unittest.TestCase):
             tuple(f"sway_idle/sway_idle_{index:02d}.png" for index in range(1, 11)),
         )
 
+    def test_tick_elapsed_uses_monotonic_time_and_caps_large_stalls(self) -> None:
+        buddy = SimpleNamespace(
+            TICK_MS=Buddy.TICK_MS,
+            MAX_TICK_CATCHUP_MS=Buddy.MAX_TICK_CATCHUP_MS,
+            _last_tick_monotonic=10.0,
+        )
+
+        with patch("mochi.buddy.time.monotonic", return_value=10.080):
+            self.assertEqual(Buddy._measure_tick_elapsed_ms(buddy), 80)
+
+        buddy._last_tick_monotonic = 10.0
+        with patch("mochi.buddy.time.monotonic", return_value=11.0):
+            self.assertEqual(
+                Buddy._measure_tick_elapsed_ms(buddy),
+                Buddy.MAX_TICK_CATCHUP_MS,
+            )
+
     def test_tick_advances_sway_while_drag_state_is_held(self) -> None:
         buddy = SimpleNamespace(
             state=SimpleNamespace(current=MochiState.DRAGGED),

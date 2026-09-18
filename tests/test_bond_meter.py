@@ -10,6 +10,7 @@ from mochi.care import BOND_FEED_XP, BondState
 from mochi.emotes import EMOTES_BY_ID
 from mochi.sprites import ANIMATIONS
 from mochi.presence.bond_meter import (
+    BOND_FEED_VISUAL_ORB_LIMIT,
     BOND_PERSIST_INTERVAL_XP,
     BondMeterMixin,
 )
@@ -134,7 +135,7 @@ def test_completed_feed_awards_large_boost_persists_and_shows_bar() -> None:
     assert harness._bond_state == BondState(level=1, xp=10 + BOND_FEED_XP)
     harness._bond_orbs.queue_xp_bounded.assert_called_once_with(
         BOND_FEED_XP,
-        max_outstanding=BOND_FEED_XP,
+        max_outstanding=BOND_FEED_VISUAL_ORB_LIMIT,
     )
     harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_FEED_XP)
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
@@ -434,13 +435,13 @@ def test_feed_uses_visual_backlog_cap_without_reducing_real_xp() -> None:
         harness,
         BOND_FEED_XP,
         persist=True,
-        visual_orb_limit=BOND_FEED_XP,
+        visual_orb_limit=BOND_FEED_VISUAL_ORB_LIMIT,
     )
 
     assert advance.xp_awarded == BOND_FEED_XP
     assert harness._bond_state == BondState(level=1, xp=100 + BOND_FEED_XP)
     harness._bond_orbs.queue_xp_bounded.assert_called_once_with(
         BOND_FEED_XP,
-        max_outstanding=BOND_FEED_XP,
+        max_outstanding=BOND_FEED_VISUAL_ORB_LIMIT,
     )
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
