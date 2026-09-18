@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import lru_cache
 import logging
 
@@ -16,8 +16,6 @@ from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 from mochi.care import BondState, bond_xp_required
 from mochi.emote_shortcut import EmoteCatalogueShortcutMonitor
 from mochi.sprites import ANIMATIONS, SpriteAtlas
-from mochi.sound import SoundEvent
-from mochi.state import MochiState, PresentationState
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,28 +281,54 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             priority=GLib.PRIORITY_LOW,
         )
 
-    def _tick_hover(self) -> bool:
-        changed = False
+    @classmethod
+    def _advance_hover_progress(
+        cls,
+        progress: tuple[float, ...],
+        hovered_index: int | None,
+    ) -> tuple[tuple[float, ...], bool]:
+        updated_progress: list[float] = []
         animating = False
-        for index, current in enumerate(self._hover_progress):
-            target = 1.0 if index == self._hovered_index else 0.0
+        for index, current in enumerate(progress):
+            target = 1.0 if index == hovered_index else 0.0
             distance = target - current
-            if abs(distance) <= self.HOVER_EPSILON:
+            if abs(distance) <= cls.HOVER_EPSILON:
                 updated = target
             else:
-                updated = current + distance * self.HOVER_EASING
+                updated = current + distance * cls.HOVER_EASING
                 animating = True
-            if updated != current:
-                self._hover_progress[index] = updated
-                changed = True
+            updated_progress.append(max(0.0, min(1.0, updated)))
+        return tuple(updated_progress), animating
 
-        if changed:
+    def _tick_hover(self) -> bool:
+        previous = tuple(self._hover_progress)
+        updated, animating = self._advance_hover_progress(
+            previous,
+            self._hovered_index,
+        )
+        if updated != previous:
+            self._hover_progress[:] = updated
             self.queue_draw()
         if animating:
             return GLib.SOURCE_CONTINUE
 
         self._hover_source_id = None
         return GLib.SOURCE_REMOVE
+
+    def reset_hover(self) -> None:
+        source_id = self._hover_source_id
+        self._hover_source_id = None
+        if source_id is not None:
+            try:
+                GLib.source_remove(source_id)
+            except Exception:
+                pass
+
+        had_hover = self._hovered_index is not None or any(self._hover_progress)
+        self._hovered_index = None
+        if had_hover:
+            self._hover_progress[:] = (0.0 for _ in self._hover_progress)
+            self.queue_draw()
 
     @staticmethod
     def _ease_out(progress: float) -> float:
@@ -672,6 +696,7 @@ class EmoteCatalogueWindow:
         self._canvas = EmoteCatalogueCanvas(atlas=atlas)
         self._canvas.set_margin_top(18)
         root.append(self._canvas)
+        self.window.connect("notify::visible", self._on_visibility_changed)
 
         footer = Gtk.Label(label="Ctrl + Alt + E · Esc to close")
         footer.set_xalign(1)
@@ -725,10 +750,16 @@ class EmoteCatalogueWindow:
         self._logger.debug("Emote catalogue opened")
 
     def hide(self) -> None:
+        self._canvas.reset_hover()
         self.window.hide()
 
     def destroy(self) -> None:
+        self._canvas.reset_hover()
         self.window.destroy()
+
+    def _on_visibility_changed(self, window: Gtk.Window, _pspec=None) -> None:
+        if not window.get_visible():
+            self._canvas.reset_hover()
 
     def _on_key_pressed(
         self,
@@ -741,27 +772,6 @@ class EmoteCatalogueWindow:
             self.hide()
             return True
         return False
-
-
-_CRITICAL_STATES = frozenset(
-    (
-        MochiState.SLEEPING,
-        MochiState.WAKING,
-        MochiState.EATING,
-        MochiState.PICKUP,
-        MochiState.DRAGGED,
-        MochiState.DROPPING,
-        MochiState.FEDORA,
-    )
-)
-_MANUAL_REACTION_STATES = frozenset(
-    (
-        MochiState.BLINKING,
-        MochiState.BOUNCING,
-        MochiState.SQUISHING,
-        MochiState.EXCITED,
-    )
-)
 
 
 class EmoteCatalogueMixin:
@@ -810,73 +820,6 @@ class EmoteCatalogueMixin:
         # refreshes naturally here without forcing an unnecessary rebuild.
         window.refresh(self._bond_state)
         window.present()
-
-    def _start_manual_emote(self, emote_id: str) -> bool:
-        emote = EMOTES_BY_ID.get(emote_id)
-        state = getattr(self, "_bond_state", BondState())
-        if emote is None or not emote.is_unlocked(state):
-            return False
-        if self.state.current in _CRITICAL_STATES:
-            return False
-        if (
-            getattr(self.state, "presentation", PresentationState.NORMAL)
-            is not PresentationState.NORMAL
-        ):
-            return False
-
-        self._mark_interaction()
-        self._cancel_hover_heart()
-
-        cancel_look = getattr(self, "_cancel_idle_look", None)
-        if callable(cancel_look):
-            cancel_look()
-
-        if self.state.current is MochiState.WALKING:
-            self._cancel_walk()
-            self._transition_to(MochiState.IDLE)
-            self._play_animation("idle")
-        elif self.state.current in _MANUAL_REACTION_STATES:
-            self._transition_to(MochiState.IDLE)
-            self._play_animation("idle")
-        elif self.state.current is not MochiState.IDLE:
-            self._cancel_active_emote()
-
-        if self.state.current is not MochiState.IDLE:
-            return False
-
-        if emote.id == "heart":
-            return self._start_heart_emote(ignore_cooldown=True)
-        if emote.id == "look":
-            play_look = getattr(self, "_play_idle_look", None)
-            return bool(callable(play_look) and play_look())
-        if emote.id == "dance":
-            return self._play_manual_dance()
-
-        reaction_state = {
-            "bounce": MochiState.BOUNCING,
-            "squish": MochiState.SQUISHING,
-        }.get(emote.id)
-        if reaction_state is None or emote.animation is None:
-            return False
-        if not self._transition_to(reaction_state):
-            return False
-        self._sound.play(SoundEvent.PET)
-        self._play_animation(emote.animation)
-        return True
-
-    def _play_manual_dance(self) -> bool:
-        if not self._transition_to(MochiState.DANCING):
-            return False
-
-        animation = replace(ANIMATIONS["dance"], looping=False, next_state="idle")
-        previous = self._current_animation
-        self._current_animation = "dance"
-        self._active_animation = animation
-        self._pending_animation = "idle"
-        self.player.play(animation)
-        self._logger.debug("Animation: %s -> dance (manual one-shot)", previous)
-        self.queue_draw()
-        return True
 
     def shutdown_presence(self) -> None:
         if self._emote_shortcut_monitor is not None:

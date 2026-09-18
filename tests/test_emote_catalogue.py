@@ -19,35 +19,7 @@ from mochi.presence.emote_catalogue import (
     next_emote_unlock,
 )
 from mochi.sprites import ANIMATIONS
-from mochi.state import MochiState, PresentationState, StateMachine
 
-
-def _harness(*, bond: BondState, state: MochiState = MochiState.IDLE):
-    buddy = object.__new__(EmoteCatalogueMixin)
-    buddy._bond_state = bond
-    buddy.state = StateMachine()
-    buddy.state.current = state
-    buddy._logger = Mock()
-    buddy._mark_interaction = Mock()
-    buddy._cancel_hover_heart = Mock()
-    buddy._cancel_idle_look = Mock(return_value=False)
-    buddy._cancel_active_emote = Mock(return_value=False)
-    buddy._cancel_walk = Mock()
-    buddy._transition_to = Mock(
-        side_effect=lambda next_state: (
-            setattr(buddy.state, "current", next_state) or True
-        )
-    )
-    buddy._play_animation = Mock()
-    buddy._start_heart_emote = Mock(return_value=True)
-    buddy._play_idle_look = Mock(return_value=True)
-    buddy._sound = SimpleNamespace(play=Mock())
-    buddy.player = Mock()
-    buddy._current_animation = "idle"
-    buddy._active_animation = ANIMATIONS["idle"]
-    buddy._pending_animation = None
-    buddy.queue_draw = Mock()
-    return buddy
 
 
 def test_catalogue_contains_unlocked_locked_and_future_placeholder_emotes() -> None:
@@ -161,57 +133,18 @@ def test_card_rasterization_has_no_repeating_render_timer() -> None:
 
 def test_canvas_is_a_read_only_collection_view() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas)
+    mixin_source = inspect.getsource(EmoteCatalogueMixin)
 
     assert "Gtk.GestureClick" not in source
     assert "def _on_click" not in source
     assert "Click to ask Mochi" not in source
+    assert "_start_manual_emote" not in mixin_source
+    assert "_play_manual_dance" not in mixin_source
 
 
-def test_locked_emote_cannot_be_dispatched_before_required_bond_level() -> None:
-    buddy = _harness(bond=BondState(level=2, xp=0))
-
-    assert EmoteCatalogueMixin._start_manual_emote(buddy, "look") is False
-
-    buddy._mark_interaction.assert_not_called()
-    buddy._play_idle_look.assert_not_called()
 
 
-def test_placeholder_emote_can_never_be_dispatched_even_at_high_bond() -> None:
-    buddy = _harness(bond=BondState(level=99, xp=0))
 
-    assert EmoteCatalogueMixin._start_manual_emote(buddy, "mystery-1") is False
-
-    buddy._mark_interaction.assert_not_called()
-    buddy._play_animation.assert_not_called()
-
-
-def test_level_three_unlocks_manual_look() -> None:
-    buddy = _harness(bond=BondState(level=3, xp=0))
-
-    assert EmoteCatalogueMixin._start_manual_emote(buddy, "look") is True
-
-    buddy._play_idle_look.assert_called_once_with()
-
-
-def test_level_five_manual_dance_is_one_authored_cycle() -> None:
-    buddy = _harness(bond=BondState(level=5, xp=0))
-
-    assert EmoteCatalogueMixin._start_manual_emote(buddy, "dance") is True
-
-    buddy._transition_to.assert_called_once_with(MochiState.DANCING)
-    played = buddy.player.play.call_args.args[0]
-    assert played.name == "dance"
-    assert played.looping is False
-    assert buddy._pending_animation == "idle"
-
-
-def test_manual_emote_does_not_interrupt_level_up_presentation() -> None:
-    buddy = _harness(bond=BondState(level=5, xp=0))
-    buddy.state.transition_presentation(PresentationState.LEVEL_UP)
-
-    assert EmoteCatalogueMixin._start_manual_emote(buddy, "heart") is False
-
-    buddy._start_heart_emote.assert_not_called()
 
 
 def test_window_refresh_skips_identical_bond_state() -> None:
@@ -371,3 +304,67 @@ def test_hover_outline_applies_to_every_emote_without_making_cards_clickable() -
     assert "def _draw_hover_outline" in source
     assert "self._draw_hover_outline(context, emote" in source
     assert "Gtk.GestureClick" not in source
+
+
+def test_hover_progress_handles_rapid_pointer_changes_and_converges() -> None:
+    progress = tuple(0.0 for _ in EMOTE_CATALOGUE)
+
+    for hovered in (0, 7, 2, 5, 1, None, 6, 3, None) * 8:
+        progress, _animating = EmoteCatalogueCanvas._advance_hover_progress(
+            progress,
+            hovered,
+        )
+        assert all(0.0 <= value <= 1.0 for value in progress)
+
+    animating = True
+    for _ in range(64):
+        progress, animating = EmoteCatalogueCanvas._advance_hover_progress(
+            progress,
+            None,
+        )
+        if not animating:
+            break
+
+    assert animating is False
+    assert progress == tuple(0.0 for _ in EMOTE_CATALOGUE)
+
+
+def test_hidden_catalogue_resets_hover_state() -> None:
+    window = object.__new__(EmoteCatalogueWindow)
+    window._canvas = SimpleNamespace(reset_hover=Mock())
+    gtk_window = SimpleNamespace(get_visible=Mock(return_value=False))
+
+    EmoteCatalogueWindow._on_visibility_changed(window, gtk_window)
+
+    window._canvas.reset_hover.assert_called_once_with()
+
+
+def test_explicit_hide_resets_hover_before_hiding_window() -> None:
+    calls: list[str] = []
+    window = object.__new__(EmoteCatalogueWindow)
+    window._canvas = SimpleNamespace(reset_hover=lambda: calls.append("reset"))
+    window.window = SimpleNamespace(hide=lambda: calls.append("hide"))
+
+    EmoteCatalogueWindow.hide(window)
+
+    assert calls == ["reset", "hide"]
+
+
+def test_destroy_resets_hover_before_destroying_window() -> None:
+    calls: list[str] = []
+    window = object.__new__(EmoteCatalogueWindow)
+    window._canvas = SimpleNamespace(reset_hover=lambda: calls.append("reset"))
+    window.window = SimpleNamespace(destroy=lambda: calls.append("destroy"))
+
+    EmoteCatalogueWindow.destroy(window)
+
+    assert calls == ["reset", "destroy"]
+
+
+def test_hover_and_glow_have_safe_canvas_padding() -> None:
+    max_glow_half_width = 8.0 / 2.0
+
+    assert EmoteCatalogueCanvas.GLOW_PAD >= (
+        EmoteCatalogueCanvas.HOVER_LIFT + max_glow_half_width
+    )
+    assert EmoteCatalogueCanvas.HOVER_LIFT <= 4.0
