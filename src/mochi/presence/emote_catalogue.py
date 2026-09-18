@@ -775,7 +775,7 @@ class EmoteCatalogueWindow:
 
 
 class EmoteCatalogueMixin:
-    """Own the catalogue window, shortcut bridge, and manual emote dispatch."""
+    """Own the read-only catalogue window and its global shortcut bridge."""
 
     def __init__(self, *args, **kwargs) -> None:
         self._emote_catalogue_window: EmoteCatalogueWindow | None = None
