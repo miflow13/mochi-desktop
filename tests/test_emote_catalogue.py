@@ -10,6 +10,7 @@ from mochi.care import BondState, bond_xp_required
 from mochi.presence.emote_catalogue import (
     EMOTE_CATALOGUE,
     EMOTES_BY_ID,
+    EmoteCard,
     EmoteCatalogueMixin,
     EmoteCatalogueWindow,
     EmotePreview,
@@ -172,3 +173,111 @@ def test_locked_card_does_not_hide_or_dispatch() -> None:
 
     window.hide.assert_not_called()
     idle_add.assert_not_called()
+
+
+def test_preview_caches_representative_frame_before_draw() -> None:
+    source = inspect.getsource(EmotePreview)
+
+    assert "self._frame =" in source
+    draw_source = inspect.getsource(EmotePreview._draw)
+    assert "ANIMATIONS[" not in draw_source
+    assert "self._frame" in draw_source
+
+
+def test_card_refresh_skips_redundant_widget_writes() -> None:
+    card = object.__new__(EmoteCard)
+    card.emote = EMOTES_BY_ID["heart"]
+    card._last_unlocked = True
+    card._last_status = "UNLOCKED"
+    card._last_detail = "Click to ask Mochi to do this emote."
+    card.button = SimpleNamespace(set_sensitive=Mock())
+    card.preview = SimpleNamespace(set_locked=Mock())
+    card.status = SimpleNamespace(
+        set_text=Mock(),
+        add_css_class=Mock(),
+        remove_css_class=Mock(),
+    )
+    card.detail = SimpleNamespace(set_text=Mock())
+
+    EmoteCard.refresh(card, BondState(level=4, xp=123))
+
+    card.button.set_sensitive.assert_not_called()
+    card.preview.set_locked.assert_not_called()
+    card.status.set_text.assert_not_called()
+    card.status.add_css_class.assert_not_called()
+    card.status.remove_css_class.assert_not_called()
+    card.detail.set_text.assert_not_called()
+
+
+def test_window_refresh_skips_identical_bond_state() -> None:
+    window = object.__new__(EmoteCatalogueWindow)
+    window._state = BondState(level=2, xp=33)
+    window._cards = {"heart": SimpleNamespace(refresh=Mock())}
+    window._next_label = SimpleNamespace(set_text=Mock())
+    window._progress = SimpleNamespace(set_fraction=Mock())
+
+    changed = EmoteCatalogueWindow.refresh(
+        window,
+        BondState(level=2, xp=33),
+    )
+
+    assert changed is False
+    window._cards["heart"].refresh.assert_not_called()
+    window._next_label.set_text.assert_not_called()
+    window._progress.set_fraction.assert_not_called()
+
+
+def test_hidden_catalogue_is_not_refreshed_on_each_bond_tick() -> None:
+    buddy = object.__new__(EmoteCatalogueMixin)
+    buddy._bond_state = BondState(level=2, xp=44)
+    buddy._emote_catalogue_window = SimpleNamespace(
+        visible=False,
+        refresh=Mock(),
+    )
+
+    EmoteCatalogueMixin._refresh_emote_catalogue(buddy)
+
+    buddy._emote_catalogue_window.refresh.assert_not_called()
+
+
+def test_visible_catalogue_refreshes_with_live_bond_progress() -> None:
+    buddy = object.__new__(EmoteCatalogueMixin)
+    buddy._bond_state = BondState(level=2, xp=44)
+    buddy._emote_catalogue_window = SimpleNamespace(
+        visible=True,
+        refresh=Mock(),
+    )
+
+    EmoteCatalogueMixin._refresh_emote_catalogue(buddy)
+
+    buddy._emote_catalogue_window.refresh.assert_called_once_with(
+        buddy._bond_state
+    )
+
+
+def test_show_catalogue_lazy_creates_then_forces_current_state_refresh() -> None:
+    buddy = object.__new__(EmoteCatalogueMixin)
+    buddy._preview_mode = False
+    buddy._bond_state = BondState(level=3, xp=12)
+    window = SimpleNamespace(refresh=Mock(), present=Mock())
+    buddy._ensure_emote_catalogue_window = Mock(return_value=window)
+
+    EmoteCatalogueMixin._show_emote_catalogue(buddy)
+
+    buddy._ensure_emote_catalogue_window.assert_called_once_with()
+    window.refresh.assert_called_once_with(buddy._bond_state, force=True)
+    window.present.assert_called_once_with()
+
+
+def test_cumulative_xp_helper_is_cached() -> None:
+    from mochi.presence.emote_catalogue import _bond_xp_to_level_start
+
+    _bond_xp_to_level_start.cache_clear()
+    state = BondState(level=1, xp=10)
+
+    bond_xp_until_level(state, 5)
+    first = _bond_xp_to_level_start.cache_info()
+    bond_xp_until_level(state, 5)
+    second = _bond_xp_to_level_start.cache_info()
+
+    assert second.hits > first.hits

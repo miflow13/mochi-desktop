@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from functools import lru_cache
 import logging
 
 import cairo
@@ -48,15 +49,21 @@ EMOTE_CATALOGUE = (
 EMOTES_BY_ID = {emote.id: emote for emote in EMOTE_CATALOGUE}
 
 
+@lru_cache(maxsize=64)
+def _bond_xp_to_level_start(level: int) -> int:
+    """Cumulative XP needed to reach the beginning of a bond level."""
+    normalized = max(1, int(level))
+    return sum(bond_xp_required(current) for current in range(1, normalized))
+
+
 def bond_xp_until_level(state: BondState, target_level: int) -> int:
     """Return exact XP remaining before the target level begins."""
     if target_level <= state.level:
         return 0
 
-    remaining = state.xp_required - state.xp
-    for level in range(state.level + 1, target_level):
-        remaining += bond_xp_required(level)
-    return max(0, remaining)
+    current_total = _bond_xp_to_level_start(state.level) + state.xp
+    target_total = _bond_xp_to_level_start(target_level)
+    return max(0, target_total - current_total)
 
 
 def next_emote_unlock(state: BondState) -> EmoteDefinition | None:
@@ -163,6 +170,9 @@ class EmotePreview(Gtk.DrawingArea):
         super().__init__()
         self._atlas = atlas
         self._emote = emote
+        animation = ANIMATIONS[emote.animation or "idle"]
+        frames = animation.frames
+        self._frame = frames[min(len(frames) - 1, len(frames) // 2)]
         self._locked = True
         self.set_content_width(self.SIZE)
         self.set_content_height(self.SIZE)
@@ -176,12 +186,6 @@ class EmotePreview(Gtk.DrawingArea):
         self._locked = locked
         self.queue_draw()
 
-    def _representative_frame(self):
-        animation_name = self._emote.animation or "idle"
-        animation = ANIMATIONS[animation_name]
-        frames = animation.frames
-        return frames[min(len(frames) - 1, len(frames) // 2)]
-
     def _draw(
         self,
         _area: Gtk.DrawingArea,
@@ -189,7 +193,7 @@ class EmotePreview(Gtk.DrawingArea):
         width: int,
         height: int,
     ) -> None:
-        frame = self._representative_frame()
+        frame = self._frame
         if not self._locked:
             self._atlas.draw(context, frame, width, height)
             return
@@ -226,6 +230,9 @@ class EmoteCard:
         on_activate,
     ) -> None:
         self.emote = emote
+        self._last_unlocked: bool | None = None
+        self._last_status: str | None = None
+        self._last_detail: str | None = None
         self.button = Gtk.Button()
         self.button.add_css_class("mochi-emote-card")
         self.button.connect("clicked", lambda _button: on_activate(emote.id))
@@ -259,24 +266,34 @@ class EmoteCard:
 
     def refresh(self, state: BondState) -> None:
         unlocked = self.emote.is_unlocked(state)
-        self.button.set_sensitive(unlocked)
-        self.preview.set_locked(not unlocked)
-        self.status.set_text(emote_status_text(self.emote, state))
+        if unlocked != self._last_unlocked:
+            self.button.set_sensitive(unlocked)
+            self.preview.set_locked(not unlocked)
+            if unlocked:
+                self.status.remove_css_class("mochi-emote-card-locked")
+            else:
+                self.status.add_css_class("mochi-emote-card-locked")
+            self._last_unlocked = unlocked
+
+        status = emote_status_text(self.emote, state)
+        if status != self._last_status:
+            self.status.set_text(status)
+            self._last_status = status
 
         if not self.emote.available:
             detail = "A future little mood. Not unlockable yet."
-            self.status.add_css_class("mochi-emote-card-locked")
         elif unlocked:
             detail = "Click to ask Mochi to do this emote."
-            self.status.remove_css_class("mochi-emote-card-locked")
         else:
             remaining = bond_xp_until_level(
                 state,
                 self.emote.required_bond_level or state.level,
             )
             detail = f"{remaining:,} bond XP remaining"
-            self.status.add_css_class("mochi-emote-card-locked")
-        self.detail.set_text(detail)
+
+        if detail != self._last_detail:
+            self.detail.set_text(detail)
+            self._last_detail = detail
 
 
 class EmoteCatalogueWindow:
@@ -295,7 +312,7 @@ class EmoteCatalogueWindow:
     ) -> None:
         self._logger = logger or logging.getLogger(__name__)
         self._cards: dict[str, EmoteCard] = {}
-        self._state = BondState()
+        self._state: BondState | None = None
         self._on_emote_requested = on_emote_requested
 
         self.window = Gtk.Window()
@@ -386,10 +403,17 @@ class EmoteCatalogueWindow:
         root.append(footer)
 
         self.window.set_child(root)
-        self.refresh(self._state)
 
-    def refresh(self, state: BondState) -> None:
-        self._state = BondState(level=state.level, xp=state.xp)
+    @property
+    def visible(self) -> bool:
+        return self.window.get_visible()
+
+    def refresh(self, state: BondState, *, force: bool = False) -> bool:
+        next_state = BondState(level=state.level, xp=state.xp)
+        if not force and next_state == self._state:
+            return False
+
+        self._state = next_state
         next_unlock = next_emote_unlock(self._state)
 
         if next_unlock is None:
@@ -418,6 +442,7 @@ class EmoteCatalogueWindow:
 
         for card in self._cards.values():
             card.refresh(self._state)
+        return True
 
     def present(self) -> None:
         self.window.present()
@@ -431,7 +456,7 @@ class EmoteCatalogueWindow:
 
     def _on_card_activate(self, emote_id: str) -> None:
         emote = EMOTES_BY_ID.get(emote_id)
-        if emote is None or not emote.is_unlocked(self._state):
+        if self._state is None or emote is None or not emote.is_unlocked(self._state):
             return
         self.hide()
         GLib.idle_add(self._dispatch_card, emote_id)
@@ -483,32 +508,40 @@ class EmoteCatalogueMixin:
         super().__init__(*args, **kwargs)
 
         if not self._preview_mode:
-            self._emote_catalogue_window = EmoteCatalogueWindow(
-                owner=self._window,
-                atlas=self.atlas,
-                on_emote_requested=self._start_manual_emote,
-                logger=self._logger,
-            )
-            self._emote_catalogue_window.refresh(self._bond_state)
+            # Keep startup cheap: only the tiny shortcut subscriber exists until
+            # the user actually asks to open the collection window.
             self._emote_shortcut_monitor = EmoteCatalogueShortcutMonitor(
                 on_requested=self._show_emote_catalogue,
                 logger=self._logger,
             )
             self._emote_shortcut_monitor.start()
 
+    def _ensure_emote_catalogue_window(self) -> EmoteCatalogueWindow:
+        window = self._emote_catalogue_window
+        if window is None:
+            window = EmoteCatalogueWindow(
+                owner=self._window,
+                atlas=self.atlas,
+                on_emote_requested=self._start_manual_emote,
+                logger=self._logger,
+            )
+            self._emote_catalogue_window = window
+        return window
+
     def _refresh_emote_catalogue(self) -> None:
-        if self._emote_catalogue_window is not None:
-            self._emote_catalogue_window.refresh(self._bond_state)
+        window = self._emote_catalogue_window
+        if window is not None and window.visible:
+            window.refresh(self._bond_state)
 
     def _set_bond_state_for_ui(self, state: BondState) -> None:
         super()._set_bond_state_for_ui(state)
         self._refresh_emote_catalogue()
 
     def _show_emote_catalogue(self) -> None:
-        window = self._emote_catalogue_window
-        if window is None or self._preview_mode:
+        if self._preview_mode:
             return
-        window.refresh(self._bond_state)
+        window = self._ensure_emote_catalogue_window()
+        window.refresh(self._bond_state, force=True)
         window.present()
 
     def _start_manual_emote(self, emote_id: str) -> bool:
