@@ -65,9 +65,14 @@ def _runtime_harness(state: BondState | None = None):
     harness._bond_meter = Mock()
     harness._bond_level_label = Mock()
     harness._bond_dev_status_label = None
+    harness._dev_unlock_all_emotes = False
+    harness._dev_unlock_all_label = None
+    harness._pending_emote_unlocks = []
     harness._bond_progress_overlay = Mock()
     harness._bond_progress_overlay.active = True
     harness._bond_progress_overlay.level_up_active = False
+    harness._bond_progress_overlay.emote_unlock_active = False
+    harness._bond_progress_overlay.presentation_active = False
     harness._bond_typing_source_id = None
     harness._bond_unsaved_xp = 0
     harness._config = Mock()
@@ -301,6 +306,7 @@ def test_dev_reset_restores_level_one_and_dismisses_overlay() -> None:
 def test_typing_refresh_does_not_dismiss_active_level_up_card() -> None:
     harness = _runtime_harness(BondState(level=2, xp=0))
     harness._bond_progress_overlay.level_up_active = True
+    harness._bond_progress_overlay.presentation_active = True
 
     with patch(
         "mochi.presence.bond_meter.GLib.timeout_add_seconds",

@@ -50,6 +50,7 @@ def _overlay_harness() -> BondProgressOverlay:
     overlay._popover_level_up_level = Mock()
     overlay._level_up_subtitle = Mock()
     overlay._popover_level_up_subtitle = Mock()
+    overlay._unlock_previews = (Mock(), Mock())
     return overlay
 
 
@@ -192,8 +193,10 @@ def test_emote_unlock_switches_to_special_reveal_card() -> None:
     )
     overlay._level_up_level.set_text.assert_called_with("Side Eye")
     overlay._level_up_subtitle.set_text.assert_called_with(
-        "UNCOMMON · Mochi learned a new idle mood"
+        "UNCOMMON · Bond Lv. 2 · now part of Mochi's idle moods"
     )
+    for preview in overlay._unlock_previews:
+        preview.set_emote.assert_called_once()
     assert overlay.emote_unlock_active is True
     assert overlay.presentation_active is True
     assert overlay._level_up_source_id == 95

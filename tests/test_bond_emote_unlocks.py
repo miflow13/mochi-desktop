@@ -14,11 +14,13 @@ def test_presentation_state_has_distinct_emote_unlock_mode() -> None:
 
 
 def test_idle_selector_uses_bond_gated_emote_pool() -> None:
-    source = inspect.getsource(Buddy._choose_idle_action)
+    selector_source = inspect.getsource(Buddy._choose_idle_action)
+    pool_source = inspect.getsource(BondMeterMixin._available_idle_emote_animations)
 
-    assert "unlocked_idle_animation_names" in source
-    assert "_dev_unlock_all_emotes" in source
-    assert "MochiState.EXCITED" in source
+    assert "_available_idle_emote_animations" in selector_source
+    assert "MochiState.IDLE_EMOTE" in selector_source
+    assert "unlocked_idle_animation_names" in pool_source
+    assert "_dev_unlock_all_emotes" in pool_source
 
 
 def test_bond_level_up_queues_revealable_emotes() -> None:
@@ -42,5 +44,5 @@ def test_developer_menu_has_session_only_unlock_all_action() -> None:
 
     assert '"Unlock all emotes"' in menu_source
     assert "Session-only QA override" in menu_source
-    assert "self._dev_unlock_all_emotes = True" in callback_source
+    assert "self._dev_unlock_all_emotes = not self._dev_unlock_all_emotes" in callback_source
     assert "_persist_bond_state" not in callback_source

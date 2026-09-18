@@ -139,7 +139,10 @@ class AmbientActivityController:
         if (
             self._buddy.state.current not in (MochiState.IDLE, MochiState.IDLE_EMOTE)
             or self._buddy._context_menu_open
-            or self._buddy.player.animation is not ANIMATIONS["idle"]
+            or (
+                self._buddy.state.current is MochiState.IDLE
+                and self._buddy.player.animation is not ANIMATIONS["idle"]
+            )
         ):
             return False
         if not self._buddy._transition_to(MochiState.SEARCHING):
