@@ -1,7 +1,8 @@
-"""Large bond-aware emote collection window and manual emote dispatch."""
+"""Large read-only bond-aware emote collection window."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 import logging
 

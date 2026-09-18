@@ -426,6 +426,7 @@ class BondProgressOverlay:
         self._cancel_level_up_timer()
         self._active = False
         self._level_up_active = False
+        self._emote_unlock_active = False
         self._hide_surfaces()
         if was_presentation:
             self._notify_level_up_finished()

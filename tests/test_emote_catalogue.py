@@ -27,7 +27,9 @@ def test_catalogue_contains_unlocked_locked_and_future_placeholder_emotes() -> N
         "heart",
         "bounce",
         "squish",
+        "side-eye",
         "look",
+        "table-flip",
         "dance",
         "mystery-1",
         "mystery-2",
@@ -46,6 +48,8 @@ def test_catalogue_assigns_progressive_rarity_tiers() -> None:
         "common",
         "common",
         "uncommon",
+        "uncommon",
+        "rare",
         "rare",
         "epic",
         "legendary",
@@ -65,7 +69,8 @@ def test_exact_xp_remaining_to_level_three_uses_current_progress() -> None:
 
 
 def test_next_unlock_advances_from_look_to_dance() -> None:
-    assert next_emote_unlock(BondState(level=1, xp=0)).id == "look"
+    assert next_emote_unlock(BondState(level=1, xp=0)).id == "side-eye"
+    assert next_emote_unlock(BondState(level=2, xp=0)).id == "look"
     assert next_emote_unlock(BondState(level=3, xp=0)).id == "dance"
     assert next_emote_unlock(BondState(level=5, xp=0)) is None
 
@@ -76,7 +81,7 @@ def test_catalogue_uses_single_compact_canvas_without_scrolling() -> None:
 
     assert "_build_context_menu" not in mixin_source
     assert "DEFAULT_WIDTH = 900" in window_source
-    assert "DEFAULT_HEIGHT = 780" in window_source
+    assert "DEFAULT_HEIGHT = 900" in window_source
     assert "EmoteCatalogueCanvas" in window_source
     assert "Gtk.Grid()" not in window_source
     assert "Gtk.GridView" not in window_source
@@ -150,6 +155,7 @@ def test_canvas_is_a_read_only_collection_view() -> None:
 def test_window_refresh_skips_identical_bond_state() -> None:
     window = object.__new__(EmoteCatalogueWindow)
     window._state = BondState(level=2, xp=33)
+    window._unlock_all = False
     window._canvas = SimpleNamespace(refresh=Mock())
     window._next_label = SimpleNamespace(set_text=Mock())
     window._progress = SimpleNamespace(set_fraction=Mock())
@@ -168,6 +174,7 @@ def test_window_refresh_skips_identical_bond_state() -> None:
 def test_hidden_catalogue_is_not_refreshed_on_each_bond_tick() -> None:
     buddy = object.__new__(EmoteCatalogueMixin)
     buddy._bond_state = BondState(level=2, xp=44)
+    buddy._dev_unlock_all_emotes = False
     buddy._emote_catalogue_window = SimpleNamespace(
         visible=False,
         refresh=Mock(),
@@ -181,6 +188,7 @@ def test_hidden_catalogue_is_not_refreshed_on_each_bond_tick() -> None:
 def test_visible_catalogue_refreshes_with_live_bond_progress() -> None:
     buddy = object.__new__(EmoteCatalogueMixin)
     buddy._bond_state = BondState(level=2, xp=44)
+    buddy._dev_unlock_all_emotes = False
     buddy._emote_catalogue_window = SimpleNamespace(
         visible=True,
         refresh=Mock(),
@@ -189,7 +197,9 @@ def test_visible_catalogue_refreshes_with_live_bond_progress() -> None:
     EmoteCatalogueMixin._refresh_emote_catalogue(buddy)
 
     buddy._emote_catalogue_window.refresh.assert_called_once_with(
-        buddy._bond_state
+        buddy._bond_state,
+        force=False,
+        unlock_all=False,
     )
 
 
@@ -197,13 +207,17 @@ def test_show_catalogue_lazy_creates_and_reuses_cached_state_when_unchanged() ->
     buddy = object.__new__(EmoteCatalogueMixin)
     buddy._preview_mode = False
     buddy._bond_state = BondState(level=3, xp=12)
+    buddy._dev_unlock_all_emotes = False
     window = SimpleNamespace(refresh=Mock(), present=Mock())
     buddy._ensure_emote_catalogue_window = Mock(return_value=window)
 
     EmoteCatalogueMixin._show_emote_catalogue(buddy)
 
     buddy._ensure_emote_catalogue_window.assert_called_once_with()
-    window.refresh.assert_called_once_with(buddy._bond_state)
+    window.refresh.assert_called_once_with(
+        buddy._bond_state,
+        unlock_all=False,
+    )
     window.present.assert_called_once_with()
 
 
@@ -245,7 +259,8 @@ def test_catalogue_is_application_owned_not_transient_to_buddy() -> None:
 def test_window_refreshes_only_the_single_canvas() -> None:
     source = inspect.getsource(EmoteCatalogueWindow.refresh)
 
-    assert "self._canvas.refresh(self._state)" in source
+    assert "self._canvas.refresh(" in source
+    assert "unlock_all=self._unlock_all" in source
 
 
 def test_locked_card_detail_is_static_across_xp_ticks() -> None:
@@ -368,3 +383,26 @@ def test_hover_and_glow_have_safe_canvas_padding() -> None:
         EmoteCatalogueCanvas.HOVER_LIFT + max_glow_half_width
     )
     assert EmoteCatalogueCanvas.HOVER_LIFT <= 4.0
+
+
+def test_developer_unlock_override_invalidates_card_cache() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas.refresh)
+
+    assert "previous_unlock_all" in source
+    assert "self._unlock_all == previous_unlock_all" in source
+
+
+def test_developer_unlock_override_reaches_catalogue_window() -> None:
+    buddy = object.__new__(EmoteCatalogueMixin)
+    buddy._preview_mode = False
+    buddy._bond_state = BondState(level=1, xp=0)
+    buddy._dev_unlock_all_emotes = True
+    window = SimpleNamespace(refresh=Mock(), present=Mock())
+    buddy._ensure_emote_catalogue_window = Mock(return_value=window)
+
+    EmoteCatalogueMixin._show_emote_catalogue(buddy)
+
+    window.refresh.assert_called_once_with(
+        buddy._bond_state,
+        unlock_all=True,
+    )

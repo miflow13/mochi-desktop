@@ -18,6 +18,7 @@ def _overlay_harness() -> BondProgressOverlay:
     overlay._activity = "typing together"
     overlay._gain_text = ""
     overlay._level_up_active = False
+    overlay._emote_unlock_active = False
     overlay._level_up_previous_level = None
     overlay._state = BondState()
     overlay._on_level_up_finished = Mock()
@@ -172,3 +173,41 @@ def test_level_up_cancels_stale_gain_timer_before_celebration() -> None:
     overlay._set_gain_highlight.assert_called_with(False)
     assert overlay._gain_source_id is None
     assert overlay._level_up_source_id == 94
+
+
+def test_emote_unlock_switches_to_special_reveal_card() -> None:
+    from mochi.emotes import EMOTES_BY_ID
+
+    overlay = _overlay_harness()
+    overlay.resume = Mock()
+
+    with patch(
+        "mochi.presence.bond_progress_overlay.GLib.timeout_add",
+        return_value=95,
+    ):
+        overlay.show_emote_unlock(EMOTES_BY_ID["side-eye"])
+
+    overlay._level_up_title.set_text.assert_called_with(
+        "✦  NEW EMOTE UNLOCKED!  ✦"
+    )
+    overlay._level_up_level.set_text.assert_called_with("Side Eye")
+    overlay._level_up_subtitle.set_text.assert_called_with(
+        "UNCOMMON · Mochi learned a new idle mood"
+    )
+    assert overlay.emote_unlock_active is True
+    assert overlay.presentation_active is True
+    assert overlay._level_up_source_id == 95
+
+
+def test_emote_unlock_finish_notifies_bond_queue() -> None:
+    overlay = _overlay_harness()
+    overlay._emote_unlock_active = True
+    overlay._hide_surfaces = Mock()
+    overlay._set_level_up_highlight = Mock()
+    overlay._set_level_up_content = Mock()
+
+    result = overlay._finish_emote_unlock()
+
+    assert result == 0
+    assert overlay.emote_unlock_active is False
+    overlay._on_level_up_finished.assert_called_once_with()
