@@ -63,3 +63,20 @@ def test_state_controller_rejects_transition_without_mutating_state() -> None:
     assert controller.request(MochiState.SLEEPING) is False
     assert state.current is MochiState.IDLE
     logger.debug.assert_called_once()
+
+
+def test_menu_windows_anchor_to_buddy_widget_not_controller() -> None:
+    context_source = inspect.getsource(BuddyMenuController._build_context_menu)
+    developer_source = inspect.getsource(BuddyMenuController._build_developer_menu)
+
+    assert "anchor_widget=self._buddy" in context_source
+    assert "anchor_widget=self._buddy" in developer_source
+    assert "anchor_widget=self," not in context_source
+    assert "anchor_widget=self," not in developer_source
+
+
+def test_menu_animation_serial_is_owned_by_buddy() -> None:
+    source = inspect.getsource(BuddyMenuController)
+
+    assert 'getattr(self._buddy, "_menu_animation_serial", 0)' in source
+    assert 'getattr(self, "_menu_animation_serial", 0)' not in source

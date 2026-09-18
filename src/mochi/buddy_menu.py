@@ -123,7 +123,7 @@ class BuddyMenuController:
         """Build Mochi's intentionally tiny user-facing right-click menu."""
         popover = MenuWindow(
             owner=self._buddy._window,
-            anchor_widget=self,
+            anchor_widget=self._buddy,
             preferred_width=self._buddy.CONTEXT_MENU_WIDTH,
             preferred_height=self._buddy.CONTEXT_MENU_BASE_HEIGHT,
             follow_owner=True,
@@ -183,7 +183,7 @@ class BuddyMenuController:
         """Developer-only controls opened by Mochi's private global shortcut."""
         popover = MenuWindow(
             owner=self._buddy._window,
-            anchor_widget=self,
+            anchor_widget=self._buddy,
             preferred_width=332,
             preferred_height=680,
             follow_owner=False,
@@ -518,7 +518,7 @@ class BuddyMenuController:
         self, content: Gtk.Widget, rows: tuple[Gtk.Widget, ...]
     ) -> None:
         """Quick ease-out lift + staggered fade without resizing the popover."""
-        self._buddy._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
+        self._buddy._menu_animation_serial = getattr(self._buddy, "_menu_animation_serial", 0) + 1
         serial = self._buddy._menu_animation_serial
         started = time.monotonic()
         duration = 0.18
@@ -596,7 +596,7 @@ class BuddyMenuController:
         self._buddy._developer_menu.popdown()
 
     def _on_context_menu_closed(self, _popover: MenuWindow) -> None:
-        self._buddy._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
+        self._buddy._menu_animation_serial = getattr(self._buddy, "_menu_animation_serial", 0) + 1
         self._buddy._context_menu_open = False
         self._buddy._logger.debug("Context menu closed")
         action = self._buddy._pending_context_action
@@ -605,7 +605,7 @@ class BuddyMenuController:
             GLib.idle_add(self._buddy._dispatch_context_action, action)
 
     def _on_developer_menu_closed(self, _popover: MenuWindow) -> None:
-        self._buddy._menu_animation_serial = getattr(self, "_menu_animation_serial", 0) + 1
+        self._buddy._menu_animation_serial = getattr(self._buddy, "_menu_animation_serial", 0) + 1
         self._buddy._context_menu_open = False
         self._buddy._logger.debug("Developer menu closed")
         action = self._buddy._pending_developer_action
