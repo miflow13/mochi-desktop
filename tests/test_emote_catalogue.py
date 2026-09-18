@@ -251,7 +251,17 @@ def test_catalogue_titlebar_uses_native_close_only_decoration() -> None:
     assert "Gtk.HeaderBar()" in source
     assert "header.set_show_title_buttons(True)" in source
     assert 'header.set_decoration_layout(":close")' in source
+    assert "set_title_widget" not in source
+    assert 'self.window.connect("close-request", self._on_close_request)' in source
     assert "self.window.set_titlebar(header)" in source
+
+
+def test_native_close_request_hides_the_reusable_window() -> None:
+    window = object.__new__(EmoteCatalogueWindow)
+    window.hide = Mock()
+
+    assert EmoteCatalogueWindow._on_close_request(window, Mock()) is True
+    window.hide.assert_called_once_with()
 
 
 def test_window_refreshes_only_the_single_canvas() -> None:

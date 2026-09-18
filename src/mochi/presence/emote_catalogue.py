@@ -303,6 +303,7 @@ class EmoteCatalogueWindow:
         self.window.set_destroy_with_parent(True)
         self.window.set_modal(False)
         self.window.set_hide_on_close(True)
+        self.window.connect("close-request", self._on_close_request)
         self.window.set_resizable(True)
         self.window.set_default_size(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
         self.window.set_size_request(680, 500)
@@ -314,9 +315,8 @@ class EmoteCatalogueWindow:
         header.set_show_title_buttons(True)
         header.set_decoration_layout(":close")
         header.add_css_class("mochi-emote-header")
-        header_title = Gtk.Label(label="Mochi Emotes")
-        header_title.add_css_class("mochi-emote-header-title")
-        header.set_title_widget(header_title)
+        # Leave the centre empty: Gtk.HeaderBar owns this native drag region.
+        # The window title is still available to GNOME and assistive tooling.
         self.window.set_titlebar(header)
 
         css = Gtk.CssProvider()
@@ -428,6 +428,11 @@ class EmoteCatalogueWindow:
 
     def destroy(self) -> None:
         self.window.destroy()
+
+    def _on_close_request(self, _window: Gtk.Window) -> bool:
+        """Keep the reusable catalogue alive when GTK's native X is clicked."""
+        self.hide()
+        return True
 
     def _on_key_pressed(
         self,
