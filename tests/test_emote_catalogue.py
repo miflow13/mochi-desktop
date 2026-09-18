@@ -120,24 +120,26 @@ def test_canvas_uses_long_two_column_rarity_cards() -> None:
     assert "_draw_ornaments" in source
 
 
-def test_canvas_retains_one_surface_and_no_card_widget_tree() -> None:
+def test_canvas_caches_one_surface_per_card_and_no_card_widget_tree() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas)
 
     assert "Gtk.DrawingArea" in source
+    assert "self._card_surfaces" in source
     assert "cairo.ImageSurface" in source
     assert "mask_surface" in source
     assert "Gtk.Button" not in source
     assert "Gtk.Picture" not in source
 
 
-def test_canvas_has_no_scroll_path_or_pointer_motion_repaint() -> None:
+def test_canvas_hover_uses_motion_controller_without_click_dispatch() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas)
 
     assert "Gtk.ScrolledWindow" not in source
-    assert "def refresh" in source
-    assert "state.level == previous.level" in source
-    assert "EventControllerMotion" not in source
-    assert "def _on_motion" not in source
+    assert "Gtk.EventControllerMotion" in source
+    assert 'motion.connect("motion", self._on_motion)' in source
+    assert 'motion.connect("leave", self._on_leave)' in source
+    assert "Gtk.GestureClick" not in source
+    assert "def _on_click" not in source
 
 
 def test_canvas_refresh_is_keyed_to_level_not_exact_xp_state() -> None:
@@ -145,15 +147,15 @@ def test_canvas_refresh_is_keyed_to_level_not_exact_xp_state() -> None:
 
     assert "state.level == previous.level" in source
     assert "state == self._state" not in source
-    assert "self._render_surface()" in source
+    assert "self._render_card_surfaces()" in source
 
 
-def test_canvas_renders_static_surface_in_one_pass() -> None:
-    source = inspect.getsource(EmoteCatalogueCanvas)
+def test_card_rasterization_has_no_repeating_render_timer() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas._render_card_surfaces)
 
     assert "GLib.timeout_add" not in source
-    assert "def _render_surface" in source
-    assert "for index, emote in enumerate(EMOTE_CATALOGUE)" in source
+    assert "for emote in EMOTE_CATALOGUE" in source
+    assert "self._card_surfaces = surfaces" in source
     assert source.count("self.queue_draw()") == 1
 
 
@@ -162,7 +164,6 @@ def test_canvas_is_a_read_only_collection_view() -> None:
 
     assert "Gtk.GestureClick" not in source
     assert "def _on_click" not in source
-    assert "def emote_at" not in source
     assert "Click to ask Mochi" not in source
 
 
@@ -325,4 +326,47 @@ def test_scale_notification_is_guarded_by_last_rendered_scale() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas._on_scale_factor_changed)
 
     assert "scale != self._render_scale" in source
-    assert "self._render_surface()" in source
+    assert "self._render_card_surfaces()" in source
+
+
+def test_card_hit_testing_ignores_gap_and_glow_padding() -> None:
+    first_x, first_y = EmoteCatalogueCanvas._card_origin(0)
+    second_x, second_y = EmoteCatalogueCanvas._card_origin(1)
+
+    assert EmoteCatalogueCanvas.card_index_at(first_x + 10, first_y + 10) == 0
+    assert EmoteCatalogueCanvas.card_index_at(second_x + 10, second_y + 10) == 1
+    assert (
+        EmoteCatalogueCanvas.card_index_at(
+            first_x + EmoteCatalogueCanvas.CARD_WIDTH + 2,
+            first_y + 10,
+        )
+        is None
+    )
+
+
+def test_hover_animation_is_short_lived_and_render_cache_independent() -> None:
+    tick_source = inspect.getsource(EmoteCatalogueCanvas._tick_hover)
+    motion_source = inspect.getsource(EmoteCatalogueCanvas._on_motion)
+
+    assert "self._render_card_surfaces" not in tick_source
+    assert "self._render_card_surfaces" not in motion_source
+    assert "self.queue_draw()" in tick_source
+    assert "self._hover_source_id = None" in tick_source
+    assert "GLib.SOURCE_REMOVE" in tick_source
+
+
+def test_only_rare_and_legendary_cards_get_persistent_rarity_glow() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas._draw_rarity_glow)
+
+    assert '{"rare", "legendary"}' in source
+    assert 'emote.rarity == "rare"' in source
+    assert 'emote.rarity == "legendary"' in source
+    assert "boost" in source
+
+
+def test_hover_outline_applies_to_every_emote_without_making_cards_clickable() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas)
+
+    assert "def _draw_hover_outline" in source
+    assert "self._draw_hover_outline(context, emote" in source
+    assert "Gtk.GestureClick" not in source

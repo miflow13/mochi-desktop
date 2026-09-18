@@ -11,7 +11,7 @@ import gi
 
 gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.care import BondState, bond_xp_required
 from mochi.emote_shortcut import EmoteCatalogueShortcutMonitor
@@ -144,34 +144,75 @@ window.mochi-emote-catalogue {
 
 
 class EmoteCatalogueCanvas(Gtk.DrawingArea):
-    """One retained Cairo canvas for all catalogue cards.
+    """Cached card catalogue with hover-only dynamic presentation.
 
-    Eight long cards fit in four rows, so a scroller and dozens of independently
-    measured GTK widgets are unnecessary. The canvas is rendered into one cached
-    surface only when bond level or display scale changes. XP-only updates belong
-    to the lightweight GTK progress header and never re-rasterize the cards.
+    Card artwork is rasterized once per bond level/display scale. Pointer hover
+    never rebuilds those surfaces: it only moves cached cards a few pixels and
+    paints lightweight rarity/outline overlays for the short transition.
     """
 
     COLUMNS = 2
     CARD_WIDTH = 410
     CARD_HEIGHT = 112
     GAP = 16
+    GLOW_PAD = 12
     PREVIEW_SIZE = 88
-    WIDTH = COLUMNS * CARD_WIDTH + (COLUMNS - 1) * GAP
+    HOVER_LIFT = 4.0
+    HOVER_INTERVAL_MS = 16
+    HOVER_EASING = 0.34
+    HOVER_EPSILON = 0.015
+    WIDTH = (
+        COLUMNS * CARD_WIDTH
+        + (COLUMNS - 1) * GAP
+        + GLOW_PAD * 2
+    )
     ROWS = (len(EMOTE_CATALOGUE) + COLUMNS - 1) // COLUMNS
-    HEIGHT = ROWS * CARD_HEIGHT + (ROWS - 1) * GAP
+    HEIGHT = (
+        ROWS * CARD_HEIGHT
+        + (ROWS - 1) * GAP
+        + GLOW_PAD * 2
+    )
 
     def __init__(self, *, atlas: SpriteAtlas) -> None:
         super().__init__()
         self._atlas = atlas
         self._state: BondState | None = None
-        self._surface: cairo.ImageSurface | None = None
+        self._card_surfaces: list[cairo.ImageSurface] = []
         self._render_scale = 0
+        self._hovered_index: int | None = None
+        self._hover_progress = [0.0 for _ in EMOTE_CATALOGUE]
+        self._hover_source_id: int | None = None
+
         self.set_content_width(self.WIDTH)
         self.set_content_height(self.HEIGHT)
         self.set_halign(Gtk.Align.CENTER)
         self.set_draw_func(self._draw)
         self.connect("notify::scale-factor", self._on_scale_factor_changed)
+
+        motion = Gtk.EventControllerMotion.new()
+        motion.connect("motion", self._on_motion)
+        motion.connect("leave", self._on_leave)
+        self.add_controller(motion)
+
+    @classmethod
+    def _card_origin(cls, index: int) -> tuple[float, float]:
+        column = index % cls.COLUMNS
+        row = index // cls.COLUMNS
+        return (
+            cls.GLOW_PAD + column * (cls.CARD_WIDTH + cls.GAP),
+            cls.GLOW_PAD + row * (cls.CARD_HEIGHT + cls.GAP),
+        )
+
+    @classmethod
+    def card_index_at(cls, x: float, y: float) -> int | None:
+        for index in range(len(EMOTE_CATALOGUE)):
+            card_x, card_y = cls._card_origin(index)
+            if (
+                card_x <= x < card_x + cls.CARD_WIDTH
+                and card_y <= y < card_y + cls.CARD_HEIGHT
+            ):
+                return index
+        return None
 
     def refresh(self, state: BondState) -> None:
         state = BondState(level=state.level, xp=state.xp)
@@ -180,47 +221,95 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         if (
             previous is not None
             and state.level == previous.level
-            and self._surface is not None
+            and len(self._card_surfaces) == len(EMOTE_CATALOGUE)
         ):
             return
-        self._render_surface()
+        self._render_card_surfaces()
 
     def _on_scale_factor_changed(self, *_args) -> None:
         scale = max(1, self.get_scale_factor())
         if self._state is not None and scale != self._render_scale:
-            self._render_surface()
+            self._render_card_surfaces()
 
-    def _render_surface(self) -> None:
+    def _render_card_surfaces(self) -> None:
         if self._state is None:
             return
 
         scale = max(1, self.get_scale_factor())
-        surface = cairo.ImageSurface(
-            cairo.FORMAT_ARGB32, self.WIDTH * scale, self.HEIGHT * scale
-        )
-        surface.set_device_scale(scale, scale)
-        context = cairo.Context(surface)
-        context.set_operator(cairo.OPERATOR_CLEAR)
-        context.paint()
-        context.set_operator(cairo.OPERATOR_OVER)
-
-        for index, emote in enumerate(EMOTE_CATALOGUE):
-            column = index % self.COLUMNS
-            row = index // self.COLUMNS
-            self._draw_card(
-                context,
-                emote,
-                column * (self.CARD_WIDTH + self.GAP),
-                row * (self.CARD_HEIGHT + self.GAP),
+        surfaces: list[cairo.ImageSurface] = []
+        for emote in EMOTE_CATALOGUE:
+            surface = cairo.ImageSurface(
+                cairo.FORMAT_ARGB32,
+                self.CARD_WIDTH * scale,
+                self.CARD_HEIGHT * scale,
             )
+            surface.set_device_scale(scale, scale)
+            context = cairo.Context(surface)
+            context.set_operator(cairo.OPERATOR_CLEAR)
+            context.paint()
+            context.set_operator(cairo.OPERATOR_OVER)
+            self._draw_card(context, emote, 0, 0)
+            surface.flush()
+            surfaces.append(surface)
 
-        surface.flush()
-        # Swap the completed surface atomically, then ask GTK for one repaint.
-        # This avoids eight full-area paints and eight GLib timer callbacks for
-        # a catalogue that contains only eight static cards.
-        self._surface = surface
+        self._card_surfaces = surfaces
         self._render_scale = scale
         self.queue_draw()
+
+    def _on_motion(
+        self,
+        _controller: Gtk.EventControllerMotion,
+        x: float,
+        y: float,
+    ) -> None:
+        hovered = self.card_index_at(x, y)
+        if hovered == self._hovered_index:
+            return
+        self._hovered_index = hovered
+        self._ensure_hover_animation()
+
+    def _on_leave(self, _controller: Gtk.EventControllerMotion) -> None:
+        if self._hovered_index is None:
+            return
+        self._hovered_index = None
+        self._ensure_hover_animation()
+
+    def _ensure_hover_animation(self) -> None:
+        if self._hover_source_id is not None:
+            return
+        self._hover_source_id = GLib.timeout_add(
+            self.HOVER_INTERVAL_MS,
+            self._tick_hover,
+            priority=GLib.PRIORITY_LOW,
+        )
+
+    def _tick_hover(self) -> bool:
+        changed = False
+        animating = False
+        for index, current in enumerate(self._hover_progress):
+            target = 1.0 if index == self._hovered_index else 0.0
+            distance = target - current
+            if abs(distance) <= self.HOVER_EPSILON:
+                updated = target
+            else:
+                updated = current + distance * self.HOVER_EASING
+                animating = True
+            if updated != current:
+                self._hover_progress[index] = updated
+                changed = True
+
+        if changed:
+            self.queue_draw()
+        if animating:
+            return GLib.SOURCE_CONTINUE
+
+        self._hover_source_id = None
+        return GLib.SOURCE_REMOVE
+
+    @staticmethod
+    def _ease_out(progress: float) -> float:
+        clamped = max(0.0, min(1.0, progress))
+        return 1.0 - (1.0 - clamped) ** 3
 
     def _draw_card(
         self,
@@ -266,11 +355,26 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             self._draw_silhouette(context, frame)
         context.restore()
 
-        self._draw_text(context, emote.label, 126, 42, 17, (0.12, 0.12, 0.12, 1), bold=True)
+        self._draw_text(
+            context,
+            emote.label,
+            126,
+            42,
+            17,
+            (0.12, 0.12, 0.12, 1),
+            bold=True,
+        )
         status = emote_status_text(emote, self._state)
         status_colour = rarity.colour if unlocked else (0.38, 0.38, 0.38)
         self._draw_text(context, status, 126, 62, 10, status_colour, bold=True)
-        self._draw_text(context, self._detail(emote, unlocked), 126, 88, 10, (0.40, 0.40, 0.40, 1))
+        self._draw_text(
+            context,
+            self._detail(emote, unlocked),
+            126,
+            88,
+            10,
+            (0.40, 0.40, 0.40, 1),
+        )
 
         badge_width = 92
         badge_x = self.CARD_WIDTH - badge_width - 14
@@ -281,8 +385,79 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         context.set_line_width(1)
         self._rounded_rectangle(context, badge_x, 14, badge_width, 24, 12)
         context.stroke()
-        self._draw_text(context, rarity.label, badge_x + 12, 30, 9, rarity.colour, bold=True)
+        self._draw_text(
+            context,
+            rarity.label,
+            badge_x + 12,
+            30,
+            9,
+            rarity.colour,
+            bold=True,
+        )
         context.restore()
+
+    def _draw_rarity_glow(
+        self,
+        context: cairo.Context,
+        emote: EmoteDefinition,
+        x: float,
+        y: float,
+        hover: float,
+    ) -> None:
+        if emote.rarity not in {"rare", "legendary"}:
+            return
+
+        rarity = RARITY_STYLES[emote.rarity]
+        red, green, blue = rarity.colour
+        base = 0.11 if emote.rarity == "rare" else 0.18
+        boost = 0.11 if emote.rarity == "rare" else 0.18
+        strength = base + boost * hover
+        layers = (
+            (8.0, 0.18),
+            (5.0, 0.28),
+            (2.5, 0.44),
+        )
+        for width, alpha_scale in layers:
+            context.set_source_rgba(
+                red,
+                green,
+                blue,
+                strength * alpha_scale,
+            )
+            context.set_line_width(width)
+            self._rounded_rectangle(
+                context,
+                x + 1,
+                y + 1,
+                self.CARD_WIDTH - 2,
+                self.CARD_HEIGHT - 2,
+                15,
+            )
+            context.stroke()
+
+    def _draw_hover_outline(
+        self,
+        context: cairo.Context,
+        emote: EmoteDefinition,
+        x: float,
+        y: float,
+        hover: float,
+    ) -> None:
+        if hover <= 0:
+            return
+        rarity = RARITY_STYLES[emote.rarity]
+        red, green, blue = rarity.colour
+        context.set_source_rgba(red, green, blue, 0.16 + 0.34 * hover)
+        context.set_line_width(1.0 + 1.25 * hover)
+        self._rounded_rectangle(
+            context,
+            x + 1,
+            y + 1,
+            self.CARD_WIDTH - 2,
+            self.CARD_HEIGHT - 2,
+            14,
+        )
+        context.stroke()
 
     def _draw_ornaments(self, context: cairo.Context, rarity: RarityStyle) -> None:
         red, green, blue = rarity.colour
@@ -308,22 +483,45 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
     ) -> None:
         context.new_sub_path()
         context.arc(x + width - radius, y + radius, radius, -1.5708, 0)
-        context.arc(x + width - radius, y + height - radius, radius, 0, 1.5708)
-        context.arc(x + radius, y + height - radius, radius, 1.5708, 3.1416)
+        context.arc(
+            x + width - radius,
+            y + height - radius,
+            radius,
+            0,
+            1.5708,
+        )
+        context.arc(
+            x + radius,
+            y + height - radius,
+            radius,
+            1.5708,
+            3.1416,
+        )
         context.arc(x + radius, y + radius, radius, 3.1416, 4.7124)
         context.close_path()
 
     def _preview_frame(self, emote: EmoteDefinition):
         animation = ANIMATIONS[emote.animation or "idle"]
-        return animation.frames[min(len(animation.frames) - 1, len(animation.frames) // 2)]
+        return animation.frames[
+            min(len(animation.frames) - 1, len(animation.frames) // 2)
+        ]
 
     def _draw_silhouette(self, context: cairo.Context, frame) -> None:
         sprite = self._atlas.frames[frame.sprite]
         source_width, source_height = self._atlas.CANVAS_SIZE
-        scale = min(self.PREVIEW_SIZE / source_width, self.PREVIEW_SIZE / source_height)
+        scale = min(
+            self.PREVIEW_SIZE / source_width,
+            self.PREVIEW_SIZE / source_height,
+        )
         offset_scale = self.PREVIEW_SIZE / self._atlas.OFFSET_COORDINATE_SIZE
-        x = round((self.PREVIEW_SIZE - source_width * scale) / 2 + frame.horizontal_offset * offset_scale)
-        y = round((self.PREVIEW_SIZE - source_height * scale) / 2 + frame.vertical_offset * offset_scale)
+        x = round(
+            (self.PREVIEW_SIZE - source_width * scale) / 2
+            + frame.horizontal_offset * offset_scale
+        )
+        y = round(
+            (self.PREVIEW_SIZE - source_height * scale) / 2
+            + frame.vertical_offset * offset_scale
+        )
         context.translate(x, y)
         context.scale(scale, scale)
         context.set_source_rgba(0.10, 0.14, 0.11, 0.78)
@@ -337,7 +535,16 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         return "Keep bonding to discover this mood."
 
     @staticmethod
-    def _draw_text(context, text: str, x: float, y: float, size: float, colour, *, bold: bool = False) -> None:
+    def _draw_text(
+        context,
+        text: str,
+        x: float,
+        y: float,
+        size: float,
+        colour,
+        *,
+        bold: bool = False,
+    ) -> None:
         weight = cairo.FONT_WEIGHT_BOLD if bold else cairo.FONT_WEIGHT_NORMAL
         context.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, weight)
         context.set_font_size(size)
@@ -345,10 +552,27 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         context.move_to(x, y)
         context.show_text(text)
 
-    def _draw(self, _area, context: cairo.Context, _width: int, _height: int) -> None:
-        if self._surface is not None:
-            context.set_source_surface(self._surface, 0, 0)
+    def _draw(
+        self,
+        _area,
+        context: cairo.Context,
+        _width: int,
+        _height: int,
+    ) -> None:
+        if len(self._card_surfaces) != len(EMOTE_CATALOGUE):
+            return
+
+        for index, (emote, surface) in enumerate(
+            zip(EMOTE_CATALOGUE, self._card_surfaces)
+        ):
+            x, y = self._card_origin(index)
+            hover = self._ease_out(self._hover_progress[index])
+            lifted_y = y - self.HOVER_LIFT * hover
+
+            self._draw_rarity_glow(context, emote, x, lifted_y, hover)
+            context.set_source_surface(surface, x, lifted_y)
             context.paint()
+            self._draw_hover_outline(context, emote, x, lifted_y, hover)
 
 
 class EmoteCatalogueWindow:
