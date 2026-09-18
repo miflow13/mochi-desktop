@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -10,6 +11,8 @@ from mochi.presence.emote_catalogue import (
     EMOTE_CATALOGUE,
     EMOTES_BY_ID,
     EmoteCatalogueMixin,
+    EmoteCatalogueWindow,
+    EmotePreview,
     bond_xp_until_level,
     emote_status_text,
     next_emote_unlock,
@@ -62,7 +65,7 @@ def test_catalogue_contains_unlocked_locked_and_future_placeholder_emotes() -> N
     assert EMOTES_BY_ID["heart"].is_unlocked(state)
     assert not EMOTES_BY_ID["look"].is_unlocked(state)
     assert not EMOTES_BY_ID["mystery-1"].is_unlocked(BondState(level=99, xp=0))
-    assert emote_status_text(EMOTES_BY_ID["mystery-1"], state) == "Coming soon"
+    assert emote_status_text(EMOTES_BY_ID["mystery-1"], state) == "COMING SOON"
 
 
 def test_exact_xp_remaining_to_level_three_uses_current_progress() -> None:
@@ -74,13 +77,27 @@ def test_exact_xp_remaining_to_level_three_uses_current_progress() -> None:
 
 
 def test_next_unlock_advances_from_look_to_dance() -> None:
-    level_one = BondState(level=1, xp=0)
-    level_three = BondState(level=3, xp=0)
-    level_five = BondState(level=5, xp=0)
+    assert next_emote_unlock(BondState(level=1, xp=0)).id == "look"
+    assert next_emote_unlock(BondState(level=3, xp=0)).id == "dance"
+    assert next_emote_unlock(BondState(level=5, xp=0)) is None
 
-    assert next_emote_unlock(level_one).id == "look"
-    assert next_emote_unlock(level_three).id == "dance"
-    assert next_emote_unlock(level_five) is None
+
+def test_catalogue_is_large_card_grid_not_a_context_menu_feature() -> None:
+    mixin_source = inspect.getsource(EmoteCatalogueMixin)
+    window_source = inspect.getsource(EmoteCatalogueWindow)
+
+    assert "_build_context_menu" not in mixin_source
+    assert "DEFAULT_WIDTH = 900" in window_source
+    assert "DEFAULT_HEIGHT = 680" in window_source
+    assert "Gtk.Grid()" in window_source
+    assert "index % 3" in window_source
+
+
+def test_locked_previews_use_authored_sprite_alpha_as_silhouette() -> None:
+    source = inspect.getsource(EmotePreview._draw)
+
+    assert "mask_surface" in source
+    assert "self._atlas.draw" in source
 
 
 def test_locked_emote_cannot_be_dispatched_before_required_bond_level() -> None:
@@ -130,36 +147,28 @@ def test_manual_emote_does_not_interrupt_level_up_presentation() -> None:
     buddy._start_heart_emote.assert_not_called()
 
 
-def test_unlocked_selection_waits_for_catalogue_close_before_dispatch() -> None:
-    buddy = object.__new__(EmoteCatalogueMixin)
-    buddy._bond_state = BondState(level=3, xp=0)
-    buddy._pending_manual_emote = None
-    buddy._emote_catalogue_window = SimpleNamespace(popdown=Mock())
-    buddy._context_menu_open = True
-    buddy._dispatch_manual_emote = Mock()
-
-    EmoteCatalogueMixin._choose_manual_emote(buddy, "look")
-    assert buddy._pending_manual_emote == "look"
-    buddy._emote_catalogue_window.popdown.assert_called_once_with()
+def test_unlocked_card_hides_window_then_dispatches_on_idle() -> None:
+    window = object.__new__(EmoteCatalogueWindow)
+    window._state = BondState(level=3, xp=0)
+    window._on_emote_requested = Mock()
+    window.hide = Mock()
+    window._dispatch_card = Mock(return_value=False)
 
     with patch("mochi.presence.emote_catalogue.GLib.idle_add") as idle_add:
-        EmoteCatalogueMixin._on_emote_catalogue_closed(
-            buddy,
-            buddy._emote_catalogue_window,
-        )
+        EmoteCatalogueWindow._on_card_activate(window, "look")
 
-    assert buddy._context_menu_open is False
-    assert buddy._pending_manual_emote is None
-    idle_add.assert_called_once_with(buddy._dispatch_manual_emote, "look")
+    window.hide.assert_called_once_with()
+    idle_add.assert_called_once_with(window._dispatch_card, "look")
 
 
-def test_locked_selection_is_ignored_without_closing_catalogue() -> None:
-    buddy = object.__new__(EmoteCatalogueMixin)
-    buddy._bond_state = BondState(level=1, xp=0)
-    buddy._pending_manual_emote = None
-    buddy._emote_catalogue_window = SimpleNamespace(popdown=Mock())
+def test_locked_card_does_not_hide_or_dispatch() -> None:
+    window = object.__new__(EmoteCatalogueWindow)
+    window._state = BondState(level=1, xp=0)
+    window.hide = Mock()
+    window._dispatch_card = Mock(return_value=False)
 
-    EmoteCatalogueMixin._choose_manual_emote(buddy, "dance")
+    with patch("mochi.presence.emote_catalogue.GLib.idle_add") as idle_add:
+        EmoteCatalogueWindow._on_card_activate(window, "dance")
 
-    assert buddy._pending_manual_emote is None
-    buddy._emote_catalogue_window.popdown.assert_not_called()
+    window.hide.assert_not_called()
+    idle_add.assert_not_called()
