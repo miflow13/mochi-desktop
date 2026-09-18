@@ -249,19 +249,6 @@ class Buddy(Gtk.DrawingArea):
             self._schedule_blink()
             self._schedule_computer_idle_emote()
 
-, press, pickup, and drag.
-        # Apply it to both the drawing area and the toplevel because XWayland
-        # hands an active window move to the compositor, which can otherwise
-        # override a child-widget cursor.
-        held = (
-            self._hovered
-            or self._press is not None
-            or self._drag_started
-            or self.state.current in (MochiState.PICKUP, MochiState.DRAGGED)
-        )
-        cursor_name = "pointer" if held else None
-        self.set_cursor_from_name(cursor_name)
-        self._window.set_cursor_from_name(cursor_name)
 
 
     # Compatibility seams for feature mixins and GTK callbacks. The behavior
