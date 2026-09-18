@@ -83,15 +83,17 @@ def test_next_unlock_advances_from_look_to_dance() -> None:
     assert next_emote_unlock(BondState(level=5, xp=0)) is None
 
 
-def test_catalogue_is_large_card_grid_not_a_context_menu_feature() -> None:
+def test_catalogue_uses_virtualized_grid_view_not_a_scrolled_grid() -> None:
     mixin_source = inspect.getsource(EmoteCatalogueMixin)
     window_source = inspect.getsource(EmoteCatalogueWindow)
 
     assert "_build_context_menu" not in mixin_source
     assert "DEFAULT_WIDTH = 900" in window_source
     assert "DEFAULT_HEIGHT = 680" in window_source
-    assert "Gtk.Grid()" in window_source
-    assert "index % 3" in window_source
+    assert "Gtk.GridView.new" in window_source
+    assert "Gtk.Grid()" not in window_source
+    assert "Gtk.SignalListItemFactory" in window_source
+    assert "grid.set_max_columns(3)" in window_source
 
 
 def test_previews_are_static_pictures_with_cached_silhouette_textures() -> None:
@@ -101,6 +103,14 @@ def test_previews_are_static_pictures_with_cached_silhouette_textures() -> None:
     assert "Gdk.MemoryTexture.new" in source
     assert "mask_surface" in source
     assert "set_draw_func" not in source
+
+
+def test_factory_refreshes_only_cards_bound_in_the_viewport() -> None:
+    source = inspect.getsource(EmoteCatalogueWindow)
+
+    assert "self._bound_cards" in source
+    assert "for card in self._bound_cards" in source
+    assert 'factory.connect("unbind", self._unbind_card)' in source
 
 
 def test_locked_emote_cannot_be_dispatched_before_required_bond_level() -> None:
@@ -215,7 +225,8 @@ def test_card_refresh_skips_redundant_widget_writes() -> None:
 def test_window_refresh_skips_identical_bond_state() -> None:
     window = object.__new__(EmoteCatalogueWindow)
     window._state = BondState(level=2, xp=33)
-    window._cards = {"heart": SimpleNamespace(refresh=Mock())}
+    card = Mock()
+    window._bound_cards = {card}
     window._next_label = SimpleNamespace(set_text=Mock())
     window._progress = SimpleNamespace(set_fraction=Mock())
 
@@ -225,7 +236,7 @@ def test_window_refresh_skips_identical_bond_state() -> None:
     )
 
     assert changed is False
-    window._cards["heart"].refresh.assert_not_called()
+    card.refresh.assert_not_called()
     window._next_label.set_text.assert_not_called()
     window._progress.set_fraction.assert_not_called()
 
@@ -286,17 +297,17 @@ def test_cumulative_xp_helper_is_cached() -> None:
     assert second.hits > first.hits
 
 
-def test_catalogue_titlebar_exposes_only_custom_close_control() -> None:
+def test_catalogue_titlebar_uses_native_close_only_decoration() -> None:
     source = inspect.getsource(EmoteCatalogueWindow.__init__)
 
     assert "Gtk.HeaderBar()" in source
-    assert "header.set_show_title_buttons(False)" in source
-    assert 'Gtk.Button.new_from_icon_name("window-close-symbolic")' in source
+    assert "header.set_show_title_buttons(True)" in source
+    assert 'header.set_decoration_layout(":close")' in source
     assert "self.window.set_titlebar(header)" in source
 
 
 def test_cards_share_preview_texture_cache() -> None:
-    source = inspect.getsource(EmoteCatalogueWindow.__init__)
+    source = inspect.getsource(EmoteCatalogueWindow)
 
     assert "_preview_texture_cache" in source
     assert "texture_cache=self._preview_texture_cache" in source

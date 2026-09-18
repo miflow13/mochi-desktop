@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from functools import lru_cache
 import logging
-import sys
 
 import cairo
 import gi
@@ -128,9 +127,9 @@ button.mochi-emote-close {
 }
 button.mochi-emote-card {
     min-width: 232px;
-    min-height: 258px;
+    min-height: 250px;
     padding: 0;
-    border-radius: 18px;
+    border-radius: 12px;
     background-image: none;
     background-color: alpha(@theme_fg_color, 0.045);
     border: 1px solid alpha(@theme_fg_color, 0.10);
@@ -161,13 +160,12 @@ button.mochi-emote-card:disabled {
     color: alpha(@theme_fg_color, 0.62);
     font-size: 11px;
 }
-.mochi-emote-preview {
-    background-color: alpha(@theme_fg_color, 0.028);
-    border-radius: 14px;
-}
 .mochi-emote-footer {
     color: alpha(@theme_fg_color, 0.48);
     font-size: 11px;
+}
+gridview.mochi-emote-grid {
+    border-spacing: 14px;
 }
 """
 
@@ -181,10 +179,21 @@ class EmotePreview(Gtk.Picture):
         self,
         *,
         atlas: SpriteAtlas,
-        emote: EmoteDefinition,
         texture_cache: dict[tuple[object, ...], Gdk.Texture],
     ) -> None:
         super().__init__()
+        self._atlas = atlas
+        self._texture_cache = texture_cache
+        self._unlocked_texture: Gdk.Texture | None = None
+        self._locked_texture: Gdk.Texture | None = None
+        self._locked = True
+        self.set_content_fit(Gtk.ContentFit.CONTAIN)
+        self.set_can_shrink(False)
+        self.set_size_request(self.SIZE, self.SIZE)
+        self.set_halign(Gtk.Align.CENTER)
+        self.add_css_class("mochi-emote-preview")
+
+    def set_emote(self, emote: EmoteDefinition) -> None:
         animation = ANIMATIONS[emote.animation or "idle"]
         frames = animation.frames
         frame = frames[min(len(frames) - 1, len(frames) // 2)]
@@ -194,26 +203,20 @@ class EmotePreview(Gtk.Picture):
             frame.vertical_offset,
         )
         self._unlocked_texture = self._cached_texture(
-            atlas,
+            self._atlas,
             frame,
             locked=False,
             key=(*key, False),
-            cache=texture_cache,
+            cache=self._texture_cache,
         )
         self._locked_texture = self._cached_texture(
-            atlas,
+            self._atlas,
             frame,
             locked=True,
             key=(*key, True),
-            cache=texture_cache,
+            cache=self._texture_cache,
         )
-        self._locked = True
-        self.set_paintable(self._locked_texture)
-        self.set_content_fit(Gtk.ContentFit.CONTAIN)
-        self.set_can_shrink(True)
-        self.set_size_request(self.SIZE, self.SIZE)
-        self.set_halign(Gtk.Align.CENTER)
-        self.add_css_class("mochi-emote-preview")
+        self.set_paintable(self._locked_texture if self._locked else self._unlocked_texture)
 
     def set_locked(self, locked: bool) -> None:
         if locked == self._locked:
@@ -288,17 +291,17 @@ class EmoteCard:
         self,
         *,
         atlas: SpriteAtlas,
-        emote: EmoteDefinition,
         on_activate,
         texture_cache: dict[tuple[object, ...], Gdk.Texture],
     ) -> None:
-        self.emote = emote
+        self.emote: EmoteDefinition | None = None
+        self._on_activate = on_activate
         self._last_unlocked: bool | None = None
         self._last_status: str | None = None
         self._last_detail: str | None = None
         self.button = Gtk.Button()
         self.button.add_css_class("mochi-emote-card")
-        self.button.connect("clicked", lambda _button: on_activate(emote.id))
+        self.button.connect("clicked", self._on_clicked)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         content.set_margin_top(12)
@@ -308,12 +311,11 @@ class EmoteCard:
 
         self.preview = EmotePreview(
             atlas=atlas,
-            emote=emote,
             texture_cache=texture_cache,
         )
         content.append(self.preview)
 
-        self.name = Gtk.Label(label=emote.label)
+        self.name = Gtk.Label()
         self.name.set_xalign(0)
         self.name.add_css_class("mochi-emote-card-name")
         content.append(self.name)
@@ -331,7 +333,23 @@ class EmoteCard:
 
         self.button.set_child(content)
 
+    def bind(self, emote: EmoteDefinition) -> None:
+        if self.emote is emote:
+            return
+        self.emote = emote
+        self._last_unlocked = None
+        self._last_status = None
+        self._last_detail = None
+        self.name.set_text(emote.label)
+        self.preview.set_emote(emote)
+
+    def _on_clicked(self, _button: Gtk.Button) -> None:
+        if self.emote is not None:
+            self._on_activate(self.emote.id)
+
     def refresh(self, state: BondState) -> None:
+        if self.emote is None:
+            return
         unlocked = self.emote.is_unlocked(state)
         if unlocked != self._last_unlocked:
             self.button.set_sensitive(unlocked)
@@ -378,7 +396,9 @@ class EmoteCatalogueWindow:
         logger: logging.Logger | None = None,
     ) -> None:
         self._logger = logger or logging.getLogger(__name__)
-        self._cards: dict[str, EmoteCard] = {}
+        self._bound_cards: set[EmoteCard] = set()
+        self._cards_by_button: dict[Gtk.Button, EmoteCard] = {}
+        self._atlas = atlas
         self._preview_texture_cache: dict[tuple[object, ...], Gdk.Texture] = {}
         self._state: BondState | None = None
         self._on_emote_requested = on_emote_requested
@@ -394,20 +414,15 @@ class EmoteCatalogueWindow:
         self.window.set_size_request(680, 500)
         self.window.add_css_class("mochi-emote-catalogue")
 
-        # Use a client-side titlebar so the collection has exactly one window
-        # control: close. GtkHeaderBar keeps native Wayland window dragging.
+        # Keep this a native header-bar decoration. GTK reserves the remaining
+        # header-bar area as the compositor-supported drag region on Wayland.
         header = Gtk.HeaderBar()
-        header.set_show_title_buttons(False)
+        header.set_show_title_buttons(True)
+        header.set_decoration_layout(":close")
         header.add_css_class("mochi-emote-header")
         header_title = Gtk.Label(label="Mochi Emotes")
         header_title.add_css_class("mochi-emote-header-title")
         header.set_title_widget(header_title)
-        close_button = Gtk.Button.new_from_icon_name("window-close-symbolic")
-        close_button.set_tooltip_text("Close")
-        close_button.add_css_class("flat")
-        close_button.add_css_class("mochi-emote-close")
-        close_button.connect("clicked", lambda _button: self.hide())
-        header.pack_end(close_button)
         self.window.set_titlebar(header)
 
         css = Gtk.CssProvider()
@@ -465,19 +480,16 @@ class EmoteCatalogueWindow:
         scroller.set_vexpand(True)
         scroller.set_margin_top(18)
 
-        grid = Gtk.Grid()
-        grid.set_column_spacing(14)
-        grid.set_row_spacing(14)
-        grid.set_column_homogeneous(True)
-        for index, emote in enumerate(EMOTE_CATALOGUE):
-            card = EmoteCard(
-                atlas=atlas,
-                emote=emote,
-                on_activate=self._on_card_activate,
-                texture_cache=self._preview_texture_cache,
-            )
-            self._cards[emote.id] = card
-            grid.attach(card.button, index % 3, index // 3, 1, 1)
+        self._emote_model = Gtk.StringList.new([emote.id for emote in EMOTE_CATALOGUE])
+        factory = Gtk.SignalListItemFactory()
+        factory.connect("setup", self._setup_card)
+        factory.connect("bind", self._bind_card)
+        factory.connect("unbind", self._unbind_card)
+        grid = Gtk.GridView.new(Gtk.NoSelection.new(self._emote_model), factory)
+        grid.set_min_columns(1)
+        grid.set_max_columns(3)
+        grid.set_enable_rubberband(False)
+        grid.add_css_class("mochi-emote-grid")
         scroller.set_child(grid)
         root.append(scroller)
 
@@ -525,9 +537,41 @@ class EmoteCatalogueWindow:
                 f"at Lv. {target} · {remaining:,} XP to go"
             )
 
-        for card in self._cards.values():
+        for card in self._bound_cards:
             card.refresh(self._state)
         return True
+
+    def _setup_card(
+        self,
+        _factory: Gtk.SignalListItemFactory,
+        list_item: Gtk.ListItem,
+    ) -> None:
+        card = EmoteCard(
+            atlas=self._atlas,
+            on_activate=self._on_card_activate,
+            texture_cache=self._preview_texture_cache,
+        )
+        list_item.set_child(card.button)
+        self._cards_by_button[card.button] = card
+
+    def _bind_card(
+        self,
+        _factory: Gtk.SignalListItemFactory,
+        list_item: Gtk.ListItem,
+    ) -> None:
+        emote_id = list_item.get_item().get_string()
+        card = self._cards_by_button[list_item.get_child()]
+        card.bind(EMOTES_BY_ID[emote_id])
+        self._bound_cards.add(card)
+        if self._state is not None:
+            card.refresh(self._state)
+
+    def _unbind_card(
+        self,
+        _factory: Gtk.SignalListItemFactory,
+        list_item: Gtk.ListItem,
+    ) -> None:
+        self._bound_cards.discard(self._cards_by_button[list_item.get_child()])
 
     def present(self) -> None:
         self.window.present()
