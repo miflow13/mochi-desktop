@@ -31,6 +31,7 @@ class MochiState(Enum):
 class PresentationState(Enum):
     NORMAL = auto()
     LEVEL_UP = auto()
+    EMOTE_UNLOCK = auto()
 
 
 class StateMachine:
