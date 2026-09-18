@@ -404,13 +404,17 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         y: float,
         hover: float,
     ) -> None:
-        if emote.rarity not in {"rare", "legendary"}:
+        if emote.rarity == "rare":
+            base = 0.11
+            boost = 0.11
+        elif emote.rarity == "legendary":
+            base = 0.18
+            boost = 0.18
+        else:
             return
 
         rarity = RARITY_STYLES[emote.rarity]
         red, green, blue = rarity.colour
-        base = 0.11 if emote.rarity == "rare" else 0.18
-        boost = 0.11 if emote.rarity == "rare" else 0.18
         strength = base + boost * hover
         layers = (
             (8.0, 0.18),
