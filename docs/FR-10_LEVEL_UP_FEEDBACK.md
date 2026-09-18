@@ -8,11 +8,12 @@ This branch is presentation-only. It does not add new bond progression rules, pe
 
 ## MVP
 
-- [ ] **Dedicated level-up emote**
+- [x] **Dedicated level-up emote**
   - Plays once when a new bond level is reached.
   - Should feel celebratory and character-driven.
   - Must not loop indefinitely or replay from repeated/stale level state.
   - Returns cleanly to the appropriate post-emote state.
+  - Uses the authored 16-frame default celebration unless a future legendary level-up explicitly supersedes it.
 
 - [ ] **Immediate level-up line**
   - Show a short Mochi line as part of the level-up moment.
@@ -26,7 +27,7 @@ This branch is presentation-only. It does not add new bond progression rules, pe
 
 ## Feedback Flow
 
-`bond level changes → visual bloom → level-up emote → short line → resume appropriate state`
+`bond level changes → visual bloom → default/legendary level-up emote → short line/card → optional emote-unlock card → perform the newly learned emote once → resume appropriate state`
 
 The exact overlap/timing between bloom, emote, and line can be tuned during implementation to produce the best visual feel.
 
@@ -57,6 +58,8 @@ These ideas remain valid for later bond-system work, but are not part of this br
 ## QA Targets
 
 - A real level-up triggers the visual feedback once.
+- The default level-up animation plays once before the level-up card.
+- A newly unlocked emote performs one automatic demonstration pass after its unlock card.
 - The bloom, emote, and line feel like one coherent sequence.
 - The emote finishes and Mochi returns to the correct prior/idle behavior.
 - Repeated bond updates at the same level do not replay the level-up feedback.

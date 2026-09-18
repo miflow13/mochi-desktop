@@ -41,6 +41,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
             "watch", "dance", "searching", "drop", "side_eye", "table_flip",
+            "level_up_default",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -177,6 +178,16 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(len(heart.frames), 16)
         self.assertEqual(heart.frame_duration_ms, 120)
         self.assertFalse(heart.looping)
+
+    def test_level_up_default_preserves_authored_64px_spritesheet(self) -> None:
+        level_up = ANIMATIONS["level_up_default"]
+        metadata = ASSET_SET.animations["level_up_default"]
+
+        self.assertEqual(len(level_up.frames), 16)
+        self.assertEqual(level_up.frame_duration_ms, 120)
+        self.assertFalse(level_up.looping)
+        self.assertEqual(metadata.spritesheet_path, "level_up_default/level_up_default.png")
+        self.assertEqual(metadata.source_cell_size, (64, 64))
 
     def test_computer_emote_has_intro_typing_and_outro_phases(self) -> None:
         self.assertEqual(len(ANIMATIONS["computer_intro"].frames), 4)
