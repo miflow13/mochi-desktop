@@ -32,6 +32,7 @@ BOND_TYPING_TICK_SECONDS = 1
 BOND_PERSIST_INTERVAL_XP = 15
 BOND_FEED_HOLD_SECONDS = 2.4
 LEVEL_UP_DEFAULT_ANIMATION = "level_up_default"
+EMOTE_UNLOCK_DEMO_DELAY_MS = 150
 
 
 class BondMeter(Gtk.ProgressBar):
@@ -70,6 +71,7 @@ class BondMeterMixin:
         self._dev_unlock_all_label: Gtk.Label | None = None
         self._pending_emote_unlocks: list[EmoteDefinition] = []
         self._pending_emote_demo: EmoteDefinition | None = None
+        self._bond_emote_demo_source_id: int | None = None
         self._pending_level_up_card: tuple[BondState, int] | None = None
         self._bond_presentation_player: AnimationPlayer | None = None
         self._bond_presentation_animation: str | None = None
@@ -300,6 +302,7 @@ class BondMeterMixin:
         self._pending_emote_unlocks.clear()
         self._pending_emote_demo = None
         self._pending_level_up_card = None
+        self._cancel_bond_emote_demo_timer()
         self._cancel_bond_presentation_animation()
         if self.state.presentation is not PresentationState.NORMAL:
             self.state.transition_presentation(PresentationState.NORMAL)
@@ -465,6 +468,35 @@ class BondMeterMixin:
             return
         overlay.show_level_up(state, previous_level=previous_level)
 
+    def _cancel_bond_emote_demo_timer(self) -> None:
+        source_id = self._bond_emote_demo_source_id
+        self._bond_emote_demo_source_id = None
+        if source_id is not None:
+            try:
+                GLib.source_remove(source_id)
+            except Exception:
+                pass
+
+    def _start_pending_emote_demo(self) -> bool:
+        self._bond_emote_demo_source_id = None
+        emote = self._pending_emote_demo
+        if (
+            self.state.presentation is not PresentationState.EMOTE_UNLOCK
+            or emote is None
+            or emote.animation is None
+        ):
+            return GLib.SOURCE_REMOVE
+
+        if self._play_bond_presentation_animation(
+            emote.animation,
+            stage="emote_demo",
+        ):
+            self._logger.info(
+                "Demonstrating newly unlocked emote: %s",
+                emote.label,
+            )
+        return GLib.SOURCE_REMOVE
+
     def _show_next_emote_unlock_or_finish(self) -> None:
         overlay = self._bond_progress_overlay
         if self._pending_emote_unlocks and overlay is not None:
@@ -473,17 +505,18 @@ class BondMeterMixin:
             self.state.transition_presentation(PresentationState.EMOTE_UNLOCK)
             overlay.show_emote_unlock(emote)
 
-            demonstrated = False
-            if emote.animation is not None:
-                demonstrated = self._play_bond_presentation_animation(
-                    emote.animation,
-                    stage="emote_demo",
-                )
+            # Give the reward card a tiny anticipation beat before Mochi shows
+            # what she learned. A dedicated "notice" transition can later reuse
+            # this seam without changing the reward flow.
+            self._cancel_bond_emote_demo_timer()
+            self._bond_emote_demo_source_id = GLib.timeout_add(
+                EMOTE_UNLOCK_DEMO_DELAY_MS,
+                self._start_pending_emote_demo,
+            )
             self._logger.info(
-                "Emote unlocked: %s at bond level %d%s",
+                "Emote unlocked: %s at bond level %d",
                 emote.label,
                 emote.required_bond_level,
-                " (demonstrating now)" if demonstrated else "",
             )
             return
 
@@ -533,6 +566,7 @@ class BondMeterMixin:
             # The unlock card and demonstration own the same presentation beat.
             # If a future emote ever outlives the card, stop it before moving on
             # so demonstrations never overlap consecutive rewards.
+            self._cancel_bond_emote_demo_timer()
             if self._bond_presentation_stage == "emote_demo":
                 self._cancel_bond_presentation_animation()
             self._pending_emote_demo = None
@@ -698,6 +732,7 @@ class BondMeterMixin:
 
     def shutdown_presence(self) -> None:
         """Flush earned XP and tear down the visual-only progress surface."""
+        self._cancel_bond_emote_demo_timer()
         self._cancel_bond_presentation_animation()
         self._pending_level_up_card = None
         self._pending_emote_demo = None

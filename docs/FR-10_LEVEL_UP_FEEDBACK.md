@@ -32,7 +32,7 @@ This branch is presentation-only. It does not add new bond progression rules, pe
 
 ## Feedback Flow
 
-`bond level changes → sound + visual bloom → default/legendary level-up emote → short line/card → optional emote-unlock card + newly learned emote demonstration together → resume appropriate state`
+`bond level changes → sound + visual bloom → default/legendary level-up emote → short line/card → optional emote-unlock card → 150 ms anticipation → newly learned emote plays while the card remains visible → resume appropriate state`
 
 The exact overlap/timing between bloom, emote, and line can be tuned during implementation to produce the best visual feel.
 
@@ -63,7 +63,7 @@ These ideas remain valid for later bond-system work, but are not part of this br
 
 - A real level-up triggers the visual feedback once.
 - The default level-up animation plays once before the level-up card.
-- A newly unlocked emote performs one automatic demonstration pass while its unlock card is displayed.
+- A newly unlocked emote performs one automatic demonstration pass while its unlock card is displayed, after a 150 ms anticipation beat.
 - The supplied level-up sound fires once for a real level-up and not for the visual-only preview.
 - The bloom, emote, and line feel like one coherent sequence.
 - The emote finishes and Mochi returns to the correct prior/idle behavior.

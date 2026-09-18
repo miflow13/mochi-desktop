@@ -72,6 +72,7 @@ def _runtime_harness(state: BondState | None = None):
     harness._dev_unlock_all_label = None
     harness._pending_emote_unlocks = []
     harness._pending_emote_demo = None
+    harness._bond_emote_demo_source_id = None
     harness._pending_level_up_card = None
     harness._bond_presentation_animation = None
     harness._bond_presentation_stage = None
@@ -343,18 +344,31 @@ def test_typing_refresh_does_not_dismiss_active_level_up_card() -> None:
     assert harness._bond_typing_source_id == 55
 
 
-def test_unlock_card_and_new_emote_demo_start_together() -> None:
+def test_unlock_card_then_new_emote_demo_starts_after_tiny_anticipation() -> None:
     harness = _runtime_harness(BondState(level=2, xp=0))
     harness.state.transition_presentation(PresentationState.LEVEL_UP)
     harness._pending_emote_unlocks = [EMOTES_BY_ID["side-eye"]]
 
-    BondMeterMixin._on_bond_level_up_finished(harness)
+    with patch(
+        "mochi.presence.bond_meter.GLib.timeout_add",
+        return_value=91,
+    ) as timeout:
+        BondMeterMixin._on_bond_level_up_finished(harness)
 
     assert harness.state.presentation is PresentationState.EMOTE_UNLOCK
     harness._bond_progress_overlay.show_emote_unlock.assert_called_once_with(
         EMOTES_BY_ID["side-eye"]
     )
     assert harness._pending_emote_demo is EMOTES_BY_ID["side-eye"]
+    assert harness._bond_presentation_animation is None
+    timeout.assert_called_once_with(
+        150,
+        harness._start_pending_emote_demo,
+    )
+
+    result = BondMeterMixin._start_pending_emote_demo(harness)
+
+    assert result == 0
     assert harness._bond_presentation_animation == "side_eye"
     assert harness._bond_presentation_stage == "emote_demo"
     assert harness._bond_presentation_player.animation is not None
