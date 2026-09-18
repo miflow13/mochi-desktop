@@ -20,6 +20,11 @@ This branch is presentation-only. It does not add new bond progression rules, pe
   - The line is presentation feedback only; recurring bond-tier phrase banks are not part of this branch.
   - Keep the treatment visually integrated with Mochi rather than using a blocking dialog.
 
+- [x] **Level-up sound**
+  - Plays once on a real bond level-up alongside the authored visual celebration.
+  - Uses the supplied Mochi level-up cue through the existing centralized sound manager.
+  - Visual-only preview controls remain silent.
+
 - [ ] **Polished visual timing**
   - Coordinate the existing level-up bloom, emote, and line so they read as one intentional sequence.
   - Avoid overlapping feedback that makes the moment noisy or difficult to read.
@@ -27,7 +32,7 @@ This branch is presentation-only. It does not add new bond progression rules, pe
 
 ## Feedback Flow
 
-`bond level changes → visual bloom → default/legendary level-up emote → short line/card → optional emote-unlock card → perform the newly learned emote once → resume appropriate state`
+`bond level changes → sound + visual bloom → default/legendary level-up emote → short line/card → optional emote-unlock card + newly learned emote demonstration together → resume appropriate state`
 
 The exact overlap/timing between bloom, emote, and line can be tuned during implementation to produce the best visual feel.
 
@@ -53,13 +58,13 @@ These ideas remain valid for later bond-system work, but are not part of this br
 - New care mechanics
 - A unique reward for every level
 - Rare alternate level-up animations
-- Level-up sound unless it becomes necessary for visual timing QA
 
 ## QA Targets
 
 - A real level-up triggers the visual feedback once.
 - The default level-up animation plays once before the level-up card.
-- A newly unlocked emote performs one automatic demonstration pass after its unlock card.
+- A newly unlocked emote performs one automatic demonstration pass while its unlock card is displayed.
+- The supplied level-up sound fires once for a real level-up and not for the visual-only preview.
 - The bloom, emote, and line feel like one coherent sequence.
 - The emote finishes and Mochi returns to the correct prior/idle behavior.
 - Repeated bond updates at the same level do not replay the level-up feedback.

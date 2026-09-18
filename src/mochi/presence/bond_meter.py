@@ -444,7 +444,9 @@ class BondMeterMixin:
         if stage == "level_up":
             self._show_pending_level_up_card()
         elif stage == "emote_demo":
-            self._show_next_emote_unlock_or_finish()
+            self._logger.debug(
+                "Unlocked emote demonstration finished while card remains visible"
+            )
 
         queue_draw = getattr(self, "queue_draw", None)
         if callable(queue_draw):
@@ -470,10 +472,18 @@ class BondMeterMixin:
             self._pending_emote_demo = emote
             self.state.transition_presentation(PresentationState.EMOTE_UNLOCK)
             overlay.show_emote_unlock(emote)
+
+            demonstrated = False
+            if emote.animation is not None:
+                demonstrated = self._play_bond_presentation_animation(
+                    emote.animation,
+                    stage="emote_demo",
+                )
             self._logger.info(
-                "Emote unlocked: %s at bond level %d",
+                "Emote unlocked: %s at bond level %d%s",
                 emote.label,
                 emote.required_bond_level,
+                " (demonstrating now)" if demonstrated else "",
             )
             return
 
@@ -520,27 +530,21 @@ class BondMeterMixin:
 
     def _on_bond_level_up_finished(self) -> None:
         if self.state.presentation is PresentationState.EMOTE_UNLOCK:
-            emote = self._pending_emote_demo
+            # The unlock card and demonstration own the same presentation beat.
+            # If a future emote ever outlives the card, stop it before moving on
+            # so demonstrations never overlap consecutive rewards.
+            if self._bond_presentation_stage == "emote_demo":
+                self._cancel_bond_presentation_animation()
             self._pending_emote_demo = None
-            if (
-                emote is not None
-                and emote.animation is not None
-                and self._play_bond_presentation_animation(
-                    emote.animation,
-                    stage="emote_demo",
-                )
-            ):
-                self._logger.info(
-                    "Demonstrating newly unlocked emote: %s",
-                    emote.label,
-                )
-                return
 
         self._show_next_emote_unlock_or_finish()
 
     def _on_bond_level_up(self, previous_level: int, new_level: int) -> None:
         """Celebrate the bond milestone, then reveal newly learned idle emotes."""
         self._logger.info("Bond level increased: %d -> %d", previous_level, new_level)
+        play_level_up = getattr(getattr(self, "_sound", None), "play_level_up", None)
+        if callable(play_level_up):
+            play_level_up()
         self._pending_emote_unlocks.extend(
             newly_unlocked_emotes(
                 previous_level,

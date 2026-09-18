@@ -90,6 +90,7 @@ def _runtime_harness(state: BondState | None = None):
     harness._bond_unsaved_xp = 0
     harness._config = Mock()
     harness._logger = Mock()
+    harness._sound = Mock()
     harness.state = StateMachine()
     harness.state.current = MochiState.TYPING
     harness._dismiss_presence_bubble = Mock()
@@ -224,6 +225,7 @@ def test_level_up_plays_default_animation_before_card_even_while_typing() -> Non
     assert harness.state.dialogue_allowed is False
     harness._dismiss_presence_bubble.assert_called_once_with(user_initiated=False)
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    harness._sound.play_level_up.assert_called_once_with()
     assert harness._bond_presentation_animation == "level_up_default"
     assert harness._bond_presentation_stage == "level_up"
     assert harness._bond_presentation_player.animation is not None
@@ -292,6 +294,7 @@ def test_dev_level_up_card_previews_next_level_without_mutating_state() -> None:
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
     assert harness._bond_presentation_animation == "level_up_default"
     harness._bond_progress_overlay.show_level_up.assert_not_called()
+    harness._sound.play_level_up.assert_not_called()
     harness._config.save_bond_state.assert_not_called()
 
 
@@ -340,7 +343,7 @@ def test_typing_refresh_does_not_dismiss_active_level_up_card() -> None:
     assert harness._bond_typing_source_id == 55
 
 
-def test_unlock_card_is_followed_by_one_pass_of_the_new_emote() -> None:
+def test_unlock_card_and_new_emote_demo_start_together() -> None:
     harness = _runtime_harness(BondState(level=2, xp=0))
     harness.state.transition_presentation(PresentationState.LEVEL_UP)
     harness._pending_emote_unlocks = [EMOTES_BY_ID["side-eye"]]
@@ -352,21 +355,21 @@ def test_unlock_card_is_followed_by_one_pass_of_the_new_emote() -> None:
         EMOTES_BY_ID["side-eye"]
     )
     assert harness._pending_emote_demo is EMOTES_BY_ID["side-eye"]
-
-    BondMeterMixin._on_bond_level_up_finished(harness)
-
-    assert harness._pending_emote_demo is None
     assert harness._bond_presentation_animation == "side_eye"
     assert harness._bond_presentation_stage == "emote_demo"
     assert harness._bond_presentation_player.animation is not None
     assert harness._bond_presentation_player.animation.name == "side_eye"
     assert harness._bond_presentation_player.animation.looping is False
 
-    BondMeterMixin._on_bond_presentation_animation_finished(
-        harness,
-        harness._bond_presentation_player.animation,
-    )
+    finished = harness._bond_presentation_player.animation
+    BondMeterMixin._on_bond_presentation_animation_finished(harness, finished)
 
+    assert harness.state.presentation is PresentationState.EMOTE_UNLOCK
+    assert harness._pending_emote_demo is EMOTES_BY_ID["side-eye"]
+
+    BondMeterMixin._on_bond_level_up_finished(harness)
+
+    assert harness._pending_emote_demo is None
     assert harness.state.presentation is PresentationState.NORMAL
     assert harness.state.dialogue_allowed is True
 
@@ -404,6 +407,7 @@ def test_real_xp_threshold_runs_complete_level_up_presentation_regression() -> N
     harness._bond_orbs.show_gain_marker.assert_called_once_with(1)
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
     harness._dismiss_presence_bubble.assert_called_once_with(user_initiated=False)
+    harness._sound.play_level_up.assert_called_once_with()
     assert harness._bond_presentation_animation == "level_up_default"
     harness._bond_progress_overlay.show_level_up.assert_not_called()
 
