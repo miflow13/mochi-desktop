@@ -202,7 +202,7 @@ class BuddyContextMenuTests(unittest.TestCase):
         source = inspect.getsource(BuddyMenuController._build_context_menu)
 
         self.assertIn("follow_owner=True", source)
-        self.assertIn("self._quit_from_context_menu", source)
+        self.assertIn("self._buddy._quit_from_context_menu", source)
 
     def test_developer_menu_is_independently_draggable(self) -> None:
         import inspect
@@ -230,8 +230,8 @@ class BuddyContextMenuTests(unittest.TestCase):
         show_source = inspect.getsource(BuddyMenuController._show_context_menu)
 
         self.assertIn("dismiss_on_focus_loss=True", build_source)
-        self.assertIn("self._context_menu.get_visible()", show_source)
-        self.assertIn("self._context_menu.popdown()", show_source)
+        self.assertIn("self._buddy._context_menu.get_visible()", show_source)
+        self.assertIn("self._buddy._context_menu.popdown()", show_source)
 
     def test_context_menu_open_plays_one_subtle_menu_sound(self) -> None:
         sound = SimpleNamespace(play=Mock())
