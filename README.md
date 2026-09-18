@@ -14,6 +14,10 @@ react to broad local desktop activity without reading its contents.
 > tested configuration. Mochi uses XWayland for its window on GNOME Wayland,
 > where native positioning restrictions require it.
 
+> 🌟 **Milestone:** Mochi reached **30 GitHub stars**! Thank you to everyone
+> following, testing, and cheering on this tiny Linux desktop buddy while the
+> public alpha takes shape.
+
 
 ## Install
 
