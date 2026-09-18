@@ -1,9 +1,11 @@
-"""Bond-aware user emote catalogue and manual emote dispatch."""
+"""Large bond-aware emote collection window and manual emote dispatch."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import logging
 
+import cairo
 import gi
 
 gi.require_version("Gdk", "4.0")
@@ -11,8 +13,8 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.care import BondState, bond_xp_required
-from mochi.menu_window import MenuWindow
-from mochi.sprites import ANIMATIONS
+from mochi.emote_shortcut import EmoteCatalogueShortcutMonitor
+from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.sound import SoundEvent
 from mochi.state import MochiState, PresentationState
 
@@ -21,7 +23,6 @@ from mochi.state import MochiState, PresentationState
 class EmoteDefinition:
     id: str
     label: str
-    icon_name: str
     animation: str | None
     required_bond_level: int | None
     available: bool = True
@@ -35,65 +36,14 @@ class EmoteDefinition:
 
 
 EMOTE_CATALOGUE = (
-    EmoteDefinition(
-        id="heart",
-        label="Heart",
-        icon_name="emblem-favorite-symbolic",
-        animation="heart",
-        required_bond_level=1,
-    ),
-    EmoteDefinition(
-        id="bounce",
-        label="Bounce",
-        icon_name="go-up-symbolic",
-        animation="bounce",
-        required_bond_level=1,
-    ),
-    EmoteDefinition(
-        id="squish",
-        label="Squish",
-        icon_name="object-select-symbolic",
-        animation="squish",
-        required_bond_level=1,
-    ),
-    EmoteDefinition(
-        id="look",
-        label="Look Around",
-        icon_name="view-reveal-symbolic",
-        animation="look",
-        required_bond_level=3,
-    ),
-    EmoteDefinition(
-        id="dance",
-        label="Dance",
-        icon_name="media-playback-start-symbolic",
-        animation="dance",
-        required_bond_level=5,
-    ),
-    EmoteDefinition(
-        id="mystery-1",
-        label="Mystery Emote I",
-        icon_name="changes-prevent-symbolic",
-        animation=None,
-        required_bond_level=None,
-        available=False,
-    ),
-    EmoteDefinition(
-        id="mystery-2",
-        label="Mystery Emote II",
-        icon_name="changes-prevent-symbolic",
-        animation=None,
-        required_bond_level=None,
-        available=False,
-    ),
-    EmoteDefinition(
-        id="mystery-3",
-        label="Mystery Emote III",
-        icon_name="changes-prevent-symbolic",
-        animation=None,
-        required_bond_level=None,
-        available=False,
-    ),
+    EmoteDefinition("heart", "Heart", "heart", 1),
+    EmoteDefinition("bounce", "Bounce", "bounce", 1),
+    EmoteDefinition("squish", "Squish", "squish", 1),
+    EmoteDefinition("look", "Look Around", "look", 3),
+    EmoteDefinition("dance", "Dance", "dance", 5),
+    EmoteDefinition("mystery-1", "Mystery Emote I", None, None, False),
+    EmoteDefinition("mystery-2", "Mystery Emote II", None, None, False),
+    EmoteDefinition("mystery-3", "Mystery Emote III", None, None, False),
 )
 EMOTES_BY_ID = {emote.id: emote for emote in EMOTE_CATALOGUE}
 
@@ -110,7 +60,6 @@ def bond_xp_until_level(state: BondState, target_level: int) -> int:
 
 
 def next_emote_unlock(state: BondState) -> EmoteDefinition | None:
-    """Return the next real level-gated emote, ignoring future placeholders."""
     candidates = (
         emote
         for emote in EMOTE_CATALOGUE
@@ -123,10 +72,385 @@ def next_emote_unlock(state: BondState) -> EmoteDefinition | None:
 
 def emote_status_text(emote: EmoteDefinition, state: BondState) -> str:
     if not emote.available:
-        return "Coming soon"
+        return "COMING SOON"
     if emote.is_unlocked(state):
-        return "Unlocked"
-    return f"Bond Lv. {emote.required_bond_level}"
+        return "UNLOCKED"
+    return f"BOND LV. {emote.required_bond_level}"
+
+
+CATALOGUE_CSS = """
+window.mochi-emote-catalogue {
+    background-color: @theme_bg_color;
+    color: @theme_fg_color;
+}
+.mochi-emote-kicker {
+    color: #79c98b;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.10em;
+}
+.mochi-emote-title {
+    font-size: 26px;
+    font-weight: 850;
+}
+.mochi-emote-subtitle,
+.mochi-emote-progress-copy {
+    color: alpha(@theme_fg_color, 0.68);
+}
+.mochi-emote-progress-copy {
+    font-size: 12px;
+}
+.mochi-emote-progress {
+    min-height: 7px;
+}
+button.mochi-emote-card {
+    min-width: 232px;
+    min-height: 258px;
+    padding: 0;
+    border-radius: 18px;
+    background-image: none;
+    background-color: alpha(@theme_fg_color, 0.045);
+    border: 1px solid alpha(@theme_fg_color, 0.10);
+}
+button.mochi-emote-card:hover {
+    background-color: alpha(#79c98b, 0.10);
+    border-color: alpha(#79c98b, 0.42);
+}
+button.mochi-emote-card:disabled {
+    opacity: 1.0;
+    background-color: alpha(@theme_fg_color, 0.025);
+    border-color: alpha(@theme_fg_color, 0.07);
+}
+.mochi-emote-card-name {
+    font-size: 15px;
+    font-weight: 800;
+}
+.mochi-emote-card-status {
+    color: #79c98b;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+}
+.mochi-emote-card-locked {
+    color: alpha(@theme_fg_color, 0.55);
+}
+.mochi-emote-card-detail {
+    color: alpha(@theme_fg_color, 0.62);
+    font-size: 11px;
+}
+.mochi-emote-preview {
+    background-color: alpha(@theme_fg_color, 0.028);
+    border-radius: 14px;
+}
+.mochi-emote-footer {
+    color: alpha(@theme_fg_color, 0.48);
+    font-size: 11px;
+}
+"""
+
+
+class EmotePreview(Gtk.DrawingArea):
+    """Static catalogue art using authored animation frames and silhouette masks."""
+
+    SIZE = 166
+
+    def __init__(
+        self,
+        *,
+        atlas: SpriteAtlas,
+        emote: EmoteDefinition,
+    ) -> None:
+        super().__init__()
+        self._atlas = atlas
+        self._emote = emote
+        self._locked = True
+        self.set_content_width(self.SIZE)
+        self.set_content_height(self.SIZE)
+        self.set_hexpand(True)
+        self.add_css_class("mochi-emote-preview")
+        self.set_draw_func(self._draw)
+
+    def set_locked(self, locked: bool) -> None:
+        if locked == self._locked:
+            return
+        self._locked = locked
+        self.queue_draw()
+
+    def _representative_frame(self):
+        animation_name = self._emote.animation or "idle"
+        animation = ANIMATIONS[animation_name]
+        frames = animation.frames
+        return frames[min(len(frames) - 1, len(frames) // 2)]
+
+    def _draw(
+        self,
+        _area: Gtk.DrawingArea,
+        context: cairo.Context,
+        width: int,
+        height: int,
+    ) -> None:
+        frame = self._representative_frame()
+        if not self._locked:
+            self._atlas.draw(context, frame, width, height)
+            return
+
+        sprite = self._atlas.frames[frame.sprite]
+        source_width, source_height = self._atlas.CANVAS_SIZE
+        scale = min(width / source_width, height / source_height)
+        offset_scale = min(width, height) / self._atlas.OFFSET_COORDINATE_SIZE
+        x = round(
+            (width - source_width * scale) / 2
+            + frame.horizontal_offset * offset_scale
+        )
+        y = round(
+            (height - source_height * scale) / 2
+            + frame.vertical_offset * offset_scale
+        )
+
+        context.save()
+        context.translate(x, y)
+        context.scale(scale, scale)
+        context.set_source_rgba(0.10, 0.14, 0.11, 0.78)
+        context.mask_surface(sprite, 0, 0)
+        context.restore()
+
+
+class EmoteCard:
+    """One large visual catalogue card."""
+
+    def __init__(
+        self,
+        *,
+        atlas: SpriteAtlas,
+        emote: EmoteDefinition,
+        on_activate,
+    ) -> None:
+        self.emote = emote
+        self.button = Gtk.Button()
+        self.button.add_css_class("mochi-emote-card")
+        self.button.connect("clicked", lambda _button: on_activate(emote.id))
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        content.set_margin_top(12)
+        content.set_margin_bottom(12)
+        content.set_margin_start(12)
+        content.set_margin_end(12)
+
+        self.preview = EmotePreview(atlas=atlas, emote=emote)
+        content.append(self.preview)
+
+        self.name = Gtk.Label(label=emote.label)
+        self.name.set_xalign(0)
+        self.name.add_css_class("mochi-emote-card-name")
+        content.append(self.name)
+
+        self.status = Gtk.Label()
+        self.status.set_xalign(0)
+        self.status.add_css_class("mochi-emote-card-status")
+        content.append(self.status)
+
+        self.detail = Gtk.Label()
+        self.detail.set_xalign(0)
+        self.detail.set_wrap(True)
+        self.detail.add_css_class("mochi-emote-card-detail")
+        content.append(self.detail)
+
+        self.button.set_child(content)
+
+    def refresh(self, state: BondState) -> None:
+        unlocked = self.emote.is_unlocked(state)
+        self.button.set_sensitive(unlocked)
+        self.preview.set_locked(not unlocked)
+        self.status.set_text(emote_status_text(self.emote, state))
+
+        if not self.emote.available:
+            detail = "A future little mood. Not unlockable yet."
+            self.status.add_css_class("mochi-emote-card-locked")
+        elif unlocked:
+            detail = "Click to ask Mochi to do this emote."
+            self.status.remove_css_class("mochi-emote-card-locked")
+        else:
+            remaining = bond_xp_until_level(
+                state,
+                self.emote.required_bond_level or state.level,
+            )
+            detail = f"{remaining:,} bond XP remaining"
+            self.status.add_css_class("mochi-emote-card-locked")
+        self.detail.set_text(detail)
+
+
+class EmoteCatalogueWindow:
+    """Large reusable collection window opened by Mochi's global shortcut."""
+
+    DEFAULT_WIDTH = 900
+    DEFAULT_HEIGHT = 680
+
+    def __init__(
+        self,
+        *,
+        owner: Gtk.Window,
+        atlas: SpriteAtlas,
+        on_emote_requested,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self._logger = logger or logging.getLogger(__name__)
+        self._cards: dict[str, EmoteCard] = {}
+        self._state = BondState()
+        self._on_emote_requested = on_emote_requested
+
+        self.window = Gtk.Window()
+        self.window.set_title("Mochi Emote Catalogue")
+        self.window.set_transient_for(owner)
+        self.window.set_destroy_with_parent(True)
+        self.window.set_modal(False)
+        self.window.set_hide_on_close(True)
+        self.window.set_resizable(True)
+        self.window.set_default_size(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
+        self.window.set_size_request(680, 500)
+        self.window.add_css_class("mochi-emote-catalogue")
+
+        css = Gtk.CssProvider()
+        css.load_from_string(CATALOGUE_CSS)
+        self._css = css
+        Gtk.StyleContext.add_provider_for_display(
+            owner.get_display(),
+            css,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+
+        keys = Gtk.EventControllerKey.new()
+        keys.connect("key-pressed", self._on_key_pressed)
+        self.window.add_controller(keys)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        root.set_margin_top(24)
+        root.set_margin_bottom(18)
+        root.set_margin_start(24)
+        root.set_margin_end(24)
+
+        hero = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        kicker = Gtk.Label(label="MOCHI COLLECTION")
+        kicker.set_xalign(0)
+        kicker.add_css_class("mochi-emote-kicker")
+        hero.append(kicker)
+
+        title = Gtk.Label(label="Emote Catalogue")
+        title.set_xalign(0)
+        title.add_css_class("mochi-emote-title")
+        hero.append(title)
+
+        subtitle = Gtk.Label(
+            label="Grow your bond with Mochi to reveal more little moods."
+        )
+        subtitle.set_xalign(0)
+        subtitle.add_css_class("mochi-emote-subtitle")
+        hero.append(subtitle)
+
+        self._next_label = Gtk.Label()
+        self._next_label.set_xalign(0)
+        self._next_label.set_margin_top(8)
+        self._next_label.add_css_class("mochi-emote-progress-copy")
+        hero.append(self._next_label)
+
+        self._progress = Gtk.ProgressBar()
+        self._progress.set_show_text(False)
+        self._progress.add_css_class("mochi-emote-progress")
+        hero.append(self._progress)
+        root.append(hero)
+
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_hexpand(True)
+        scroller.set_vexpand(True)
+        scroller.set_margin_top(18)
+
+        grid = Gtk.Grid()
+        grid.set_column_spacing(14)
+        grid.set_row_spacing(14)
+        grid.set_column_homogeneous(True)
+        for index, emote in enumerate(EMOTE_CATALOGUE):
+            card = EmoteCard(
+                atlas=atlas,
+                emote=emote,
+                on_activate=self._on_card_activate,
+            )
+            self._cards[emote.id] = card
+            grid.attach(card.button, index % 3, index // 3, 1, 1)
+        scroller.set_child(grid)
+        root.append(scroller)
+
+        footer = Gtk.Label(label="Ctrl + Alt + E · Esc to close")
+        footer.set_xalign(1)
+        footer.set_margin_top(10)
+        footer.add_css_class("mochi-emote-footer")
+        root.append(footer)
+
+        self.window.set_child(root)
+        self.refresh(self._state)
+
+    def refresh(self, state: BondState) -> None:
+        self._state = BondState(level=state.level, xp=state.xp)
+        next_unlock = next_emote_unlock(self._state)
+
+        if next_unlock is None:
+            self._next_label.set_text(
+                f"Bond Lv. {self._state.level} · all current emotes unlocked ✦"
+            )
+            self._progress.set_fraction(1.0)
+        else:
+            target = next_unlock.required_bond_level or self._state.level
+            remaining = bond_xp_until_level(self._state, target)
+            total_from_level_start = bond_xp_until_level(
+                BondState(level=self._state.level, xp=0),
+                target,
+            )
+            completed = max(0, total_from_level_start - remaining)
+            fraction = (
+                completed / total_from_level_start
+                if total_from_level_start > 0
+                else 1.0
+            )
+            self._progress.set_fraction(min(1.0, max(0.0, fraction)))
+            self._next_label.set_text(
+                f"Bond Lv. {self._state.level} · Next: {next_unlock.label} "
+                f"at Lv. {target} · {remaining:,} XP to go"
+            )
+
+        for card in self._cards.values():
+            card.refresh(self._state)
+
+    def present(self) -> None:
+        self.window.present()
+        self._logger.debug("Emote catalogue opened")
+
+    def hide(self) -> None:
+        self.window.hide()
+
+    def destroy(self) -> None:
+        self.window.destroy()
+
+    def _on_card_activate(self, emote_id: str) -> None:
+        emote = EMOTES_BY_ID.get(emote_id)
+        if emote is None or not emote.is_unlocked(self._state):
+            return
+        self.hide()
+        GLib.idle_add(self._dispatch_card, emote_id)
+
+    def _dispatch_card(self, emote_id: str) -> bool:
+        self._on_emote_requested(emote_id)
+        return GLib.SOURCE_REMOVE
+
+    def _on_key_pressed(
+        self,
+        _controller: Gtk.EventControllerKey,
+        keyval: int,
+        _keycode: int,
+        _state: Gdk.ModifierType,
+    ) -> bool:
+        if keyval == Gdk.KEY_Escape:
+            self.hide()
+            return True
+        return False
 
 
 _CRITICAL_STATES = frozenset(
@@ -151,232 +475,41 @@ _MANUAL_REACTION_STATES = frozenset(
 
 
 class EmoteCatalogueMixin:
-    """Expose Mochi's emotes as one bond-aware collection and trigger surface."""
-
-    EMOTE_CATALOGUE_WIDTH = 316
-    EMOTE_CATALOGUE_HEIGHT = 460
+    """Own the catalogue window, shortcut bridge, and manual emote dispatch."""
 
     def __init__(self, *args, **kwargs) -> None:
-        self._emote_catalogue_window: MenuWindow | None = None
-        self._emote_catalogue_next_label: Gtk.Label | None = None
-        self._emote_catalogue_rows: dict[
-            str, tuple[Gtk.Button, Gtk.Label, Gtk.Label]
-        ] = {}
-        self._pending_manual_emote: str | None = None
-        self._emote_catalogue_content: Gtk.Widget | None = None
-        self._emote_catalogue_animated_rows: tuple[Gtk.Widget, ...] = ()
+        self._emote_catalogue_window: EmoteCatalogueWindow | None = None
+        self._emote_shortcut_monitor: EmoteCatalogueShortcutMonitor | None = None
         super().__init__(*args, **kwargs)
 
         if not self._preview_mode:
-            self._emote_catalogue_window = self._build_emote_catalogue()
-            self._emote_catalogue_window.connect(
-                "closed",
-                self._on_emote_catalogue_closed,
+            self._emote_catalogue_window = EmoteCatalogueWindow(
+                owner=self._window,
+                atlas=self.atlas,
+                on_emote_requested=self._start_manual_emote,
+                logger=self._logger,
             )
-            self._refresh_emote_catalogue()
-
-    def _build_context_menu(self):
-        menu = super()._build_context_menu()
-        button, _ = self._make_menu_button(
-            "Emotes",
-            "face-smile-symbolic",
-            self._open_emote_catalogue_from_context_menu,
-        )
-        button.set_tooltip_text("Open Mochi's emote catalogue")
-        self._register_context_menu_row(
-            "emote-catalogue",
-            button,
-            before="sleep",
-        )
-        return menu
-
-    def _build_emote_catalogue(self) -> MenuWindow:
-        menu = MenuWindow(
-            owner=self._window,
-            anchor_widget=self,
-            preferred_width=self.EMOTE_CATALOGUE_WIDTH,
-            preferred_height=self.EMOTE_CATALOGUE_HEIGHT,
-            follow_owner=True,
-            dismiss_on_focus_loss=True,
-            logger=self._logger,
-        )
-        menu.add_css_class("mochi-user-menu")
-
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        root.add_css_class("mochi-menu-card")
-        root.set_margin_top(12)
-        root.set_margin_bottom(12)
-        root.set_margin_start(12)
-        root.set_margin_end(12)
-        root.set_size_request(284, -1)
-
-        title = Gtk.Label(label="Emote Catalogue  ✦")
-        title.set_xalign(0)
-        title.add_css_class("mochi-menu-title")
-        root.append(title)
-
-        subtitle = Gtk.Label(label="grow your bond · collect little moods")
-        subtitle.set_xalign(0)
-        subtitle.add_css_class("mochi-menu-subtitle")
-        root.append(subtitle)
-
-        self._emote_catalogue_next_label = Gtk.Label()
-        self._emote_catalogue_next_label.set_xalign(0)
-        self._emote_catalogue_next_label.set_wrap(True)
-        self._emote_catalogue_next_label.add_css_class("mochi-menu-value")
-        root.append(self._emote_catalogue_next_label)
-
-        root.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-
-        list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        animated_rows: list[Gtk.Widget] = []
-        for emote in EMOTE_CATALOGUE:
-            button = Gtk.Button()
-            button.add_css_class("mochi-menu-row")
-
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            icon = Gtk.Image.new_from_icon_name(emote.icon_name)
-            icon.add_css_class("mochi-menu-icon")
-            row.append(icon)
-
-            text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
-            text_box.set_hexpand(True)
-            name = Gtk.Label(label=emote.label)
-            name.set_xalign(0)
-            text_box.append(name)
-
-            requirement = Gtk.Label()
-            requirement.set_xalign(0)
-            requirement.add_css_class("mochi-menu-subtitle")
-            text_box.append(requirement)
-            row.append(text_box)
-
-            status = Gtk.Label()
-            status.add_css_class("mochi-menu-value")
-            row.append(status)
-
-            button.set_child(row)
-            button.connect(
-                "clicked",
-                lambda _button, emote_id=emote.id: self._choose_manual_emote(
-                    emote_id
-                ),
+            self._emote_catalogue_window.refresh(self._bond_state)
+            self._emote_shortcut_monitor = EmoteCatalogueShortcutMonitor(
+                on_requested=self._show_emote_catalogue,
+                logger=self._logger,
             )
-            list_box.append(button)
-            animated_rows.append(button)
-            self._emote_catalogue_rows[emote.id] = (
-                button,
-                requirement,
-                status,
-            )
-
-        scroller = Gtk.ScrolledWindow()
-        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroller.set_propagate_natural_height(True)
-        scroller.set_child(list_box)
-        root.append(scroller)
-
-        self._emote_catalogue_content = root
-        self._emote_catalogue_animated_rows = tuple(animated_rows)
-        menu.set_child(root)
-        return menu
+            self._emote_shortcut_monitor.start()
 
     def _refresh_emote_catalogue(self) -> None:
-        state = getattr(self, "_bond_state", BondState())
-        next_unlock = next_emote_unlock(state)
-
-        if self._emote_catalogue_next_label is not None:
-            if next_unlock is None:
-                next_text = "All current emotes unlocked ✦"
-            else:
-                xp_left = bond_xp_until_level(
-                    state,
-                    next_unlock.required_bond_level or state.level,
-                )
-                next_text = (
-                    f"Next: {next_unlock.label} · Bond Lv. "
-                    f"{next_unlock.required_bond_level} · {xp_left:,} XP to go"
-                )
-            self._emote_catalogue_next_label.set_text(next_text)
-
-        for emote in EMOTE_CATALOGUE:
-            row = self._emote_catalogue_rows.get(emote.id)
-            if row is None:
-                continue
-            button, requirement, status = row
-            unlocked = emote.is_unlocked(state)
-            button.set_sensitive(unlocked)
-            if not emote.available:
-                requirement.set_text("Future reward")
-            elif unlocked:
-                requirement.set_text("Ready to play")
-            else:
-                xp_left = bond_xp_until_level(
-                    state,
-                    emote.required_bond_level or state.level,
-                )
-                requirement.set_text(f"{xp_left:,} XP remaining")
-            status.set_text(emote_status_text(emote, state))
+        if self._emote_catalogue_window is not None:
+            self._emote_catalogue_window.refresh(self._bond_state)
 
     def _set_bond_state_for_ui(self, state: BondState) -> None:
         super()._set_bond_state_for_ui(state)
         self._refresh_emote_catalogue()
 
-    def _open_emote_catalogue_from_context_menu(self, _button=None) -> None:
-        self._close_context_menu_then(self._show_emote_catalogue)
-
     def _show_emote_catalogue(self) -> None:
-        menu = self._emote_catalogue_window
-        if menu is None or self._preview_mode:
+        window = self._emote_catalogue_window
+        if window is None or self._preview_mode:
             return
-        if menu.get_visible():
-            menu.popdown()
-            return
-
-        self._refresh_emote_catalogue()
-        rectangle = Gdk.Rectangle()
-        rectangle.x = max(1, self.get_width() // 2)
-        rectangle.y = max(1, self.get_height() // 2)
-        rectangle.width = 1
-        rectangle.height = 1
-        menu.set_pointing_to(rectangle)
-
-        self._context_menu_open = True
-        menu.popup()
-        if self._emote_catalogue_content is not None:
-            self._animate_menu_open(
-                self._emote_catalogue_content,
-                self._emote_catalogue_animated_rows,
-            )
-        self._logger.debug("Emote catalogue opened")
-
-    def _show_context_menu(self, *args) -> None:
-        if (
-            self._emote_catalogue_window is not None
-            and self._emote_catalogue_window.get_visible()
-        ):
-            self._emote_catalogue_window.popdown()
-        super()._show_context_menu(*args)
-
-    def _choose_manual_emote(self, emote_id: str) -> None:
-        emote = EMOTES_BY_ID.get(emote_id)
-        state = getattr(self, "_bond_state", BondState())
-        if emote is None or not emote.is_unlocked(state):
-            return
-        self._pending_manual_emote = emote_id
-        if self._emote_catalogue_window is not None:
-            self._emote_catalogue_window.popdown()
-
-    def _on_emote_catalogue_closed(self, _menu: MenuWindow) -> None:
-        self._context_menu_open = False
-        emote_id = self._pending_manual_emote
-        self._pending_manual_emote = None
-        if emote_id is not None:
-            GLib.idle_add(self._dispatch_manual_emote, emote_id)
-
-    def _dispatch_manual_emote(self, emote_id: str) -> bool:
-        self._start_manual_emote(emote_id)
-        return GLib.SOURCE_REMOVE
+        window.refresh(self._bond_state)
+        window.present()
 
     def _start_manual_emote(self, emote_id: str) -> bool:
         emote = EMOTES_BY_ID.get(emote_id)
@@ -435,11 +568,7 @@ class EmoteCatalogueMixin:
         if not self._transition_to(MochiState.DANCING):
             return False
 
-        animation = replace(
-            ANIMATIONS["dance"],
-            looping=False,
-            next_state="idle",
-        )
+        animation = replace(ANIMATIONS["dance"], looping=False, next_state="idle")
         previous = self._current_animation
         self._current_animation = "dance"
         self._active_animation = animation
@@ -450,8 +579,10 @@ class EmoteCatalogueMixin:
         return True
 
     def shutdown_presence(self) -> None:
+        if self._emote_shortcut_monitor is not None:
+            self._emote_shortcut_monitor.stop()
+            self._emote_shortcut_monitor = None
         if self._emote_catalogue_window is not None:
-            self._emote_catalogue_window.popdown()
+            self._emote_catalogue_window.destroy()
             self._emote_catalogue_window = None
-        self._pending_manual_emote = None
         super().shutdown_presence()
