@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import gi
 
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
+from mochi.animation import Animation, AnimationPlayer
 from mochi.care import (
     BOND_FEED_XP,
     BOND_TYPING_XP_PER_SECOND,
@@ -19,6 +22,7 @@ from mochi.emotes import (
     newly_unlocked_emotes,
     unlocked_idle_animation_names,
 )
+from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState, PresentationState
 
 from .bond_progress_overlay import BondProgressOverlay
@@ -27,6 +31,8 @@ from .bond_progress_overlay import BondProgressOverlay
 BOND_TYPING_TICK_SECONDS = 1
 BOND_PERSIST_INTERVAL_XP = 15
 BOND_FEED_HOLD_SECONDS = 2.4
+LEVEL_UP_DEFAULT_ANIMATION = "level_up_default"
+EMOTE_UNLOCK_DEMO_DELAY_MS = 150
 
 
 class BondMeter(Gtk.ProgressBar):
@@ -64,7 +70,16 @@ class BondMeterMixin:
         self._dev_unlock_all_emotes = False
         self._dev_unlock_all_label: Gtk.Label | None = None
         self._pending_emote_unlocks: list[EmoteDefinition] = []
+        self._pending_emote_demo: EmoteDefinition | None = None
+        self._bond_emote_demo_source_id: int | None = None
+        self._pending_level_up_card: tuple[BondState, int] | None = None
+        self._bond_presentation_player: AnimationPlayer | None = None
+        self._bond_presentation_animation: str | None = None
+        self._bond_presentation_stage: str | None = None
         super().__init__(*args, **kwargs)
+        self._bond_presentation_player = AnimationPlayer(
+            on_finished=self._on_bond_presentation_animation_finished,
+        )
         self._restore_bond_state()
 
         window = getattr(self, "_window", None)
@@ -285,6 +300,12 @@ class BondMeterMixin:
         """Restore a predictable Level 1 baseline after developer testing."""
         self._dev_unlock_all_emotes = False
         self._pending_emote_unlocks.clear()
+        self._pending_emote_demo = None
+        self._pending_level_up_card = None
+        self._cancel_bond_emote_demo_timer()
+        self._cancel_bond_presentation_animation()
+        if self.state.presentation is not PresentationState.NORMAL:
+            self.state.transition_presentation(PresentationState.NORMAL)
         if self._dev_unlock_all_label is not None:
             self._dev_unlock_all_label.set_text("Unlock all emotes")
         self._set_bond_state_for_ui(BondState())
@@ -361,6 +382,151 @@ class BondMeterMixin:
         if overlay is not None:
             overlay.show_activity(self._bond_state, activity)
 
+    def _level_up_animation_name(self, state: BondState) -> str:
+        """Select the authored level-up animation for the reached bond level.
+
+        FR-10 ships with one default celebration. Keeping selection behind this
+        seam lets a future legendary level-up supersede it without changing the
+        presentation pipeline.
+        """
+        _ = state
+        return LEVEL_UP_DEFAULT_ANIMATION
+
+    def _play_bond_presentation_animation(
+        self,
+        name: str,
+        *,
+        stage: str,
+    ) -> bool:
+        """Play one visual-only presentation pass without disturbing behavior."""
+        player = self._bond_presentation_player
+        animation = ANIMATIONS.get(name)
+        if player is None or animation is None:
+            self._logger.warning("Bond presentation animation unavailable: %s", name)
+            return False
+        if player.animation is not None:
+            self._logger.warning(
+                "Bond presentation animation already active: %s",
+                self._bond_presentation_animation,
+            )
+            return False
+
+        # Presentation demos are always one pass, even if a future unlocked
+        # emote is normally authored as a loop.
+        player.play(replace(animation, looping=False, next_state=None))
+        self._bond_presentation_animation = name
+        self._bond_presentation_stage = stage
+        queue_draw = getattr(self, "queue_draw", None)
+        if callable(queue_draw):
+            queue_draw()
+        return True
+
+    def _cancel_bond_presentation_animation(self) -> None:
+        player = self._bond_presentation_player
+        if player is not None:
+            player.stop()
+        self._bond_presentation_animation = None
+        self._bond_presentation_stage = None
+
+    def _on_bond_presentation_animation_finished(
+        self,
+        finished_animation: Animation,
+    ) -> None:
+        """Advance FR-10 after a visual-only presentation animation finishes."""
+        if finished_animation.name != self._bond_presentation_animation:
+            self._logger.debug(
+                "Ignoring stale bond presentation completion: %s",
+                finished_animation.name,
+            )
+            return
+
+        stage = self._bond_presentation_stage
+        self._bond_presentation_animation = None
+        self._bond_presentation_stage = None
+
+        if stage == "level_up":
+            self._show_pending_level_up_card()
+        elif stage == "emote_demo":
+            self._logger.debug(
+                "Unlocked emote demonstration finished while card remains visible"
+            )
+
+        queue_draw = getattr(self, "queue_draw", None)
+        if callable(queue_draw):
+            queue_draw()
+
+    def _show_pending_level_up_card(self) -> None:
+        pending = self._pending_level_up_card
+        self._pending_level_up_card = None
+        if pending is None:
+            return
+
+        state, previous_level = pending
+        overlay = self._bond_progress_overlay
+        if overlay is None:
+            self._show_next_emote_unlock_or_finish()
+            return
+        overlay.show_level_up(state, previous_level=previous_level)
+
+    def _cancel_bond_emote_demo_timer(self) -> None:
+        source_id = self._bond_emote_demo_source_id
+        self._bond_emote_demo_source_id = None
+        if source_id is not None:
+            try:
+                GLib.source_remove(source_id)
+            except Exception:
+                pass
+
+    def _start_pending_emote_demo(self) -> bool:
+        self._bond_emote_demo_source_id = None
+        emote = self._pending_emote_demo
+        if (
+            self.state.presentation is not PresentationState.EMOTE_UNLOCK
+            or emote is None
+            or emote.animation is None
+        ):
+            return GLib.SOURCE_REMOVE
+
+        if self._play_bond_presentation_animation(
+            emote.animation,
+            stage="emote_demo",
+        ):
+            self._logger.info(
+                "Demonstrating newly unlocked emote: %s",
+                emote.label,
+            )
+        return GLib.SOURCE_REMOVE
+
+    def _show_next_emote_unlock_or_finish(self) -> None:
+        overlay = self._bond_progress_overlay
+        if self._pending_emote_unlocks and overlay is not None:
+            emote = self._pending_emote_unlocks.pop(0)
+            self._pending_emote_demo = emote
+            self.state.transition_presentation(PresentationState.EMOTE_UNLOCK)
+            overlay.show_emote_unlock(emote)
+
+            # Give the reward card a tiny anticipation beat before Mochi shows
+            # what she learned. A dedicated "notice" transition can later reuse
+            # this seam without changing the reward flow.
+            self._cancel_bond_emote_demo_timer()
+            self._bond_emote_demo_source_id = GLib.timeout_add(
+                EMOTE_UNLOCK_DEMO_DELAY_MS,
+                self._start_pending_emote_demo,
+            )
+            self._logger.info(
+                "Emote unlocked: %s at bond level %d",
+                emote.label,
+                emote.required_bond_level,
+            )
+            return
+
+        self._pending_emote_demo = None
+        if self.state.presentation in (
+            PresentationState.LEVEL_UP,
+            PresentationState.EMOTE_UNLOCK,
+        ):
+            self.state.transition_presentation(PresentationState.NORMAL)
+
     def _begin_bond_level_up_presentation(
         self,
         state: BondState,
@@ -371,42 +537,48 @@ class BondMeterMixin:
         if overlay is None:
             return
 
-        # Level-up is a presentation priority, not a behavior state. Typing,
-        # eating, and other animation state can continue while speech yields.
+        # The presentation player draws over Mochi while the normal behavior
+        # player continues underneath. Typing, eating, dragging, and ambient
+        # state therefore resume naturally after the celebration.
         self.state.transition_presentation(PresentationState.LEVEL_UP)
         dismiss_dialogue = getattr(self, "_dismiss_presence_bubble", None)
         if callable(dismiss_dialogue):
             dismiss_dialogue(user_initiated=False)
 
         self._bond_orbs.trigger_level_up()
-        overlay.show_level_up(state, previous_level=previous_level)
+        self._pending_level_up_card = (
+            BondState(level=state.level, xp=state.xp),
+            previous_level,
+        )
+        animation_name = self._level_up_animation_name(state)
+        if not self._play_bond_presentation_animation(
+            animation_name,
+            stage="level_up",
+        ):
+            self._show_pending_level_up_card()
 
         queue_draw = getattr(self, "queue_draw", None)
         if callable(queue_draw):
             queue_draw()
 
     def _on_bond_level_up_finished(self) -> None:
-        overlay = self._bond_progress_overlay
-        if self._pending_emote_unlocks and overlay is not None:
-            emote = self._pending_emote_unlocks.pop(0)
-            self.state.transition_presentation(PresentationState.EMOTE_UNLOCK)
-            overlay.show_emote_unlock(emote)
-            self._logger.info(
-                "Emote unlocked: %s at bond level %d",
-                emote.label,
-                emote.required_bond_level,
-            )
-            return
+        if self.state.presentation is PresentationState.EMOTE_UNLOCK:
+            # The unlock card and demonstration own the same presentation beat.
+            # If a future emote ever outlives the card, stop it before moving on
+            # so demonstrations never overlap consecutive rewards.
+            self._cancel_bond_emote_demo_timer()
+            if self._bond_presentation_stage == "emote_demo":
+                self._cancel_bond_presentation_animation()
+            self._pending_emote_demo = None
 
-        if self.state.presentation in (
-            PresentationState.LEVEL_UP,
-            PresentationState.EMOTE_UNLOCK,
-        ):
-            self.state.transition_presentation(PresentationState.NORMAL)
+        self._show_next_emote_unlock_or_finish()
 
     def _on_bond_level_up(self, previous_level: int, new_level: int) -> None:
         """Celebrate the bond milestone, then reveal newly learned idle emotes."""
         self._logger.info("Bond level increased: %d -> %d", previous_level, new_level)
+        play_level_up = getattr(getattr(self, "_sound", None), "play_level_up", None)
+        if callable(play_level_up):
+            play_level_up()
         self._pending_emote_unlocks.extend(
             newly_unlocked_emotes(
                 previous_level,
@@ -482,8 +654,13 @@ class BondMeterMixin:
             self._persist_bond_state()
 
     def _bond_orb_target(self, width: int, height: int) -> tuple[float, float]:
-        """Aim XP at the visible center of Mochi instead of transparent padding."""
-        frame = getattr(getattr(self, "player", None), "frame", None)
+        """Aim XP at the visible center of whichever Mochi frame is shown."""
+        presentation_player = self._bond_presentation_player
+        frame = (
+            presentation_player.frame
+            if presentation_player is not None and presentation_player.frame is not None
+            else getattr(getattr(self, "player", None), "frame", None)
+        )
         atlas = getattr(self, "atlas", None)
         if frame is not None and atlas is not None and hasattr(atlas, "visible_bounds"):
             try:
@@ -501,8 +678,18 @@ class BondMeterMixin:
         return (width * 0.50, height * 0.58)
 
     def _draw(self, area, context, width: int, height: int) -> None:
-        """Paint Mochi normally, then render XP orbs in the same input surface."""
-        super()._draw(area, context, width, height)
+        """Paint the presentation pass when active, then render XP orbs."""
+        presentation_player = self._bond_presentation_player
+        presentation_frame = (
+            presentation_player.frame
+            if presentation_player is not None
+            else None
+        )
+        if presentation_frame is None:
+            super()._draw(area, context, width, height)
+        else:
+            self.atlas.draw(context, presentation_frame, width, height)
+
         if not self._bond_orbs.has_activity:
             return
         target_x, target_y = self._bond_orb_target(width, height)
@@ -514,8 +701,18 @@ class BondMeterMixin:
         )
 
     def _tick(self) -> bool:
-        """Advance XP particles on Mochi's existing 60-ish Hz animation tick."""
+        """Advance behavior, presentation animation, and XP feedback together."""
         result = super()._tick()
+        presentation_player = self._bond_presentation_player
+        if (
+            presentation_player is not None
+            and presentation_player.animation is not None
+            and presentation_player.tick(getattr(self, "TICK_MS", 16))
+        ):
+            queue_draw = getattr(self, "queue_draw", None)
+            if callable(queue_draw):
+                queue_draw()
+
         if self._bond_orbs.has_activity:
             width = max(1, getattr(self, "get_width", lambda: 128)())
             height = max(1, getattr(self, "get_height", lambda: 128)())
@@ -535,6 +732,10 @@ class BondMeterMixin:
 
     def shutdown_presence(self) -> None:
         """Flush earned XP and tear down the visual-only progress surface."""
+        self._cancel_bond_emote_demo_timer()
+        self._cancel_bond_presentation_animation()
+        self._pending_level_up_card = None
+        self._pending_emote_demo = None
         source_id = self._bond_typing_source_id
         self._bond_typing_source_id = None
         if source_id is not None:

@@ -41,6 +41,13 @@ class SoundManagerTests(unittest.TestCase):
             self.assertTrue(manager.play_level_up())
             self.assertEqual(backend.calls[0][0].name, "level_up.ogg")
 
+    def test_shipped_level_up_sound_asset_exists(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "assets" / "audio"
+        path = root / SoundManager.EVENT_FILES[SoundEvent.LEVEL_UP]
+
+        self.assertTrue(path.is_file())
+        self.assertGreater(path.stat().st_size, 1_000)
+
     def test_lifecycle_sounds_use_subtle_event_gain(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
