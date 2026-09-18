@@ -131,7 +131,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
 
     Eight cards fit in two rows, so a scroller and dozens of independently
     measured GTK widgets are unnecessary. The canvas only re-rasterizes on a
-    bond-state or hover change; normal pointer movement just composites it.
+    bond-state or display-scale change; pointer movement does not redraw it.
     """
 
     COLUMNS = 3
@@ -148,20 +148,16 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         self._atlas = atlas
         self._on_activate = on_activate
         self._state: BondState | None = None
-        self._hovered: int | None = None
         self._surface: cairo.ImageSurface | None = None
         self.set_content_width(self.WIDTH)
         self.set_content_height(self.HEIGHT)
         self.set_halign(Gtk.Align.CENTER)
+        self.set_cursor_from_name("pointer")
         self.set_draw_func(self._draw)
 
         click = Gtk.GestureClick.new()
         click.connect("released", self._on_click)
         self.add_controller(click)
-        motion = Gtk.EventControllerMotion.new()
-        motion.connect("motion", self._on_motion)
-        motion.connect("leave", self._on_leave)
-        self.add_controller(motion)
         self.connect("notify::scale-factor", self._on_scale_factor_changed)
 
     def refresh(self, state: BondState) -> None:
@@ -189,23 +185,6 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         if self._state is not None and emote is not None and emote.is_unlocked(self._state):
             self._on_activate(emote.id)
 
-    def _on_motion(self, _controller, x: float, y: float) -> None:
-        emote = self.emote_at(x, y)
-        hovered = EMOTE_CATALOGUE.index(emote) if emote is not None else None
-        if hovered == self._hovered:
-            return
-        self._hovered = hovered
-        self.set_cursor_from_name("pointer" if emote is not None else "default")
-        self._render()
-        self.queue_draw()
-
-    def _on_leave(self, _controller) -> None:
-        if self._hovered is not None:
-            self._hovered = None
-            self.set_cursor_from_name("default")
-            self._render()
-            self.queue_draw()
-
     def _on_scale_factor_changed(self, *_args) -> None:
         if self._state is not None:
             self._render()
@@ -226,18 +205,23 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
                 emote,
                 column * (self.CARD_WIDTH + self.GAP),
                 row * (self.CARD_HEIGHT + self.GAP),
-                index == self._hovered,
             )
         self._surface = surface
 
-    def _draw_card(self, context: cairo.Context, emote: EmoteDefinition, x: int, y: int, hovered: bool) -> None:
+    def _draw_card(
+        self,
+        context: cairo.Context,
+        emote: EmoteDefinition,
+        x: int,
+        y: int,
+    ) -> None:
         unlocked = emote.is_unlocked(self._state)
         context.save()
         context.translate(x, y)
-        context.set_source_rgba(0.32, 0.70, 0.41, 0.13 if hovered and unlocked else 0.055)
+        context.set_source_rgba(0.32, 0.70, 0.41, 0.055)
         context.rectangle(0, 0, self.CARD_WIDTH, self.CARD_HEIGHT)
         context.fill()
-        context.set_source_rgba(0.32, 0.70, 0.41, 0.46 if hovered and unlocked else 0.16)
+        context.set_source_rgba(0.32, 0.70, 0.41, 0.16)
         context.set_line_width(1)
         context.rectangle(0.5, 0.5, self.CARD_WIDTH - 1, self.CARD_HEIGHT - 1)
         context.stroke()

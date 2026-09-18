@@ -105,13 +105,14 @@ def test_canvas_retains_one_surface_and_no_card_widget_tree() -> None:
     assert "Gtk.Picture" not in source
 
 
-def test_canvas_has_no_scroll_path_and_only_repaints_on_state_or_hover_change() -> None:
+def test_canvas_has_no_scroll_path_or_pointer_motion_repaint() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas)
 
     assert "Gtk.ScrolledWindow" not in source
     assert "def refresh" in source
     assert "if state == self._state" in source
-    assert "if hovered == self._hovered" in source
+    assert "EventControllerMotion" not in source
+    assert "def _on_motion" not in source
 
 
 def test_canvas_hit_testing_maps_cards_and_excludes_gaps() -> None:
