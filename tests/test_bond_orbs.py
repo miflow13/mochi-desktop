@@ -243,3 +243,36 @@ def test_feed_sized_feedback_stays_bounded_through_full_lifecycle() -> None:
     assert peak_pulses <= MAX_ACTIVE_PULSES
     assert peak_markers <= MAX_ACTIVE_GAIN_MARKERS
     assert field.has_activity is False
+
+
+def test_repeated_feed_sized_rewards_do_not_stack_visual_backlog() -> None:
+    field = XpOrbField(rng=random.Random(29))
+
+    assert field.queue_xp_bounded(60, max_outstanding=60) == 60
+    assert field.outstanding_orb_count == 60
+
+    # Spam-feeding while the first swarm is still outstanding adds no debt.
+    for _ in range(5):
+        assert field.queue_xp_bounded(60, max_outstanding=60) == 0
+        assert field.outstanding_orb_count == 60
+
+
+def test_bounded_reward_only_refills_available_visual_capacity() -> None:
+    field = XpOrbField(rng=random.Random(31))
+    field.queue_xp_bounded(60, max_outstanding=60)
+
+    # Emit/age enough particles that some of the original 60 have completed.
+    for _ in range(100):
+        field.advance(
+            0.016,
+            width=112,
+            height=112,
+            target_x=56,
+            target_y=64,
+        )
+
+    before = field.outstanding_orb_count
+    accepted = field.queue_xp_bounded(60, max_outstanding=60)
+
+    assert accepted == 60 - before
+    assert field.outstanding_orb_count == 60

@@ -111,7 +111,10 @@ def test_completed_feed_awards_large_boost_persists_and_shows_bar() -> None:
     harness._on_feed_animation_completed()
 
     assert harness._bond_state == BondState(level=1, xp=10 + BOND_FEED_XP)
-    harness._bond_orbs.queue_xp.assert_called_once_with(BOND_FEED_XP)
+    harness._bond_orbs.queue_xp_bounded.assert_called_once_with(
+        BOND_FEED_XP,
+        max_outstanding=BOND_FEED_XP,
+    )
     harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_FEED_XP)
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
     harness._bond_progress_overlay.show_activity.assert_called_once_with(
@@ -238,7 +241,10 @@ def test_dev_swarm_is_visual_only() -> None:
     BondMeterMixin._test_bond_swarm(harness)
 
     assert harness._bond_state == original
-    harness._bond_orbs.queue_xp.assert_called_once_with(BOND_FEED_XP)
+    harness._bond_orbs.queue_xp_bounded.assert_called_once_with(
+        BOND_FEED_XP,
+        max_outstanding=BOND_FEED_XP,
+    )
     harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_FEED_XP)
     harness._config.save_bond_state.assert_not_called()
     harness.queue_draw.assert_called_once_with()
@@ -343,3 +349,23 @@ def test_real_xp_threshold_runs_complete_level_up_presentation_regression() -> N
         BondState(level=2, xp=0),
         previous_level=1,
     )
+
+
+def test_feed_uses_visual_backlog_cap_without_reducing_real_xp() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=100))
+    harness.state.current = MochiState.EATING
+
+    advance = BondMeterMixin._award_bond(
+        harness,
+        BOND_FEED_XP,
+        persist=True,
+        visual_orb_limit=BOND_FEED_XP,
+    )
+
+    assert advance.xp_awarded == BOND_FEED_XP
+    assert harness._bond_state == BondState(level=1, xp=100 + BOND_FEED_XP)
+    harness._bond_orbs.queue_xp_bounded.assert_called_once_with(
+        BOND_FEED_XP,
+        max_outstanding=BOND_FEED_XP,
+    )
+    harness._config.save_bond_state.assert_called_once_with(harness._bond_state)

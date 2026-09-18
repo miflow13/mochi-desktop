@@ -1,8 +1,9 @@
 """Visual-only bond XP particles rendered inside Mochi's sprite surface.
 
 No extra GTK windows, widgets, controllers, or hit targets are created here.
-Every awarded XP still maps to exactly one orb; collection pulses and the
-level-up bloom are feedback effects only and never represent additional XP.
+Normal awards map one XP to one orb. Repeated dense rewards may coalesce their
+visual backlog so spam cannot leave Mochi emitting particles long after the
+interaction ends. Collection pulses and the level-up bloom are feedback only.
 """
 
 from __future__ import annotations
@@ -159,7 +160,7 @@ class XpCollectionPulse:
 
 
 class XpOrbField:
-    """Queue and animate one visual orb for every awarded bond XP."""
+    """Queue and animate bounded visual feedback for awarded bond XP."""
 
     def __init__(self, *, rng: random.Random | None = None) -> None:
         self._rng = rng or random.Random()
@@ -179,6 +180,11 @@ class XpOrbField:
     @property
     def active_count(self) -> int:
         return len(self._active)
+
+    @property
+    def outstanding_orb_count(self) -> int:
+        """Particles still travelling or waiting to be emitted."""
+        return len(self._active) + self._pending_xp
 
     @property
     def pulse_count(self) -> int:
@@ -221,6 +227,23 @@ class XpOrbField:
                 ORB_EMIT_INTERVAL_SECONDS,
             )
         return queued
+
+    def queue_xp_bounded(self, amount: int, *, max_outstanding: int) -> int:
+        """Queue visual XP without letting repeated dense rewards grow forever.
+
+        The returned value is the number of *visual* orbs accepted. Bond XP is
+        owned by the caller and is never reduced by this presentation cap.
+        """
+        requested = _coerce_positive_int(amount)
+        limit = _coerce_positive_int(max_outstanding)
+        if requested <= 0 or limit <= 0:
+            return 0
+
+        available = max(0, limit - self.outstanding_orb_count)
+        queued = min(requested, available)
+        if queued <= 0:
+            return 0
+        return self.queue_xp(queued)
 
     def show_gain_marker(self, amount: int) -> int:
         """Show one floating label for this award without inventing extra XP."""

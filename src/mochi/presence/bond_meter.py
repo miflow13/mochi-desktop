@@ -207,7 +207,10 @@ class BondMeterMixin:
 
     def _test_bond_swarm(self, _button=None) -> None:
         """Preview a feed-sized particle swarm without mutating bond progress."""
-        self._bond_orbs.queue_xp(BOND_FEED_XP)
+        self._bond_orbs.queue_xp_bounded(
+            BOND_FEED_XP,
+            max_outstanding=BOND_FEED_XP,
+        )
         self._bond_orbs.show_gain_marker(BOND_FEED_XP)
         queue_draw = getattr(self, "queue_draw", None)
         if callable(queue_draw):
@@ -252,8 +255,14 @@ class BondMeterMixin:
         config.save_bond_state(self._bond_state)
         self._bond_unsaved_xp = 0
 
-    def _award_bond(self, amount: int, *, persist: bool = True) -> BondAdvance:
-        """Award positive bond XP and update every live presentation."""
+    def _award_bond(
+        self,
+        amount: int,
+        *,
+        persist: bool = True,
+        visual_orb_limit: int | None = None,
+    ) -> BondAdvance:
+        """Award bond XP while optionally capping only its visual orb backlog."""
         advance = self._bond_state.award(amount)
         if advance.xp_awarded <= 0:
             return advance
@@ -261,7 +270,13 @@ class BondMeterMixin:
         previous_level = self._bond_state.level
         self._set_bond_state_for_ui(advance.state)
         self._bond_unsaved_xp += advance.xp_awarded
-        self._bond_orbs.queue_xp(advance.xp_awarded)
+        if visual_orb_limit is None:
+            self._bond_orbs.queue_xp(advance.xp_awarded)
+        else:
+            self._bond_orbs.queue_xp_bounded(
+                advance.xp_awarded,
+                max_outstanding=visual_orb_limit,
+            )
         self._bond_orbs.show_gain_marker(advance.xp_awarded)
         if (
             self._bond_progress_overlay is not None
@@ -336,7 +351,11 @@ class BondMeterMixin:
         # Establish the reason first so the +XP pulse and any level-up message
         # inherit the correct activity instead of flashing generic "bonding".
         self._show_bond_progress("sharing a snack")
-        self._award_bond(BOND_FEED_XP, persist=True)
+        self._award_bond(
+            BOND_FEED_XP,
+            persist=True,
+            visual_orb_limit=BOND_FEED_XP,
+        )
         if self._bond_progress_overlay is not None:
             self._bond_progress_overlay.finish_activity(BOND_FEED_HOLD_SECONDS)
 
