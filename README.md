@@ -1,6 +1,13 @@
 
 # Mochi
 
+## Support Mochi ☕
+
+Mochi is free and open source. If you enjoy having this little desktop buddy around
+and would like to support continued development, you can support the project on Ko-fi.
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](YOUR_PUBLIC_KOFI_URL)
+
 [![Tests](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml/badge.svg)](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml)
 
 <img width="800" height="428" alt="ezgif-2e6aaeb139cf0fe7" src="https://github.com/user-attachments/assets/9f3e0ca5-8454-4e22-a3d1-70d7e27c23fe" />
