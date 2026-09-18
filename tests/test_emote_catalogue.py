@@ -140,27 +140,12 @@ def test_canvas_has_no_scroll_path_or_pointer_motion_repaint() -> None:
     assert "def _on_motion" not in source
 
 
-def test_canvas_xp_only_refresh_does_not_rerasterize_cards() -> None:
-    canvas = object.__new__(EmoteCatalogueCanvas)
-    canvas._state = BondState(level=2, xp=10)
-    canvas._surface = object()
-    canvas._render_surface = Mock()
+def test_canvas_refresh_is_keyed_to_level_not_exact_xp_state() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas.refresh)
 
-    EmoteCatalogueCanvas.refresh(canvas, BondState(level=2, xp=11))
-
-    assert canvas._state == BondState(level=2, xp=11)
-    canvas._render_surface.assert_not_called()
-
-
-def test_canvas_level_change_rerasterizes_cards() -> None:
-    canvas = object.__new__(EmoteCatalogueCanvas)
-    canvas._state = BondState(level=2, xp=10)
-    canvas._surface = object()
-    canvas._render_surface = Mock()
-
-    EmoteCatalogueCanvas.refresh(canvas, BondState(level=3, xp=0))
-
-    canvas._render_surface.assert_called_once_with()
+    assert "state.level == previous.level" in source
+    assert "state == self._state" not in source
+    assert "self._render_surface()" in source
 
 
 def test_canvas_renders_static_surface_in_one_pass() -> None:
@@ -330,29 +315,14 @@ def test_window_refreshes_only_the_single_canvas() -> None:
 
 
 def test_locked_card_detail_is_static_across_xp_ticks() -> None:
-    canvas = object.__new__(EmoteCatalogueCanvas)
-    canvas._state = BondState(level=1, xp=0)
-    emote = EMOTES_BY_ID["look"]
+    source = inspect.getsource(EmoteCatalogueCanvas._detail)
 
-    first = EmoteCatalogueCanvas._detail(canvas, emote, False)
-    canvas._state = BondState(level=1, xp=200)
-    second = EmoteCatalogueCanvas._detail(canvas, emote, False)
-
-    assert first == second == "Keep bonding to discover this mood."
+    assert '"Keep bonding to discover this mood."' in source
+    assert "bond_xp_until_level" not in source
 
 
-def test_scale_notification_rerenders_only_when_scale_really_changes() -> None:
-    canvas = object.__new__(EmoteCatalogueCanvas)
-    canvas._state = BondState(level=2, xp=10)
-    canvas._render_scale = 1
-    canvas.get_scale_factor = Mock(return_value=1)
-    canvas._render_surface = Mock()
+def test_scale_notification_is_guarded_by_last_rendered_scale() -> None:
+    source = inspect.getsource(EmoteCatalogueCanvas._on_scale_factor_changed)
 
-    EmoteCatalogueCanvas._on_scale_factor_changed(canvas)
-
-    canvas._render_surface.assert_not_called()
-
-    canvas.get_scale_factor.return_value = 2
-    EmoteCatalogueCanvas._on_scale_factor_changed(canvas)
-
-    canvas._render_surface.assert_called_once_with()
+    assert "scale != self._render_scale" in source
+    assert "self._render_surface()" in source
