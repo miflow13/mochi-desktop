@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 import logging
 
@@ -31,10 +32,12 @@ class BondProgressOverlay:
         owner: Gtk.Window,
         anchor_widget: Gtk.Widget,
         logger: logging.Logger | None = None,
+        on_level_up_finished: Callable[[], None] | None = None,
     ) -> None:
         self._owner = owner
         self._anchor = anchor_widget
         self._logger = logger or logging.getLogger(__name__)
+        self._on_level_up_finished = on_level_up_finished
         self._active = False
         self._mode: str | None = None
         self._hide_source_id: int | None = None
@@ -265,7 +268,9 @@ class BondProgressOverlay:
     def show_level_up(self, state: BondState, *, previous_level: int) -> None:
         """Present a distinct, unmistakable relationship-level milestone."""
         self._cancel_hide_timer()
+        self._cancel_gain_timer()
         self._cancel_level_up_timer()
+        self._set_gain_highlight(False)
         self._level_up_active = True
         self._level_up_previous_level = previous_level
         self._active = True
@@ -313,6 +318,7 @@ class BondProgressOverlay:
 
     def dismiss(self) -> None:
         """Immediately retire the HUD without changing bond progression."""
+        was_level_up = self._level_up_active
         self._cancel_hide_timer()
         self._cancel_gain_timer()
         self._cancel_level_up_timer()
@@ -324,14 +330,18 @@ class BondProgressOverlay:
         self._set_level_up_highlight(False)
         self._set_level_up_content(False)
         self._hide_surfaces()
+        if was_level_up:
+            self._notify_level_up_finished()
 
     def finish_activity(self, delay_seconds: float = 1.6) -> None:
         if not self._active:
             return
+        # The level-up timer already owns the celebration lifetime. Avoid a
+        # second GLib hide timer racing the same presentation.
+        if self._level_up_active:
+            return
         self._cancel_hide_timer()
         delay = max(0.0, delay_seconds)
-        if self._level_up_active:
-            delay = max(delay, self.LEVEL_UP_MIN_HOLD_SECONDS)
         delay_ms = max(1, round(delay * 1000))
         self._hide_source_id = GLib.timeout_add(delay_ms, self._finish_hide)
 
@@ -365,11 +375,15 @@ class BondProgressOverlay:
             self._position_wayland_anchor()
 
     def destroy(self) -> None:
+        was_level_up = self._level_up_active
         self._cancel_hide_timer()
         self._cancel_gain_timer()
         self._cancel_level_up_timer()
         self._active = False
+        self._level_up_active = False
         self._hide_surfaces()
+        if was_level_up:
+            self._notify_level_up_finished()
         self._window.destroy()
         self._popover.unparent()
 
@@ -396,7 +410,13 @@ class BondProgressOverlay:
         self._gain_text = ""
         self._active = False
         self._hide_surfaces()
+        self._notify_level_up_finished()
         return GLib.SOURCE_REMOVE
+
+    def _notify_level_up_finished(self) -> None:
+        callback = self._on_level_up_finished
+        if callback is not None:
+            callback()
 
     def _hide_surfaces(self) -> None:
         if self._window.get_visible():

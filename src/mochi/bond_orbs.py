@@ -35,7 +35,7 @@ def _coerce_positive_int(value: object) -> int:
         return 0
 
 
-@dataclass
+@dataclass(slots=True)
 class XpOrb:
     """One XP particle travelling from Mochi's perimeter into the body."""
 
@@ -91,7 +91,7 @@ class XpOrb:
         return max(0.9, self.radius * (1.0 - 0.38 * t))
 
 
-@dataclass
+@dataclass(slots=True)
 class XpGainMarker:
     """Short floating text marker for one awarded XP event."""
 
@@ -127,7 +127,7 @@ class XpGainMarker:
         return x, y
 
 
-@dataclass
+@dataclass(slots=True)
 class XpCollectionPulse:
     """Short glow produced when one real XP orb reaches Mochi."""
 
