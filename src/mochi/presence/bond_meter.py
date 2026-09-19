@@ -139,6 +139,7 @@ class BondMeterMixin:
             self._bond_progress_overlay is not None
             and self._bond_progress_overlay.active
             and self.state.current is not MochiState.TYPING
+            and not self._focus_bond_hint_active()
         ):
             self._bond_progress_overlay.update(self._bond_state)
 
@@ -388,6 +389,8 @@ class BondMeterMixin:
         return advance
 
     def _show_bond_progress(self, activity: str) -> None:
+        if self._focus_bond_hint_active():
+            return
         overlay = self._bond_progress_overlay
         if overlay is not None:
             overlay.show_activity(self._bond_state, activity)
