@@ -802,9 +802,14 @@ class Buddy(Gtk.DrawingArea):
         self._maybe_resume_ambient_activity()
 
     def _begin_sleep(self) -> None:
-        self._cancel_active_emote()
         if not can_begin_sleep(self.state.current):
             return
+        if not _state_controller_for(self).allows(MochiState.SLEEPING):
+            return
+
+        # Only clear active runtime state after the transition policy has
+        # accepted sleeping. Rejected requests must be completely non-mutating.
+        self._cancel_active_emote()
         self._cancel_walk()
         self._click_reactions.clear()
         if not self._transition_to(MochiState.SLEEPING):
