@@ -21,6 +21,7 @@ from .engine import speech_display_seconds
 
 
 FOCUS_TIMER_TICK_MS = 500
+FOCUS_PRESENCE_PRIORITY_FLOOR = 40
 FOCUS_BREAK_LINE = "break time 🌱"
 FOCUS_RESUME_LINE = "back to it. i'm with you 🌱"
 FOCUS_COMPLETE_LINE = "nice work. we did it 🌱"
@@ -442,9 +443,8 @@ class FocusWindow:
 class FocusSessionMixin:
     """Add a low-pressure Pomodoro loop without creating a second state machine."""
 
-    FOCUS_START_ANIMATION = "focus_start"
-    FOCUS_LOOP_ANIMATION = "focus_loop"
-    FOCUS_STOP_ANIMATION = "focus_stop"
+    FOCUS_WORK_ANIMATION = "computer_typing"
+    FOCUS_EXIT_ANIMATION = "computer_outro"
 
     def __init__(self, *args, **kwargs) -> None:
         self._focus_window: FocusWindow | None = None
@@ -494,11 +494,10 @@ class FocusSessionMixin:
             self._focus_window.present_session(session)
             return
 
-        if (
-            self.state.current is MochiState.IDLE
-            and self.player.animation is ANIMATIONS["idle"]
-        ):
-            self._start_computer_emote()
+        # Reuse the ordinary computer emote as the setup "getting ready" beat.
+        # The existing emote owns its own eligibility checks, so opening Focus
+        # never force-interrupts a higher-priority interaction.
+        self._start_computer_emote()
         self._focus_window.present_setup(self._focus_plan)
 
     def _start_focus_session(self, plan: FocusPlan) -> None:
@@ -514,7 +513,7 @@ class FocusSessionMixin:
         if self.state.current is MochiState.SLEEPING:
             self._wake_up()
         self._ensure_focus_visual()
-        self._focus_ambience.start_selected()
+        self._resume_focus_ambience()
 
         if self._focus_source_id is not None:
             GLib.source_remove(self._focus_source_id)
@@ -586,6 +585,7 @@ class FocusSessionMixin:
             elif session.phase is FocusPhase.FOCUS:
                 self._show_focus_line(FOCUS_RESUME_LINE)
                 self._ensure_focus_visual()
+                self._resume_focus_ambience()
                 resumed_focus_visual = True
 
         if (
@@ -613,12 +613,10 @@ class FocusSessionMixin:
         if paused:
             self._stop_focus_visual()
             self._focus_ambience.pause()
-        elif session.phase is FocusPhase.FOCUS:
-            self._ensure_focus_visual()
-            if self._focus_ambience.active_name is None:
-                self._focus_ambience.start_selected()
-            else:
-                self._focus_ambience.resume()
+        else:
+            if session.phase is FocusPhase.FOCUS:
+                self._ensure_focus_visual()
+            self._resume_focus_ambience()
 
         if self._focus_window is not None:
             self._focus_window.update_session(session)
@@ -658,9 +656,8 @@ class FocusSessionMixin:
         self._focus_completion_heart_pending = bool(
             self.state.current is MochiState.COMPUTER
             and self._current_animation in (
-                self.FOCUS_START_ANIMATION,
-                self.FOCUS_LOOP_ANIMATION,
-                self.FOCUS_STOP_ANIMATION,
+                self.FOCUS_WORK_ANIMATION,
+                self.FOCUS_EXIT_ANIMATION,
             )
         )
         self._stop_focus_visual()
@@ -693,26 +690,17 @@ class FocusSessionMixin:
         engine = getattr(self, "_ambient_presence_engine", None)
         if engine is None:
             return False
-        tuning = engine.tuning
-        if not tuning.speech_enabled or tuning.quiet_mode:
-            return False
-
-        bubble = getattr(self, "_presence_bubble", None)
-        if bubble is None or not self.state.dialogue_allowed:
-            return False
 
         text = engine.phrases.choose("focus", exclude_recent=True)
-        self._dismiss_presence_bubble(user_initiated=False)
-        shown = bubble.show(
-            text,
-            duration_seconds=min(4.0, speech_display_seconds(text)),
-        )
+        shown = self._show_focus_bubble(text)
         if shown:
-            engine.phrases.remember(text)
             self._logger.debug("[focus] encouragement text=%r", text)
         return shown
 
     def _show_focus_line(self, text: str) -> bool:
+        return self._show_focus_bubble(text)
+
+    def _show_focus_bubble(self, text: str) -> bool:
         engine = getattr(self, "_ambient_presence_engine", None)
         bubble = getattr(self, "_presence_bubble", None)
         if engine is None or bubble is None or not self.state.dialogue_allowed:
@@ -744,7 +732,13 @@ class FocusSessionMixin:
         """Keep focused work quiet without touching AmbiSense queues or tuning."""
         if not self._focus_should_work():
             return True
-        return getattr(action, "priority", 0) >= 40
+        return getattr(action, "priority", 0) >= FOCUS_PRESENCE_PRIORITY_FLOOR
+
+    def _resume_focus_ambience(self) -> None:
+        if self._focus_ambience.active_name is None:
+            self._focus_ambience.start_selected()
+        else:
+            self._focus_ambience.resume()
 
     def _ensure_focus_visual(self) -> bool:
         if not self._focus_should_work() or self._context_menu_open:
@@ -760,13 +754,9 @@ class FocusSessionMixin:
             self._play_animation("idle")
 
         if self.state.current is MochiState.COMPUTER:
-            if self._current_animation in (
-                self.FOCUS_START_ANIMATION,
-                self.FOCUS_LOOP_ANIMATION,
-                self.FOCUS_STOP_ANIMATION,
-            ):
+            if self._current_animation == self.FOCUS_WORK_ANIMATION:
                 return True
-            self._play_animation(self.FOCUS_START_ANIMATION, after=None)
+            self._play_animation(self.FOCUS_WORK_ANIMATION, after=None)
             return True
 
         if self.state.current is not MochiState.IDLE:
@@ -780,49 +770,32 @@ class FocusSessionMixin:
         if not self._transition_to(MochiState.COMPUTER):
             return False
 
-        self._play_animation(self.FOCUS_START_ANIMATION, after=None)
-        self._logger.debug("Focus coworking animation started")
+        self._play_animation(self.FOCUS_WORK_ANIMATION, after=None)
+        self._logger.debug("Focus coworking reused computer typing loop")
         return True
 
     def _stop_focus_visual(self) -> None:
         if self.state.current is not MochiState.COMPUTER:
             return
-        if self._current_animation == self.FOCUS_LOOP_ANIMATION:
-            self._play_animation(self.FOCUS_STOP_ANIMATION, after=None)
-        # If the sit-down is still playing, let it finish. Its completion
-        # callback chooses the stop transition when focus is no longer active.
+        if self._current_animation == self.FOCUS_EXIT_ANIMATION:
+            return
+        self._play_animation(self.FOCUS_EXIT_ANIMATION, after="idle")
 
     def _finish_reaction(self, finished_animation) -> None:
-        """Advance the authored focus start/loop/stop animation sequence."""
-        if finished_animation is self._active_animation:
-            if self._current_animation == self.FOCUS_START_ANIMATION:
-                self._pending_animation = None
-                if (
-                    self._focus_should_work()
-                    and self.state.current is MochiState.COMPUTER
-                ):
-                    self._play_animation(self.FOCUS_LOOP_ANIMATION, after=None)
-                elif self.state.current is MochiState.COMPUTER:
-                    self._play_animation(self.FOCUS_STOP_ANIMATION, after=None)
-                else:
-                    super()._finish_reaction(finished_animation)
-                return
-
-            if self._current_animation == self.FOCUS_STOP_ANIMATION:
-                self._pending_animation = None
-                if self.state.current is MochiState.COMPUTER:
-                    self._transition_to(MochiState.IDLE)
-                    self._play_animation("idle")
-
-                if self._focus_should_work():
-                    self._ensure_focus_visual()
-                elif self._focus_completion_heart_pending:
-                    self._focus_completion_heart_pending = False
-                    if self.state.dialogue_allowed:
-                        self._start_heart_emote(ignore_cooldown=True)
-                return
-
+        finishing_focus_exit = bool(
+            finished_animation is self._active_animation
+            and self._current_animation == self.FOCUS_EXIT_ANIMATION
+        )
         super()._finish_reaction(finished_animation)
+
+        if (
+            finishing_focus_exit
+            and self._focus_completion_heart_pending
+            and self.state.current is MochiState.IDLE
+        ):
+            self._focus_completion_heart_pending = False
+            if self.state.dialogue_allowed:
+                self._start_heart_emote(ignore_cooldown=True)
 
     def _stop_focus_timer(self) -> None:
         source_id = self._focus_source_id
@@ -858,9 +831,16 @@ class FocusSessionMixin:
 
     def _toggle_sleep(self, *args, **kwargs) -> None:
         session = self._focus_session
-        if session is not None and session.active and not session.paused:
+        choosing_sleep = self.state.current is not MochiState.SLEEPING
+        if (
+            choosing_sleep
+            and session is not None
+            and session.active
+            and not session.paused
+        ):
             session.set_paused(True)
             self._stop_focus_visual()
+            self._focus_ambience.pause()
             if self._focus_window is not None:
                 self._focus_window.update_session(session)
         super()._toggle_sleep(*args, **kwargs)
