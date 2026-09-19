@@ -292,14 +292,20 @@ def test_focus_bond_hint_draws_only_track_and_progress_fill() -> None:
     harness.player = SimpleNamespace(frame=None)
     harness.atlas = None
     context = Mock()
+    context.text_extents.return_value = SimpleNamespace(
+        width=38.0,
+        x_bearing=0.0,
+    )
 
     BondMeterMixin._draw_focus_bond_hint(harness, context, 128, 128)
 
+    context.show_text.assert_called_once_with("Bond XP")
     assert context.rectangle.call_count == 2
     track = context.rectangle.call_args_list[0].args
     fill = context.rectangle.call_args_list[1].args
     assert track[0:2] == fill[0:2]
     assert track[3] == fill[3]
+    assert track[3] >= 5.0
     assert fill[2] == track[2] * harness._bond_state.progress_fraction
     assert context.fill.call_count == 2
 
