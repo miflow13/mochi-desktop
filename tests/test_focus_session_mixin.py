@@ -42,6 +42,7 @@ def _harness() -> _Harness:
     harness._focus_source_id = None
     harness._focus_last_tick = None
     harness._focus_ambience = Mock()
+    harness._focus_ambience.active_name = None
     harness._focus_completion_heart_pending = False
     harness._context_menu_open = False
     harness._window = Mock()
@@ -55,6 +56,7 @@ def _harness() -> _Harness:
     harness._show_focus_line = Mock()
     harness._award_bond = Mock()
     harness._wake_up = Mock()
+    harness._start_computer_emote = Mock()
     harness._start_heart_emote = Mock()
     harness.state = StateMachine()
     harness.player = SimpleNamespace(animation=object())
@@ -129,6 +131,16 @@ def test_hidden_window_reopens_the_same_live_session() -> None:
     assert harness._focus_session is session
 
 
+def test_opening_setup_attempts_the_existing_computer_getting_ready_beat() -> None:
+    harness = _harness()
+    harness._focus_window = Mock()
+
+    harness._show_focus_window()
+
+    harness._start_computer_emote.assert_called_once_with()
+    harness._focus_window.present_setup.assert_called_once_with(harness._focus_plan)
+
+
 def test_focus_xp_uses_existing_bond_award_path_for_level_up_feedback() -> None:
     harness = _harness()
     harness._focus_session = FocusSession(FocusPlan(focus_minutes=5, rounds=1))
@@ -151,10 +163,9 @@ def test_focus_visual_resumes_after_temporary_interactions() -> None:
     assert harness.base_typing_calls == 0
 
 
-def test_focus_visual_plays_authored_start_loop_and_stop_sequence() -> None:
+def test_focus_visual_reuses_existing_computer_typing_loop_and_outro() -> None:
     harness = _harness()
     harness._focus_session = FocusSession(FocusPlan())
-    harness._focus_completion_heart_pending = False
     harness._current_animation = "idle"
     harness._active_animation = ANIMATIONS["idle"]
     harness._pending_animation = None
@@ -177,40 +188,26 @@ def test_focus_visual_plays_authored_start_loop_and_stop_sequence() -> None:
     )
 
     assert FocusSessionMixin._ensure_focus_visual(harness) is True
-    harness._play_animation.assert_called_with("focus_start", after=None)
-
-    start = harness._active_animation
-    FocusSessionMixin._finish_reaction(harness, start)
-    harness._play_animation.assert_called_with("focus_loop", after=None)
+    harness._play_animation.assert_called_with("computer_typing", after=None)
+    assert harness.state.current is MochiState.COMPUTER
 
     harness._focus_session.set_paused(True)
     FocusSessionMixin._stop_focus_visual(harness)
-    harness._play_animation.assert_called_with("focus_stop", after=None)
-
-    stop = harness._active_animation
-    FocusSessionMixin._finish_reaction(harness, stop)
-    harness._play_animation.assert_called_with("idle")
-    assert harness.state.current is MochiState.IDLE
+    harness._play_animation.assert_called_with("computer_outro", after="idle")
 
 
-def test_stopping_during_focus_start_finishes_start_before_stop_transition() -> None:
+def test_focus_resume_can_replace_an_in_progress_computer_outro() -> None:
     harness = _harness()
     harness._focus_session = FocusSession(FocusPlan())
-    harness._focus_session.set_paused(True)
     harness.state.current = MochiState.COMPUTER
-    harness._current_animation = "focus_start"
-    harness._active_animation = ANIMATIONS["focus_start"]
-    harness._pending_animation = None
+    harness._current_animation = "computer_outro"
+    harness._active_animation = ANIMATIONS["computer_outro"]
+    harness.player.animation = ANIMATIONS["computer_outro"]
     harness._play_animation = Mock()
 
-    FocusSessionMixin._stop_focus_visual(harness)
+    assert FocusSessionMixin._ensure_focus_visual(harness) is True
 
-    assert harness._pending_animation is None
-    harness._play_animation.assert_not_called()
-
-    FocusSessionMixin._finish_reaction(harness, harness._active_animation)
-
-    harness._play_animation.assert_called_once_with("focus_stop", after=None)
+    harness._play_animation.assert_called_once_with("computer_typing", after=None)
 
 
 def test_focus_suppresses_only_low_priority_unsolicited_presence_actions() -> None:
@@ -239,7 +236,38 @@ def test_automatic_sleep_is_deferred_but_manual_sleep_pauses_focus() -> None:
     assert harness.base_sleep_calls == 0
     assert harness._focus_session.paused is True
     harness._stop_focus_visual.assert_called_once_with()
+    harness._focus_ambience.pause.assert_called_once_with()
     assert harness.base_toggle_sleep_calls == 1
+
+
+def test_wake_during_break_does_not_pause_the_running_break() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan())
+    session.phase = FocusPhase.BREAK
+    harness._focus_session = session
+    harness.state.current = MochiState.SLEEPING
+
+    harness._toggle_sleep()
+
+    assert session.paused is False
+    harness._stop_focus_visual.assert_not_called()
+    harness._focus_ambience.pause.assert_not_called()
+    assert harness.base_toggle_sleep_calls == 1
+
+
+def test_resume_during_break_resumes_ambience_without_work_visual() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan())
+    session.phase = FocusPhase.BREAK
+    session.set_paused(True)
+    harness._focus_session = session
+    harness._focus_ambience.active_name = "mochi_rain"
+
+    harness._toggle_focus_pause()
+
+    assert session.paused is False
+    harness._ensure_focus_visual.assert_not_called()
+    harness._focus_ambience.resume.assert_called_once_with()
 
 
 def test_focus_wakes_mochi_when_the_next_focus_round_begins() -> None:
