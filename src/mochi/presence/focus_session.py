@@ -597,6 +597,7 @@ class FocusSessionMixin:
             return False
 
         if self.state.current is MochiState.SLEEPING:
+            self._wake_up()
             return False
 
         if self.state.current is MochiState.WALKING:
