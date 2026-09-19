@@ -707,11 +707,19 @@ class BondMeterMixin:
         bar_width = max(minimum_width, min(preferred_width, maximum_width))
         bar_height = max(5.0, size * FOCUS_BOND_BAR_HEIGHT_FRACTION)
         gap = max(2.0, size * FOCUS_BOND_BAR_GAP_FRACTION)
+        label_size = max(7.0, min(11.0, size * FOCUS_BOND_LABEL_SIZE_FRACTION))
+        label_gap = max(1.0, size * FOCUS_BOND_LABEL_GAP_FRACTION)
 
         center_x = visible_x + visible_width / 2.0
         x = max(2.0, min(center_x - bar_width / 2.0, width - bar_width - 2.0))
 
-        preferred_y = visible_y + visible_height + gap
+        preferred_y = (
+            visible_y
+            + visible_height
+            + gap
+            + label_size
+            + label_gap
+        )
         maximum_y = max(2.0, height - bar_height - 2.0)
         y = min(preferred_y, maximum_y)
         return (x, y, bar_width, bar_height)
