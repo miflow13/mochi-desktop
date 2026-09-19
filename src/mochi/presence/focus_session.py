@@ -52,7 +52,6 @@ window.mochi-focus-window {
 .mochi-focus-timer {
     font-size: 38px;
     font-weight: 800;
-    font-feature-settings: "tnum";
 }
 
 .mochi-focus-card {
@@ -279,7 +278,7 @@ class FocusWindow:
         spin = Gtk.SpinButton.new_with_range(minimum, maximum, 1)
         spin.set_value(value)
         spin.set_numeric(True)
-        spin.set_width_chars(4)
+        spin.set_size_request(78, -1)
         row.append(spin)
 
         if suffix:
