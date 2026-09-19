@@ -136,6 +136,7 @@ def test_focus_window_positions_beside_full_mochi_bounds() -> None:
 
 def test_focus_window_hide_notifies_the_thinking_lifecycle() -> None:
     focus_window = object.__new__(FocusWindow)
+    focus_window._position_serial = 0
     focus_window.window = Mock()
     focus_window._on_hidden = Mock()
 
