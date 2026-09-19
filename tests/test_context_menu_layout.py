@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import inspect
 import unittest
+from unittest.mock import Mock
 
 from mochi.buddy import Buddy
 from mochi.presence.edge_roam_controls import EdgeRoamMixin
+from mochi.presence.focus_session import FocusSessionMixin
 from mochi.presence.integration import PresenceBuddyMixin
 from mochi.presence.nameplate_controls import NameplateMixin
 from mochi.quick_start import QuickStartMixin
@@ -169,6 +171,7 @@ class ContextMenuFeatureMigrationTests(unittest.TestCase):
         )
         builders = (
             EdgeRoamMixin._build_context_menu,
+            FocusSessionMixin._build_context_menu,
             PresenceBuddyMixin._build_context_menu,
             NameplateMixin._build_context_menu,
             QuickStartMixin._build_context_menu,
@@ -179,6 +182,18 @@ class ContextMenuFeatureMigrationTests(unittest.TestCase):
             self.assertIn("_register_context_menu_row", source)
             for private_detail in forbidden:
                 self.assertNotIn(private_detail, source)
+
+    def test_focus_row_stays_before_sleep_and_defers_open_until_menu_close(self) -> None:
+        source = inspect.getsource(FocusSessionMixin._build_context_menu)
+        self.assertIn('"focus"', source)
+        self.assertIn('before="sleep"', source)
+
+        harness = Mock()
+        FocusSessionMixin._show_focus_from_context_menu(harness, Mock())
+
+        harness._close_context_menu_then.assert_called_once_with(
+            harness._show_focus_window
+        )
 
 
 if __name__ == "__main__":

@@ -149,6 +149,8 @@ if command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1; then
         python3-cairo
         gtk4
         gtk4-layer-shell
+        gstreamer1
+        gstreamer1-plugins-base
         libX11
         xorg-x11-server-Xwayland
         pipewire-utils
