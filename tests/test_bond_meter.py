@@ -8,6 +8,7 @@ from unittest.mock import Mock, call, patch
 from mochi.animation import AnimationPlayer
 from mochi.care import BOND_FEED_XP, BondState
 from mochi.emotes import EMOTES_BY_ID
+from mochi.focus import FocusPhase, FocusPlan, FocusSession
 from mochi.sprites import ANIMATIONS
 from mochi.presence.bond_meter import (
     BOND_FEED_VISUAL_ORB_LIMIT,
@@ -109,6 +110,7 @@ def _runtime_harness(state: BondState | None = None):
     harness._bond_progress_overlay.presentation_active = False
     harness._bond_typing_source_id = None
     harness._bond_unsaved_xp = 0
+    harness._focus_session = None
     harness._config = Mock()
     harness._logger = Mock()
     harness._sound = Mock()
@@ -234,6 +236,77 @@ def test_typing_tick_stops_if_mochi_is_no_longer_typing() -> None:
     assert result == 0
     assert harness._bond_state == BondState(level=1, xp=200)
     harness._bond_progress_overlay.finish_activity.assert_not_called()
+
+
+def test_focus_bond_hint_tracks_real_xp_earning_not_current_visual_state() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=120))
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    harness._focus_session = session
+
+    # The context menu can temporarily put Mochi in the thinking visual while
+    # the focus clock still earns XP. The bar should remain visible.
+    harness.state.current = MochiState.IDLE_EMOTE
+    assert harness._focus_bond_hint_active() is True
+
+    session.set_paused(True)
+    assert harness._focus_bond_hint_active() is False
+
+    session.set_paused(False)
+    session.phase = FocusPhase.BREAK
+    assert harness._focus_bond_hint_active() is False
+
+
+def test_focus_xp_award_keeps_orbs_and_suppresses_full_bond_hud() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=100))
+    harness.state.current = MochiState.COMPUTER
+    harness._focus_session = FocusSession(
+        FocusPlan(focus_minutes=5, break_minutes=1, rounds=1)
+    )
+
+    BondMeterMixin._award_bond(harness, 1, persist=False)
+
+    assert harness._bond_state == BondState(level=1, xp=101)
+    harness._bond_orbs.queue_xp.assert_called_once_with(1)
+    harness._bond_orbs.show_gain_marker.assert_called_once_with(1)
+    harness._bond_progress_overlay.notify_xp_gain.assert_not_called()
+
+
+def test_focus_bond_hint_draws_only_track_and_progress_fill() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=120))
+    harness.state.current = MochiState.COMPUTER
+    harness._focus_session = FocusSession(
+        FocusPlan(focus_minutes=5, break_minutes=1, rounds=1)
+    )
+    harness.player = SimpleNamespace(frame=None)
+    harness.atlas = None
+    context = Mock()
+
+    BondMeterMixin._draw_focus_bond_hint(harness, context, 128, 128)
+
+    assert context.rectangle.call_count == 2
+    track = context.rectangle.call_args_list[0].args
+    fill = context.rectangle.call_args_list[1].args
+    assert track[0:2] == fill[0:2]
+    assert track[3] == fill[3]
+    assert fill[2] == track[2] * harness._bond_state.progress_fraction
+    assert context.fill.call_count == 2
+
+
+def test_focus_tick_dismisses_stale_nonpresentation_bond_overlay() -> None:
+    harness = object.__new__(_BondTickHarness)
+    runtime = _runtime_harness(BondState(level=1, xp=100))
+    harness.__dict__.update(runtime.__dict__)
+    harness.behavior_tick_calls = 0
+    harness.state.current = MochiState.COMPUTER
+    harness._focus_session = FocusSession(
+        FocusPlan(focus_minutes=5, break_minutes=1, rounds=1)
+    )
+    harness._bond_orbs.has_activity = False
+    harness._bond_presentation_player.stop()
+
+    assert harness._tick() is True
+
+    harness._bond_progress_overlay.dismiss.assert_called_once_with()
 
 
 def test_level_up_plays_default_animation_before_card_even_while_typing() -> None:
