@@ -187,6 +187,28 @@ def test_large_award_uses_one_marker_for_the_award_amount() -> None:
     assert field.marker_count == 1
 
 
+def test_level_up_discards_stale_dense_reward_visual_debt() -> None:
+    field = XpOrbField(rng=random.Random(2))
+    field.queue_xp(60)
+    field.show_gain_marker(60)
+    field.advance(
+        0.4,
+        width=128,
+        height=128,
+        target_x=64,
+        target_y=72,
+    )
+    assert field.outstanding_orb_count > 0
+
+    field.trigger_level_up()
+
+    assert field.pending_xp == 0
+    assert field.active_count == 0
+    assert field.pulse_count == 0
+    assert field.marker_count == 0
+    assert field.level_up_active is True
+
+
 def test_level_up_bloom_is_feedback_only_and_self_finishes() -> None:
     field = XpOrbField(rng=random.Random(2))
     field.trigger_level_up()

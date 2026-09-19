@@ -44,6 +44,7 @@ class WindowPlacement:
         self.window = window
         self.position = saved_position or self.DEFAULT_POSITION
         self._logger = logging.getLogger(__name__)
+        self.layer_shell_enabled = False
         self.layer_shell_enabled = self._enable_layer_shell()
 
     def _enable_layer_shell(self) -> bool:
@@ -71,6 +72,7 @@ class WindowPlacement:
         Gtk4LayerShell.set_exclusive_zone(self.window, -1)
         Gtk4LayerShell.set_anchor(self.window, Gtk4LayerShell.Edge.LEFT, True)
         Gtk4LayerShell.set_anchor(self.window, Gtk4LayerShell.Edge.BOTTOM, True)
+        self.layer_shell_enabled = True
         self.move_to(self.position.x, self.position.y)
         self._logger.info("Using gtk4-layer-shell Wayland overlay")
         return True

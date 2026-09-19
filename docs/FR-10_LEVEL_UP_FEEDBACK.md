@@ -15,7 +15,7 @@ This branch is presentation-only. It does not add new bond progression rules, pe
   - Returns cleanly to the appropriate post-emote state.
   - Uses the authored 16-frame default celebration unless a future legendary level-up explicitly supersedes it.
 
-- [ ] **Immediate level-up line**
+- [x] **Immediate level-up line**
   - Show a short Mochi line as part of the level-up moment.
   - The line is presentation feedback only; recurring bond-tier phrase banks are not part of this branch.
   - Keep the treatment visually integrated with Mochi rather than using a blocking dialog.
@@ -25,7 +25,7 @@ This branch is presentation-only. It does not add new bond progression rules, pe
   - Uses the supplied Mochi level-up cue through the existing centralized sound manager.
   - Visual-only preview controls remain silent.
 
-- [ ] **Polished visual timing**
+- [x] **Polished visual timing**
   - Coordinate the existing level-up bloom, emote, and line so they read as one intentional sequence.
   - Avoid overlapping feedback that makes the moment noisy or difficult to read.
   - Keep the total moment short and non-intrusive.

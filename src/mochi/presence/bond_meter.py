@@ -16,7 +16,7 @@ from mochi.care import (
     BondAdvance,
     BondState,
 )
-from mochi.bond_orbs import XpOrbField
+from mochi.bond_orbs import MAX_ACTIVE_ORBS, XpOrbField
 from mochi.emotes import (
     EmoteDefinition,
     newly_unlocked_emotes,
@@ -31,6 +31,7 @@ from .bond_progress_overlay import BondProgressOverlay
 BOND_TYPING_TICK_SECONDS = 1
 BOND_PERSIST_INTERVAL_XP = 15
 BOND_FEED_HOLD_SECONDS = 2.4
+BOND_FEED_VISUAL_ORB_LIMIT = MAX_ACTIVE_ORBS * 2
 LEVEL_UP_DEFAULT_ANIMATION = "level_up_default"
 EMOTE_UNLOCK_DEMO_DELAY_MS = 150
 
@@ -451,10 +452,6 @@ class BondMeterMixin:
                 "Unlocked emote demonstration finished while card remains visible"
             )
 
-        queue_draw = getattr(self, "queue_draw", None)
-        if callable(queue_draw):
-            queue_draw()
-
     def _show_pending_level_up_card(self) -> None:
         pending = self._pending_level_up_card
         self._pending_level_up_card = None
@@ -599,7 +596,7 @@ class BondMeterMixin:
         self._award_bond(
             BOND_FEED_XP,
             persist=True,
-            visual_orb_limit=BOND_FEED_XP,
+            visual_orb_limit=BOND_FEED_VISUAL_ORB_LIMIT,
         )
         if self._bond_progress_overlay is not None:
             self._bond_progress_overlay.finish_activity(BOND_FEED_HOLD_SECONDS)
@@ -703,31 +700,36 @@ class BondMeterMixin:
     def _tick(self) -> bool:
         """Advance behavior, presentation animation, and XP feedback together."""
         result = super()._tick()
+        elapsed_ms = max(
+            1,
+            int(getattr(self, "_frame_elapsed_ms", getattr(self, "TICK_MS", 16))),
+        )
+        needs_redraw = False
         presentation_player = self._bond_presentation_player
         if (
             presentation_player is not None
             and presentation_player.animation is not None
-            and presentation_player.tick(getattr(self, "TICK_MS", 16))
+            and presentation_player.tick(elapsed_ms)
         ):
-            queue_draw = getattr(self, "queue_draw", None)
-            if callable(queue_draw):
-                queue_draw()
+            needs_redraw = True
 
         if self._bond_orbs.has_activity:
             width = max(1, getattr(self, "get_width", lambda: 128)())
             height = max(1, getattr(self, "get_height", lambda: 128)())
             target_x, target_y = self._bond_orb_target(width, height)
             changed = self._bond_orbs.advance(
-                getattr(self, "TICK_MS", 16) / 1000.0,
+                elapsed_ms / 1000.0,
                 width=width,
                 height=height,
                 target_x=target_x,
                 target_y=target_y,
             )
             if changed:
-                queue_draw = getattr(self, "queue_draw", None)
-                if callable(queue_draw):
-                    queue_draw()
+                needs_redraw = True
+        if needs_redraw:
+            queue_draw = getattr(self, "queue_draw", None)
+            if callable(queue_draw):
+                queue_draw()
         return result
 
     def shutdown_presence(self) -> None:
@@ -735,6 +737,7 @@ class BondMeterMixin:
         self._cancel_bond_emote_demo_timer()
         self._cancel_bond_presentation_animation()
         self._pending_level_up_card = None
+        self._pending_emote_unlocks.clear()
         self._pending_emote_demo = None
         source_id = self._bond_typing_source_id
         self._bond_typing_source_id = None
@@ -745,7 +748,16 @@ class BondMeterMixin:
                 pass
         if self._bond_unsaved_xp > 0:
             self._persist_bond_state()
-        if self._bond_progress_overlay is not None:
-            self._bond_progress_overlay.destroy()
-            self._bond_progress_overlay = None
+        overlay = self._bond_progress_overlay
+        self._bond_progress_overlay = None
+        if overlay is not None:
+            # Clear our reference before destroy: destroy may synchronously
+            # report a finished card, and that callback must not enqueue the
+            # next reward against a surface that is being torn down.
+            overlay.destroy()
+        if self.state.presentation in (
+            PresentationState.LEVEL_UP,
+            PresentationState.EMOTE_UNLOCK,
+        ):
+            self.state.transition_presentation(PresentationState.NORMAL)
         super().shutdown_presence()
