@@ -38,8 +38,11 @@ EMOTE_UNLOCK_DEMO_DELAY_MS = 150
 FOCUS_BOND_BAR_MIN_WIDTH_FRACTION = 0.34
 FOCUS_BOND_BAR_MAX_WIDTH_FRACTION = 0.64
 FOCUS_BOND_BAR_VISIBLE_WIDTH_FRACTION = 0.78
-FOCUS_BOND_BAR_HEIGHT_FRACTION = 0.032
+FOCUS_BOND_BAR_HEIGHT_FRACTION = 0.040
 FOCUS_BOND_BAR_GAP_FRACTION = 0.018
+FOCUS_BOND_LABEL_GAP_FRACTION = 0.012
+FOCUS_BOND_LABEL_SIZE_FRACTION = 0.070
+FOCUS_BOND_LABEL = "Bond XP"
 
 
 class BondMeter(Gtk.ProgressBar):
@@ -702,7 +705,7 @@ class BondMeterMixin:
         maximum_width = size * FOCUS_BOND_BAR_MAX_WIDTH_FRACTION
         preferred_width = visible_width * FOCUS_BOND_BAR_VISIBLE_WIDTH_FRACTION
         bar_width = max(minimum_width, min(preferred_width, maximum_width))
-        bar_height = max(4.0, size * FOCUS_BOND_BAR_HEIGHT_FRACTION)
+        bar_height = max(5.0, size * FOCUS_BOND_BAR_HEIGHT_FRACTION)
         gap = max(2.0, size * FOCUS_BOND_BAR_GAP_FRACTION)
 
         center_x = visible_x + visible_width / 2.0
@@ -719,6 +722,28 @@ class BondMeterMixin:
 
         x, y, bar_width, bar_height = self._focus_bond_bar_geometry(width, height)
         fraction = max(0.0, min(1.0, self._bond_state.progress_fraction))
+        size = float(max(1, min(width, height)))
+
+        # Label the persistent relationship progress explicitly so this bar
+        # cannot be mistaken for the focus-session countdown/progress.
+        label_size = max(7.0, min(11.0, size * FOCUS_BOND_LABEL_SIZE_FRACTION))
+        label_gap = max(1.0, size * FOCUS_BOND_LABEL_GAP_FRACTION)
+        context.save()
+        context.select_font_face("Sans")
+        context.set_font_size(label_size)
+        extents = context.text_extents(FOCUS_BOND_LABEL)
+        if hasattr(extents, "width"):
+            text_width = float(extents.width)
+            x_bearing = float(getattr(extents, "x_bearing", 0.0))
+        else:
+            x_bearing = float(extents[0])
+            text_width = float(extents[2])
+        label_x = x + (bar_width - text_width) / 2.0 - x_bearing
+        label_y = max(label_size, y - label_gap)
+        context.set_source_rgba(0.78, 0.92, 0.80, 0.94)
+        context.move_to(label_x, label_y)
+        context.show_text(FOCUS_BOND_LABEL)
+        context.restore()
 
         # Track: subtle enough to read as context, not a second HUD.
         context.set_source_rgba(0.05, 0.08, 0.06, 0.58)
