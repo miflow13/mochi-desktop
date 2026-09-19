@@ -356,11 +356,13 @@ class BondMeterMixin:
                 advance.xp_awarded,
                 max_outstanding=visual_orb_limit,
             )
-        self._bond_orbs.show_gain_marker(advance.xp_awarded)
+        focus_hint_active = self._focus_bond_hint_active()
+        if not focus_hint_active:
+            self._bond_orbs.show_gain_marker(advance.xp_awarded)
         if (
             self._bond_progress_overlay is not None
             and self.state.current is not MochiState.TYPING
-            and not self._focus_bond_hint_active()
+            and not focus_hint_active
         ):
             self._bond_progress_overlay.notify_xp_gain(
                 self._bond_state,
