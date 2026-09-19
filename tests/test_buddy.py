@@ -300,6 +300,81 @@ class BuddyContextMenuTests(unittest.TestCase):
         action.assert_called_once()
 
 
+class BuddyRefactorRegressionTests(unittest.TestCase):
+    def test_rejected_sleep_preflight_has_no_cleanup_side_effects(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.FEDORA),
+            state_controller=SimpleNamespace(allows=Mock(return_value=False)),
+            _cancel_active_emote=Mock(),
+            _cancel_walk=Mock(),
+            _click_reactions=SimpleNamespace(clear=Mock()),
+            _transition_to=Mock(),
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._begin_sleep(buddy)
+
+        buddy.state_controller.allows.assert_called_once_with(MochiState.SLEEPING)
+        buddy._cancel_active_emote.assert_not_called()
+        buddy._cancel_walk.assert_not_called()
+        buddy._click_reactions.clear.assert_not_called()
+        buddy._transition_to.assert_not_called()
+        buddy._play_animation.assert_not_called()
+
+    def test_accepted_sleep_cleans_up_then_transitions(self) -> None:
+        buddy = SimpleNamespace(
+            state=SimpleNamespace(current=MochiState.IDLE),
+            state_controller=SimpleNamespace(allows=Mock(return_value=True)),
+            _cancel_active_emote=Mock(),
+            _cancel_walk=Mock(),
+            _click_reactions=SimpleNamespace(clear=Mock()),
+            _transition_to=Mock(return_value=True),
+            _play_animation=Mock(),
+            _logger=Mock(),
+        )
+
+        Buddy._begin_sleep(buddy)
+
+        buddy.state_controller.allows.assert_called_once_with(MochiState.SLEEPING)
+        buddy._cancel_active_emote.assert_called_once_with()
+        buddy._cancel_walk.assert_called_once_with()
+        buddy._click_reactions.clear.assert_called_once_with()
+        buddy._transition_to.assert_called_once_with(MochiState.SLEEPING)
+        buddy._play_animation.assert_called_once_with("sleep")
+
+    def test_developer_quit_closes_menu_before_quitting(self) -> None:
+        quit_application = Mock()
+        buddy = SimpleNamespace(
+            _close_developer_menu_then=Mock(),
+            _quit_application=quit_application,
+        )
+        controller = BuddyMenuController(buddy)
+
+        controller._quit()
+
+        buddy._close_developer_menu_then.assert_called_once_with(quit_application)
+
+    def test_reset_position_uses_composed_placement_default(self) -> None:
+        default = SimpleNamespace(x=321, y=654)
+        placement = SimpleNamespace(
+            DEFAULT_POSITION=default,
+            move_to=Mock(),
+        )
+        config = SimpleNamespace(reset_position=Mock())
+        buddy = SimpleNamespace(
+            _placement=placement,
+            _config=config,
+            _close_developer_menu_then=Mock(side_effect=lambda action: action()),
+        )
+        controller = BuddyMenuController(buddy)
+
+        controller._reset_position(None)
+
+        config.reset_position.assert_called_once_with()
+        placement.move_to.assert_called_once_with(321, 654)
+
+
 class BuddyEmoteTests(unittest.TestCase):
     def test_hover_heart_is_delayed_and_rescheduled_after_leave(self) -> None:
         buddy = SimpleNamespace(
