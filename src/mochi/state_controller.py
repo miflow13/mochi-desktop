@@ -35,9 +35,13 @@ class BehaviorStateController:
     def state(self) -> StateMachine:
         return self._state
 
+    def allows(self, next_state: MochiState) -> bool:
+        """Check transition policy without mutating the shared state machine."""
+        return self._transition_guard(self._state.current, next_state)
+
     def request(self, next_state: MochiState) -> bool:
         current = self._state.current
-        if not self._transition_guard(current, next_state):
+        if not self.allows(next_state):
             self._logger.debug(
                 "Rejected state transition: %s -> %s",
                 current.name,
