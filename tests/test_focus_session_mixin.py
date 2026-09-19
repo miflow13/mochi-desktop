@@ -87,6 +87,7 @@ def test_pause_and_resume_exclude_paused_wall_time_and_xp() -> None:
     session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
     harness._focus_session = session
     harness._focus_last_tick = 100.0
+    harness._focus_ambience.active_name = "mochi_rain"
 
     with patch("mochi.presence.focus_session.time.monotonic", return_value=160.0):
         harness._focus_tick()
