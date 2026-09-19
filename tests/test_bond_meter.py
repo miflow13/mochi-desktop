@@ -283,6 +283,24 @@ def test_focus_compact_hint_suppresses_full_activity_card() -> None:
     harness._bond_progress_overlay.show_activity.assert_not_called()
 
 
+def test_focus_bond_hint_geometry_sits_above_visible_mochi_bounds() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=120))
+    harness.state.current = MochiState.COMPUTER
+    harness._focus_session = FocusSession(FocusPlan())
+    harness.player = SimpleNamespace(frame=object())
+    harness.atlas = SimpleNamespace(
+        visible_bounds=lambda _frame, _width, _height: (30.0, 42.0, 68.0, 72.0)
+    )
+
+    _x, y, _bar_width, bar_height = BondMeterMixin._focus_bond_bar_geometry(
+        harness,
+        128,
+        128,
+    )
+
+    assert y + bar_height < 42.0
+
+
 def test_focus_bond_hint_draws_only_track_and_progress_fill() -> None:
     harness = _runtime_harness(BondState(level=1, xp=120))
     harness.state.current = MochiState.COMPUTER
