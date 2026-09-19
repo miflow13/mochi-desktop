@@ -14,6 +14,7 @@ from .engine import SpeechText, speech_display_seconds
 from .emote_catalogue import EmoteCatalogueMixin
 from .fedora_mode import FedoraModeMixin
 from .feeding import FeedMochiMixin
+from .focus_session import FocusSessionMixin
 from .idle_look import IdleLookMixin
 from .integration import (
     PresenceBuddy as BasePresenceBuddy,
@@ -158,6 +159,7 @@ class PresenceBuddy(
     ClickDialogueMixin,
     IdleLookMixin,
     QuickStartMixin,
+    FocusSessionMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
     MusicDanceMixin,
@@ -175,6 +177,7 @@ class PresenceX11Buddy(
     ClickDialogueMixin,
     IdleLookMixin,
     QuickStartMixin,
+    FocusSessionMixin,
     FedoraModeMixin,
     TerminalCoworkMixin,
     MusicDanceMixin,
