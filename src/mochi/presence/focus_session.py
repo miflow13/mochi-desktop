@@ -13,6 +13,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.focus import FocusPhase, FocusPlan, FocusSession
+from mochi.sound import FocusAmbienceManager
 from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState
 
@@ -360,6 +361,7 @@ class FocusSessionMixin:
         self._focus_plan = FocusPlan()
         self._focus_source_id: int | None = None
         self._focus_last_tick: float | None = None
+        self._focus_ambience = FocusAmbienceManager()
         super().__init__(*args, **kwargs)
 
     def _build_context_menu(self):
@@ -414,6 +416,7 @@ class FocusSessionMixin:
         if self.state.current is MochiState.SLEEPING:
             self._wake_up()
         self._ensure_focus_visual()
+        self._focus_ambience.start_selected()
 
         if self._focus_source_id is not None:
             GLib.source_remove(self._focus_source_id)
@@ -442,6 +445,7 @@ class FocusSessionMixin:
         previous = self._focus_last_tick or now
         self._focus_last_tick = now
         advance = session.advance(max(0.0, now - previous))
+        resumed_focus_visual = False
 
         if advance.xp_earned:
             award = getattr(self, "_award_bond", None)
@@ -463,8 +467,13 @@ class FocusSessionMixin:
             elif session.phase is FocusPhase.FOCUS:
                 self._show_focus_line(FOCUS_RESUME_LINE)
                 self._ensure_focus_visual()
+                resumed_focus_visual = True
 
-        if session.phase is FocusPhase.FOCUS and not session.paused:
+        if (
+            session.phase is FocusPhase.FOCUS
+            and not session.paused
+            and not resumed_focus_visual
+        ):
             self._ensure_focus_visual()
 
         if self._focus_window is not None:
@@ -484,8 +493,10 @@ class FocusSessionMixin:
         self._focus_last_tick = time.monotonic()
         if paused:
             self._stop_focus_visual()
+            self._focus_ambience.pause()
         elif session.phase is FocusPhase.FOCUS:
             self._ensure_focus_visual()
+            self._focus_ambience.resume()
 
         if self._focus_window is not None:
             self._focus_window.update_session(session)
@@ -501,6 +512,7 @@ class FocusSessionMixin:
         was_complete = session.phase is FocusPhase.COMPLETE
         self._stop_focus_timer()
         self._stop_focus_visual()
+        self._focus_ambience.stop()
         self._persist_focus_xp_if_needed()
         self._focus_plan = session.plan
         self._focus_session = None
@@ -521,6 +533,7 @@ class FocusSessionMixin:
             return
 
         self._stop_focus_visual()
+        self._focus_ambience.stop()
         self._persist_focus_xp_if_needed()
         self._show_focus_line(FOCUS_COMPLETE_LINE)
 
@@ -591,6 +604,12 @@ class FocusSessionMixin:
             and session.phase is FocusPhase.FOCUS
             and not session.paused
         )
+
+    def _focus_allows_presence_action(self, action) -> bool:
+        """Keep focused work quiet without touching AmbiSense queues or tuning."""
+        if not self._focus_should_work():
+            return True
+        return getattr(action, "priority", 0) >= 40
 
     def _ensure_focus_visual(self) -> bool:
         if not self._focus_should_work() or self._context_menu_open:
@@ -676,6 +695,7 @@ class FocusSessionMixin:
 
     def shutdown_presence(self) -> None:
         self._stop_focus_timer()
+        self._focus_ambience.stop()
         self._persist_focus_xp_if_needed()
         if self._focus_window is not None:
             self._focus_window.destroy()

@@ -60,6 +60,8 @@ def test_completed_session_gets_one_non_punitive_completion_bonus() -> None:
     assert session.phase is FocusPhase.COMPLETE
     assert session.remaining_label == "00:00"
 
+    assert session.advance(60).xp_earned == 0
+
 
 def test_pause_freezes_timer_and_rewards() -> None:
     session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))

@@ -82,6 +82,9 @@ long-running audio channel from Mochi's short interaction sounds. It must remain
 fully local, optional, independently volume-controlled, and safe when an audio
 backend or asset is unavailable.
 
+Approved `.ogg` or `.wav` loops can be added to `assets/audio/focus/` later.
+No soundscape chooser is shown until at least one approved asset is present.
+
 ## QA
 
 Verify on Fedora/GNOME/Wayland/XWayland:
