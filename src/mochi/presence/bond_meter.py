@@ -713,15 +713,13 @@ class BondMeterMixin:
         center_x = visible_x + visible_width / 2.0
         x = max(2.0, min(center_x - bar_width / 2.0, width - bar_width - 2.0))
 
-        preferred_y = (
-            visible_y
-            + visible_height
-            + gap
-            + label_size
-            + label_gap
-        )
-        maximum_y = max(2.0, height - bar_height - 2.0)
-        y = min(preferred_y, maximum_y)
+        # Keep the entire Focus bond hint above Mochi's visible sprite.
+        # The label is drawn above the bar, so reserve room for both before
+        # clamping to the drawing surface.
+        preferred_y = visible_y - gap - bar_height
+        minimum_y = label_size + label_gap + 2.0
+        maximum_y = max(minimum_y, height - bar_height - 2.0)
+        y = max(minimum_y, min(preferred_y, maximum_y))
         return (x, y, bar_width, bar_height)
 
     def _draw_focus_bond_hint(self, context, width: int, height: int) -> None:
