@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import math
 
 
@@ -12,6 +13,34 @@ BOND_TYPING_XP_PER_SECOND = 1
 BOND_FEED_XP = 60
 DEFAULT_BOND_LEVEL = 1
 DEFAULT_BOND_XP = 0
+
+
+class BondPhase(Enum):
+    """Relationship familiarity derived from persisted bond level."""
+
+    NEW = "new"
+    FAMILIAR = "familiar"
+    COMFORTABLE = "comfortable"
+    CLOSE = "close"
+    DEEP_BOND = "deep_bond"
+
+
+def bond_phase_for_level(level: object) -> BondPhase:
+    """Return the non-regressive relationship phase for a bond level.
+
+    Invalid and low values deliberately resolve to the new/curious phase, the
+    same safe baseline used by :class:`BondState`.
+    """
+    normalized = max(DEFAULT_BOND_LEVEL, _coerce_int(level, DEFAULT_BOND_LEVEL))
+    if normalized <= 2:
+        return BondPhase.NEW
+    if normalized <= 4:
+        return BondPhase.FAMILIAR
+    if normalized <= 7:
+        return BondPhase.COMFORTABLE
+    if normalized <= 10:
+        return BondPhase.CLOSE
+    return BondPhase.DEEP_BOND
 
 
 def _coerce_int(value: object, default: int) -> int:
