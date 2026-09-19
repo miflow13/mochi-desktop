@@ -21,7 +21,6 @@ from .engine import speech_display_seconds
 
 
 FOCUS_TIMER_TICK_MS = 500
-FOCUS_VOLUME_DEBOUNCE_MS = 150
 FOCUS_BREAK_LINE = "break time 🌱"
 FOCUS_RESUME_LINE = "back to it. i'm with you 🌱"
 FOCUS_COMPLETE_LINE = "nice work. we did it 🌱"
@@ -107,7 +106,6 @@ class FocusWindow:
         self._rain_available = rain_available
         self._rain_enabled = rain_enabled
         self._rain_volume = rain_volume
-        self._rain_volume_source_id: int | None = None
         self._logger = logger or logging.getLogger(__name__)
 
         self.window = Gtk.Window()
@@ -379,11 +377,9 @@ class FocusWindow:
         self._sync_rain_controls()
 
     def destroy(self) -> None:
-        self._cancel_rain_volume_update()
         self.window.destroy()
 
     def _on_start_clicked(self, _button: Gtk.Button) -> None:
-        self._flush_rain_volume_update()
         plan = FocusPlan(
             focus_minutes=self._focus_minutes.get_value_as_int(),
             break_minutes=self._break_minutes.get_value_as_int(),
@@ -412,31 +408,7 @@ class FocusWindow:
             return
         self._rain_volume = volume
         self._sync_rain_controls()
-        self._cancel_rain_volume_update()
-        self._rain_volume_source_id = GLib.timeout_add(
-            FOCUS_VOLUME_DEBOUNCE_MS,
-            self._commit_rain_volume_update,
-        )
-
-    def _commit_rain_volume_update(self) -> bool:
-        self._rain_volume_source_id = None
         self._on_rain_volume_change(self._rain_volume)
-        return GLib.SOURCE_REMOVE
-
-    def _flush_rain_volume_update(self) -> None:
-        if self._rain_volume_source_id is None:
-            return
-        self._cancel_rain_volume_update()
-        self._on_rain_volume_change(self._rain_volume)
-
-    def _cancel_rain_volume_update(self) -> None:
-        source_id = self._rain_volume_source_id
-        self._rain_volume_source_id = None
-        if source_id is not None:
-            try:
-                GLib.source_remove(source_id)
-            except Exception:
-                pass
 
     def _sync_rain_controls(self) -> None:
         for name in ("_setup_rain_switch", "_session_rain_switch"):

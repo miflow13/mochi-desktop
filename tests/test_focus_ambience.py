@@ -3,22 +3,25 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from mochi.presence.focus_session import FocusWindow
-from mochi.sound import FfplayFocusAmbienceBackend, FocusAmbienceManager
+from mochi.sound import GStreamerFocusAmbienceBackend, FocusAmbienceManager
 
 
 class _Backend:
     def __init__(self) -> None:
         self.started: list[tuple[Path, float]] = []
+        self.started_handles: list[object] = []
         self.paused: list[object] = []
         self.resumed: list[object] = []
+        self.volume_changes: list[tuple[object, float]] = []
         self.stopped: list[object] = []
 
     def start(self, path: Path, volume: float) -> object:
         handle = object()
         self.started.append((path, volume))
+        self.started_handles.append(handle)
         return handle
 
     def pause(self, handle: object) -> None:
@@ -27,53 +30,50 @@ class _Backend:
     def resume(self, handle: object) -> None:
         self.resumed.append(handle)
 
+    def set_volume(self, handle: object, volume: float) -> None:
+        self.volume_changes.append((handle, volume))
+
     def stop(self, handle: object) -> None:
         self.stopped.append(handle)
 
 
-def test_ffplay_backend_uses_the_supported_infinite_loop_option(tmp_path) -> None:
+def test_gstreamer_backend_updates_volume_on_the_existing_player(tmp_path) -> None:
     soundscape = tmp_path / "rain.wav"
     soundscape.touch()
-    process = Mock()
+    player = Mock()
+    gst = Mock()
+    gst.ElementFactory.make.return_value = player
+    gst.State.PLAYING = "playing"
+    gst.State.NULL = "null"
+    gst.StateChangeReturn.FAILURE = "failure"
+    player.set_state.return_value = "success"
+    backend = GStreamerFocusAmbienceBackend(gst)
 
-    with patch("mochi.sound.subprocess.Popen", return_value=process) as popen:
-        assert FfplayFocusAmbienceBackend("/usr/bin/ffplay").start(
-            soundscape,
-            0.4,
-        ) is process
+    handle = backend.start(soundscape, 0.4)
+    backend.set_volume(handle, 0.7)
 
-    command = popen.call_args.args[0]
-    assert command[command.index("-loop") + 1] == "0"
-    assert "-stream_loop" not in command
+    gst.ElementFactory.make.assert_called_once_with("playbin", None)
+    assert player.set_state.call_args_list == [(("playing",), {})]
+    assert player.set_property.call_args_list[-1] == (("volume", 0.7), {})
 
 
-def test_live_volume_drag_is_debounced_before_restarting_audio() -> None:
+def test_live_volume_drag_streams_each_change_to_the_backend() -> None:
     window = object.__new__(FocusWindow)
     window._rain_volume = 0.2
-    window._rain_volume_source_id = None
     window._on_rain_volume_change = Mock()
     window._sync_rain_controls = Mock()
     scale = Mock()
     scale.get_value.side_effect = (0.3, 0.4, 0.5)
 
-    with patch(
-        "mochi.presence.focus_session.GLib.timeout_add",
-        side_effect=(71, 72, 73),
-    ) as add, patch(
-        "mochi.presence.focus_session.GLib.source_remove"
-    ) as remove:
-        window._handle_rain_volume_changed(scale)
-        window._handle_rain_volume_changed(scale)
-        window._handle_rain_volume_changed(scale)
+    window._handle_rain_volume_changed(scale)
+    window._handle_rain_volume_changed(scale)
+    window._handle_rain_volume_changed(scale)
 
-    assert window._on_rain_volume_change.call_count == 0
-    assert add.call_count == 3
-    assert remove.call_count == 2
-    assert window._rain_volume_source_id == 73
-
-    assert window._commit_rain_volume_update() == 0
-    window._on_rain_volume_change.assert_called_once_with(0.5)
-    assert window._rain_volume_source_id is None
+    assert window._on_rain_volume_change.call_args_list == [
+        ((0.3,), {}),
+        ((0.4,), {}),
+        ((0.5,), {}),
+    ]
 
 
 def test_focus_ambience_discovers_only_approved_local_loop_types(tmp_path) -> None:
@@ -118,7 +118,7 @@ def test_focus_ambience_uses_one_long_lived_backend_handle(tmp_path) -> None:
     assert manager.selected_name == "rain"
 
 
-def test_changing_ambience_volume_restarts_only_the_active_loop(tmp_path) -> None:
+def test_changing_ambience_volume_does_not_restart_the_active_loop(tmp_path) -> None:
     (tmp_path / "rain.ogg").touch()
     backend = _Backend()
     manager = FocusAmbienceManager(asset_root=tmp_path, backend=backend, volume=0.2)
@@ -127,9 +127,7 @@ def test_changing_ambience_volume_restarts_only_the_active_loop(tmp_path) -> Non
 
     manager.set_volume(0.7)
 
-    assert backend.started == [
-        (tmp_path / "rain.ogg", 0.2),
-        (tmp_path / "rain.ogg", 0.7),
-    ]
-    assert len(backend.stopped) == 1
+    assert backend.started == [(tmp_path / "rain.ogg", 0.2)]
+    assert backend.volume_changes == [(backend.started_handles[0], 0.7)]
+    assert backend.stopped == []
     assert manager.active_name == "rain"

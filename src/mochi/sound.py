@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 import shutil
-import signal
 import subprocess
 import sys
 from enum import StrEnum
@@ -25,6 +24,8 @@ class FocusAmbienceBackend(Protocol):
     def pause(self, handle: object) -> None: ...
 
     def resume(self, handle: object) -> None: ...
+
+    def set_volume(self, handle: object, volume: float) -> None: ...
 
     def stop(self, handle: object) -> None: ...
 
@@ -65,40 +66,54 @@ class CommandAudioBackend:
 
 
 @dataclass(frozen=True)
-class FfplayFocusAmbienceBackend:
-    """Loop one local file with ffplay when an approved backend is available."""
+class GStreamerFocusHandle:
+    player: object
+    uri: str
 
-    executable: str
+
+@dataclass(frozen=True)
+class GStreamerFocusAmbienceBackend:
+    """Loop one local file while allowing in-place playback controls."""
+
+    gst: object
 
     def start(self, path: Path, volume: float) -> object:
-        return subprocess.Popen(
-            (
-                self.executable,
-                "-nodisp",
-                "-loglevel",
-                "quiet",
-                "-loop",
-                "0",
-                "-volume",
-                str(round(max(0.0, min(volume, 1.0)) * 100)),
-                str(path),
-            ),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        player = self.gst.ElementFactory.make("playbin", None)
+        if player is None:
+            raise OSError("GStreamer playbin is unavailable")
+
+        uri = path.resolve().as_uri()
+        player.set_property("uri", uri)
+        player.set_property("volume", SoundManager._clamp_volume(volume))
+        player.connect("about-to-finish", self._restart_loop, uri)
+        result = player.set_state(self.gst.State.PLAYING)
+        if result == self.gst.StateChangeReturn.FAILURE:
+            player.set_state(self.gst.State.NULL)
+            raise OSError("GStreamer could not start focus ambience")
+        return GStreamerFocusHandle(player=player, uri=uri)
 
     def pause(self, handle: object) -> None:
-        if isinstance(handle, subprocess.Popen):
-            handle.send_signal(signal.SIGSTOP)
+        if isinstance(handle, GStreamerFocusHandle):
+            handle.player.set_state(self.gst.State.PAUSED)
 
     def resume(self, handle: object) -> None:
-        if isinstance(handle, subprocess.Popen):
-            handle.send_signal(signal.SIGCONT)
+        if isinstance(handle, GStreamerFocusHandle):
+            handle.player.set_state(self.gst.State.PLAYING)
+
+    def set_volume(self, handle: object, volume: float) -> None:
+        if isinstance(handle, GStreamerFocusHandle):
+            handle.player.set_property(
+                "volume",
+                SoundManager._clamp_volume(volume),
+            )
 
     def stop(self, handle: object) -> None:
-        if isinstance(handle, subprocess.Popen) and handle.poll() is None:
-            handle.terminate()
+        if isinstance(handle, GStreamerFocusHandle):
+            handle.player.set_state(self.gst.State.NULL)
+
+    @staticmethod
+    def _restart_loop(player: object, uri: str) -> None:
+        player.set_property("uri", uri)
 
 
 class FocusAmbienceManager:
@@ -170,7 +185,7 @@ class FocusAmbienceManager:
 
     def start(self, name: str) -> bool:
         path = self._path_for(name)
-        if path is None or self.backend is None or self.volume <= 0:
+        if path is None or self.backend is None:
             return False
         if self._active_name == name and self._handle is not None:
             self.resume()
@@ -221,16 +236,12 @@ class FocusAmbienceManager:
 
     def set_volume(self, volume: float) -> None:
         self.volume = SoundManager._clamp_volume(volume)
-        active_name = self._active_name
-        was_paused = self._paused
-        if active_name is None:
+        if self._handle is None or self.backend is None:
             return
-        # Long-running backends generally cannot adjust gain in place. A
-        # user-driven slider change is rare, so restart only here—not on timer
-        # ticks—to keep exactly one ambience process alive during focus.
-        self.stop()
-        if self.start(active_name) and was_paused:
-            self.pause()
+        try:
+            self.backend.set_volume(self._handle, self.volume)
+        except OSError as error:
+            self._logger.debug("Could not change focus soundscape volume: %s", error)
 
     def _path_for(self, name: str) -> Path | None:
         candidate = self.asset_root / Path(str(name)).name
@@ -246,8 +257,15 @@ class FocusAmbienceManager:
 
     @staticmethod
     def _detect_backend() -> FocusAmbienceBackend | None:
-        executable = shutil.which("ffplay")
-        return FfplayFocusAmbienceBackend(executable) if executable is not None else None
+        try:
+            import gi
+
+            gi.require_version("Gst", "1.0")
+            from gi.repository import Gst
+        except (ImportError, ValueError):
+            return None
+        Gst.init(None)
+        return GStreamerFocusAmbienceBackend(Gst)
 
     @staticmethod
     def _find_asset_root() -> Path:
