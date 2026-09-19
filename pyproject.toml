@@ -22,7 +22,11 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.data-files]
-"share/mochi/audio" = ["assets/audio/*"]
+"share/mochi/audio" = [
+    "assets/audio/*.md",
+    "assets/audio/*.ogg",
+    "assets/audio/*.wav",
+]
 "share/mochi/audio/focus" = ["assets/audio/focus/*.ogg", "assets/audio/focus/*.wav"]
 "share/mochi" = ["assets/mochi/manifest.json"]
 "share/mochi/master" = ["assets/mochi/master/*.png"]
@@ -41,6 +45,7 @@ where = ["src"]
 "share/mochi/heart" = ["assets/mochi/heart/*.png"]
 "share/mochi/eat" = ["assets/mochi/eat/*.png"]
 "share/mochi/computer" = ["assets/mochi/computer/*.png"]
+"share/mochi/focus" = ["assets/mochi/focus/*.png"]
 "share/mochi/typing" = ["assets/mochi/typing/*.png"]
 "share/mochi/typing_intro" = ["assets/mochi/typing_intro/*.png"]
 "share/mochi/typing_outro" = ["assets/mochi/typing_outro/*.png"]

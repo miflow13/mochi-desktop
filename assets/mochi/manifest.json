@@ -264,6 +264,46 @@
       "fps": 10,
       "loop": false
     },
+    "focus_start": {
+      "frames": [
+        "focus/focus_start_0001.png",
+        "focus/focus_start_0002.png",
+        "focus/focus_start_0003.png",
+        "focus/focus_start_0004.png"
+      ],
+      "frame_count": 4,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "focus_loop": {
+      "spritesheet": "focus/focus_loop.png",
+      "frame_count": 24,
+      "fps": 7.142857142857143,
+      "loop": true,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "focus_stop": {
+      "frames": [
+        "focus/focus_stop_0001.png",
+        "focus/focus_stop_0002.png",
+        "focus/focus_stop_0003.png",
+        "focus/focus_stop_0004.png"
+      ],
+      "frame_count": 4,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
     "typing_loop": {
       "frames": [
         "typing/typing_loop_01.png",
