@@ -452,10 +452,6 @@ class BondMeterMixin:
                 "Unlocked emote demonstration finished while card remains visible"
             )
 
-        queue_draw = getattr(self, "queue_draw", None)
-        if callable(queue_draw):
-            queue_draw()
-
     def _show_pending_level_up_card(self) -> None:
         pending = self._pending_level_up_card
         self._pending_level_up_card = None
@@ -708,15 +704,14 @@ class BondMeterMixin:
             1,
             int(getattr(self, "_frame_elapsed_ms", getattr(self, "TICK_MS", 16))),
         )
+        needs_redraw = False
         presentation_player = self._bond_presentation_player
         if (
             presentation_player is not None
             and presentation_player.animation is not None
             and presentation_player.tick(elapsed_ms)
         ):
-            queue_draw = getattr(self, "queue_draw", None)
-            if callable(queue_draw):
-                queue_draw()
+            needs_redraw = True
 
         if self._bond_orbs.has_activity:
             width = max(1, getattr(self, "get_width", lambda: 128)())
@@ -730,9 +725,11 @@ class BondMeterMixin:
                 target_y=target_y,
             )
             if changed:
-                queue_draw = getattr(self, "queue_draw", None)
-                if callable(queue_draw):
-                    queue_draw()
+                needs_redraw = True
+        if needs_redraw:
+            queue_draw = getattr(self, "queue_draw", None)
+            if callable(queue_draw):
+                queue_draw()
         return result
 
     def shutdown_presence(self) -> None:
@@ -740,6 +737,7 @@ class BondMeterMixin:
         self._cancel_bond_emote_demo_timer()
         self._cancel_bond_presentation_animation()
         self._pending_level_up_card = None
+        self._pending_emote_unlocks.clear()
         self._pending_emote_demo = None
         source_id = self._bond_typing_source_id
         self._bond_typing_source_id = None
@@ -750,7 +748,16 @@ class BondMeterMixin:
                 pass
         if self._bond_unsaved_xp > 0:
             self._persist_bond_state()
-        if self._bond_progress_overlay is not None:
-            self._bond_progress_overlay.destroy()
-            self._bond_progress_overlay = None
+        overlay = self._bond_progress_overlay
+        self._bond_progress_overlay = None
+        if overlay is not None:
+            # Clear our reference before destroy: destroy may synchronously
+            # report a finished card, and that callback must not enqueue the
+            # next reward against a surface that is being torn down.
+            overlay.destroy()
+        if self.state.presentation in (
+            PresentationState.LEVEL_UP,
+            PresentationState.EMOTE_UNLOCK,
+        ):
+            self.state.transition_presentation(PresentationState.NORMAL)
         super().shutdown_presence()
