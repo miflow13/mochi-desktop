@@ -263,12 +263,17 @@ class BuddyContextMenuTests(unittest.TestCase):
             _context_menu_animated_rows=(),
             _animate_menu_open=Mock(),
             _logger=Mock(),
+            get_width=lambda: 128,
+            get_height=lambda: 128,
         )
 
         Buddy._show_context_menu(buddy, None, 1, 12.0, 18.0)
 
         sound.play.assert_called_once_with(SoundEvent.MENU_OPEN)
         menu.popup.assert_called_once()
+        anchor = menu.set_pointing_to.call_args.args[0]
+        self.assertEqual((anchor.x, anchor.y), (0, 0))
+        self.assertEqual((anchor.width, anchor.height), (128, 128))
         buddy._cancel_hover_heart.assert_called_once_with()
         buddy._mark_interaction.assert_not_called()
         buddy._cancel_active_emote.assert_not_called()
