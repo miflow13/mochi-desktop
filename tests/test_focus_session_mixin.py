@@ -87,6 +87,53 @@ def _harness() -> _Harness:
     return harness
 
 
+def test_focus_window_positions_beside_full_mochi_bounds() -> None:
+    focus_window = object.__new__(FocusWindow)
+    focus_window._position_serial = 7
+    focus_window._logger = Mock()
+    focus_window.window = Mock()
+    focus_window.window.get_visible.return_value = True
+    focus_window.window.get_width.return_value = 420
+    focus_window.window.get_height.return_value = 455
+
+    monitors = SimpleNamespace(
+        get_n_items=lambda: 1,
+        get_item=lambda _index: SimpleNamespace(
+            get_geometry=lambda: SimpleNamespace(
+                x=0,
+                y=0,
+                width=1920,
+                height=1080,
+            )
+        ),
+    )
+    focus_window._owner = SimpleNamespace(
+        get_width=lambda: 128,
+        get_height=lambda: 128,
+        get_display=lambda: SimpleNamespace(get_monitors=lambda: monitors),
+    )
+
+    with patch(
+        "mochi.presence.focus_session.get_window_position",
+        return_value=(800, 400),
+    ), patch(
+        "mochi.presence.focus_session._window_coordinate_scale",
+        return_value=1.0,
+    ), patch(
+        "mochi.presence.focus_session.menu_position_for_anchor",
+        return_value=(940, 350),
+    ) as position, patch(
+        "mochi.presence.focus_session.move_window",
+        return_value=True,
+    ) as move:
+        result = focus_window._position_if_current(7)
+
+    assert result == 0
+    position.assert_called_once()
+    assert position.call_args.kwargs["anchor_width"] == 128
+    move.assert_called_once_with(focus_window.window, 940, 350)
+
+
 def test_focus_window_hide_notifies_the_thinking_lifecycle() -> None:
     focus_window = object.__new__(FocusWindow)
     focus_window.window = Mock()
