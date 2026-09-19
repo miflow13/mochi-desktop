@@ -40,6 +40,16 @@ def test_buddy_transition_method_delegates_to_state_controller() -> None:
     assert "can_transition" not in source
 
 
+def test_state_controller_can_preflight_without_mutating_state() -> None:
+    state = StateMachine()
+    guard = Mock(return_value=False)
+    controller = BehaviorStateController(state, transition_guard=guard)
+
+    assert controller.allows(MochiState.SLEEPING) is False
+    guard.assert_called_once_with(MochiState.IDLE, MochiState.SLEEPING)
+    assert state.current is MochiState.IDLE
+
+
 def test_state_controller_accepts_allowed_transition() -> None:
     state = StateMachine()
     guard = Mock(return_value=True)
@@ -73,6 +83,20 @@ def test_menu_windows_anchor_to_buddy_widget_not_controller() -> None:
     assert "anchor_widget=self._buddy" in developer_source
     assert "anchor_widget=self," not in context_source
     assert "anchor_widget=self," not in developer_source
+
+
+def test_menu_controller_has_one_quit_callback_per_surface() -> None:
+    source = inspect.getsource(BuddyMenuController)
+
+    assert source.count("def _quit_from_context_menu") == 1
+    assert source.count("def _quit(") == 1
+
+
+def test_menu_controller_docstring_describes_composition_not_mixin() -> None:
+    module = inspect.getmodule(BuddyMenuController)
+    assert module is not None
+    assert "controller intentionally owns" in (module.__doc__ or "")
+    assert "This mixin intentionally owns" not in (module.__doc__ or "")
 
 
 def test_menu_animation_serial_is_owned_by_buddy() -> None:
