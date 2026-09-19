@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock, patch
 
-from mochi.sound import FocusAmbienceManager
+from mochi.presence.focus_session import FocusWindow
+from mochi.sound import FfplayFocusAmbienceBackend, FocusAmbienceManager
 
 
 class _Backend:
@@ -27,6 +29,51 @@ class _Backend:
 
     def stop(self, handle: object) -> None:
         self.stopped.append(handle)
+
+
+def test_ffplay_backend_uses_the_supported_infinite_loop_option(tmp_path) -> None:
+    soundscape = tmp_path / "rain.wav"
+    soundscape.touch()
+    process = Mock()
+
+    with patch("mochi.sound.subprocess.Popen", return_value=process) as popen:
+        assert FfplayFocusAmbienceBackend("/usr/bin/ffplay").start(
+            soundscape,
+            0.4,
+        ) is process
+
+    command = popen.call_args.args[0]
+    assert command[command.index("-loop") + 1] == "0"
+    assert "-stream_loop" not in command
+
+
+def test_live_volume_drag_is_debounced_before_restarting_audio() -> None:
+    window = object.__new__(FocusWindow)
+    window._rain_volume = 0.2
+    window._rain_volume_source_id = None
+    window._on_rain_volume_change = Mock()
+    window._sync_rain_controls = Mock()
+    scale = Mock()
+    scale.get_value.side_effect = (0.3, 0.4, 0.5)
+
+    with patch(
+        "mochi.presence.focus_session.GLib.timeout_add",
+        side_effect=(71, 72, 73),
+    ) as add, patch(
+        "mochi.presence.focus_session.GLib.source_remove"
+    ) as remove:
+        window._handle_rain_volume_changed(scale)
+        window._handle_rain_volume_changed(scale)
+        window._handle_rain_volume_changed(scale)
+
+    assert window._on_rain_volume_change.call_count == 0
+    assert add.call_count == 3
+    assert remove.call_count == 2
+    assert window._rain_volume_source_id == 73
+
+    assert window._commit_rain_volume_update() == 0
+    window._on_rain_volume_change.assert_called_once_with(0.5)
+    assert window._rain_volume_source_id is None
 
 
 def test_focus_ambience_discovers_only_approved_local_loop_types(tmp_path) -> None:
