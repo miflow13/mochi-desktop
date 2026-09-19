@@ -22,6 +22,7 @@ from mochi.emotes import (
     newly_unlocked_emotes,
     unlocked_idle_animation_names,
 )
+from mochi.focus import FocusPhase
 from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState, PresentationState
 
@@ -34,6 +35,11 @@ BOND_FEED_HOLD_SECONDS = 2.4
 BOND_FEED_VISUAL_ORB_LIMIT = MAX_ACTIVE_ORBS * 2
 LEVEL_UP_DEFAULT_ANIMATION = "level_up_default"
 EMOTE_UNLOCK_DEMO_DELAY_MS = 150
+FOCUS_BOND_BAR_MIN_WIDTH_FRACTION = 0.28
+FOCUS_BOND_BAR_MAX_WIDTH_FRACTION = 0.55
+FOCUS_BOND_BAR_VISIBLE_WIDTH_FRACTION = 0.68
+FOCUS_BOND_BAR_HEIGHT_FRACTION = 0.026
+FOCUS_BOND_BAR_GAP_FRACTION = 0.018
 
 
 class BondMeter(Gtk.ProgressBar):
@@ -354,6 +360,7 @@ class BondMeterMixin:
         if (
             self._bond_progress_overlay is not None
             and self.state.current is not MochiState.TYPING
+            and not self._focus_bond_hint_active()
         ):
             self._bond_progress_overlay.notify_xp_gain(
                 self._bond_state,
@@ -650,6 +657,76 @@ class BondMeterMixin:
         if self._bond_unsaved_xp > 0:
             self._persist_bond_state()
 
+    def _focus_bond_hint_active(self) -> bool:
+        """Show the quiet XP hint only while focus time is actively earning XP."""
+        session = getattr(self, "_focus_session", None)
+        return bool(
+            session is not None
+            and session.active
+            and session.phase is FocusPhase.FOCUS
+            and not session.paused
+            and self.state.presentation is PresentationState.NORMAL
+        )
+
+    def _focus_bond_bar_geometry(
+        self,
+        width: int,
+        height: int,
+    ) -> tuple[float, float, float, float]:
+        """Place a thin bond bar immediately below Mochi's visible sprite."""
+        size = float(max(1, min(width, height)))
+        visible_x = 0.0
+        visible_y = 0.0
+        visible_width = float(width)
+        visible_height = float(height)
+
+        frame = getattr(getattr(self, "player", None), "frame", None)
+        atlas = getattr(self, "atlas", None)
+        if frame is not None and atlas is not None and hasattr(atlas, "visible_bounds"):
+            try:
+                (
+                    visible_x,
+                    visible_y,
+                    visible_width,
+                    visible_height,
+                ) = atlas.visible_bounds(frame, width, height)
+            except Exception:
+                pass
+
+        minimum_width = size * FOCUS_BOND_BAR_MIN_WIDTH_FRACTION
+        maximum_width = size * FOCUS_BOND_BAR_MAX_WIDTH_FRACTION
+        preferred_width = visible_width * FOCUS_BOND_BAR_VISIBLE_WIDTH_FRACTION
+        bar_width = max(minimum_width, min(preferred_width, maximum_width))
+        bar_height = max(3.0, size * FOCUS_BOND_BAR_HEIGHT_FRACTION)
+        gap = max(2.0, size * FOCUS_BOND_BAR_GAP_FRACTION)
+
+        center_x = visible_x + visible_width / 2.0
+        x = max(2.0, min(center_x - bar_width / 2.0, width - bar_width - 2.0))
+
+        preferred_y = visible_y + visible_height + gap
+        maximum_y = max(2.0, height - bar_height - 2.0)
+        y = min(preferred_y, maximum_y)
+        return (x, y, bar_width, bar_height)
+
+    def _draw_focus_bond_hint(self, context, width: int, height: int) -> None:
+        if not self._focus_bond_hint_active():
+            return
+
+        x, y, bar_width, bar_height = self._focus_bond_bar_geometry(width, height)
+        fraction = max(0.0, min(1.0, self._bond_state.progress_fraction))
+
+        # Track: subtle enough to read as context, not a second HUD.
+        context.set_source_rgba(0.05, 0.08, 0.06, 0.58)
+        context.rectangle(x, y, bar_width, bar_height)
+        context.fill()
+
+        if fraction <= 0.0:
+            return
+
+        context.set_source_rgba(0.47, 0.79, 0.55, 0.96)
+        context.rectangle(x, y, bar_width * fraction, bar_height)
+        context.fill()
+
     def _bond_orb_target(self, width: int, height: int) -> tuple[float, float]:
         """Aim XP at the visible center of whichever Mochi frame is shown."""
         presentation_player = self._bond_presentation_player
@@ -687,6 +764,8 @@ class BondMeterMixin:
         else:
             self.atlas.draw(context, presentation_frame, width, height)
 
+        self._draw_focus_bond_hint(context, width, height)
+
         if not self._bond_orbs.has_activity:
             return
         target_x, target_y = self._bond_orb_target(width, height)
@@ -712,6 +791,16 @@ class BondMeterMixin:
             and presentation_player.tick(elapsed_ms)
         ):
             needs_redraw = True
+
+        focus_hint_active = self._focus_bond_hint_active()
+        overlay = self._bond_progress_overlay
+        if (
+            focus_hint_active
+            and overlay is not None
+            and overlay.active
+            and not overlay.presentation_active
+        ):
+            overlay.dismiss()
 
         if self._bond_orbs.has_activity:
             width = max(1, getattr(self, "get_width", lambda: 128)())
