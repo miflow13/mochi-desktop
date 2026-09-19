@@ -271,6 +271,18 @@ def test_focus_xp_award_keeps_orbs_and_suppresses_full_bond_hud() -> None:
     harness._bond_progress_overlay.notify_xp_gain.assert_not_called()
 
 
+def test_focus_compact_hint_suppresses_full_activity_card() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=100))
+    harness.state.current = MochiState.EATING
+    harness._focus_session = FocusSession(
+        FocusPlan(focus_minutes=5, break_minutes=1, rounds=1)
+    )
+
+    BondMeterMixin._show_bond_progress(harness, "sharing a snack")
+
+    harness._bond_progress_overlay.show_activity.assert_not_called()
+
+
 def test_focus_bond_hint_draws_only_track_and_progress_fill() -> None:
     harness = _runtime_harness(BondState(level=1, xp=120))
     harness.state.current = MochiState.COMPUTER
