@@ -92,6 +92,7 @@ class FocusWindow:
         on_start: Callable[[FocusPlan], None],
         on_pause: Callable[[], None],
         on_cancel: Callable[[], None],
+        on_hidden: Callable[[], None],
         on_rain_enabled: Callable[[bool], None],
         on_rain_volume_changed: Callable[[float], None],
         rain_available: bool,
@@ -102,6 +103,7 @@ class FocusWindow:
         self._on_start = on_start
         self._on_pause = on_pause
         self._on_cancel = on_cancel
+        self._on_hidden = on_hidden
         self._on_rain_enabled = on_rain_enabled
         self._on_rain_volume_change = on_rain_volume_changed
         self._rain_available = rain_available
@@ -424,8 +426,12 @@ class FocusWindow:
                     scale.set_value(self._rain_volume)
 
     def _on_close_request(self, _window: Gtk.Window) -> bool:
-        self.window.hide()
+        self._hide()
         return True
+
+    def _hide(self) -> None:
+        self.window.hide()
+        self._on_hidden()
 
     def _on_key_pressed(
         self,
@@ -435,7 +441,7 @@ class FocusWindow:
         _state: Gdk.ModifierType,
     ) -> bool:
         if keyval == Gdk.KEY_Escape:
-            self.window.hide()
+            self._hide()
             return True
         return False
 
@@ -443,8 +449,12 @@ class FocusWindow:
 class FocusSessionMixin:
     """Add a low-pressure Pomodoro loop without creating a second state machine."""
 
-    FOCUS_WORK_ANIMATION = "computer_typing"
-    FOCUS_EXIT_ANIMATION = "computer_outro"
+    FOCUS_START_ANIMATION = "focus_start"
+    FOCUS_WORK_ANIMATION = "focus_loop"
+    FOCUS_EXIT_ANIMATION = "focus_stop"
+    FOCUS_THINK_START_ANIMATION = "focus_thinking_start"
+    FOCUS_THINK_LOOP_ANIMATION = "focus_thinking_loop"
+    FOCUS_THINK_EXIT_ANIMATION = "focus_thinking_end"
 
     def __init__(self, *args, **kwargs) -> None:
         self._focus_window: FocusWindow | None = None
@@ -454,6 +464,9 @@ class FocusSessionMixin:
         self._focus_last_tick: float | None = None
         self._focus_ambience = FocusAmbienceManager()
         self._focus_completion_heart_pending = False
+        self._focus_setup_visible = False
+        self._focus_context_menu_visible = False
+        self._focus_setup_pending = False
         super().__init__(*args, **kwargs)
 
     def _build_context_menu(self):
@@ -472,15 +485,37 @@ class FocusSessionMixin:
         return menu
 
     def _show_focus_from_context_menu(self, _button: Gtk.Button) -> None:
+        # Keep the thinking visual continuously owned while the user menu
+        # closes and the setup window is presented on the next idle turn.
+        self._focus_setup_pending = True
         self._close_context_menu_then(self._show_focus_window)
 
+    def _show_context_menu(self, *args) -> None:
+        was_visible = self._context_menu.get_visible()
+        super()._show_context_menu(*args)
+        if was_visible or not self._context_menu_open:
+            return
+
+        self._focus_context_menu_visible = True
+        if getattr(self, "_fedora_mode_active", False):
+            self._stop_fedora_mode()
+        self._ensure_focus_thinking_visual()
+
+    def _on_context_menu_closed(self, popover) -> None:
+        self._focus_context_menu_visible = False
+        super()._on_context_menu_closed(popover)
+        if not self._focus_should_think():
+            self._stop_focus_thinking_visual()
+
     def _show_focus_window(self) -> None:
+        self._focus_setup_pending = False
         if self._focus_window is None:
             self._focus_window = FocusWindow(
                 owner=self._window,
                 on_start=self._start_focus_session,
                 on_pause=self._toggle_focus_pause,
                 on_cancel=self._cancel_focus_session,
+                on_hidden=self._on_focus_window_hidden,
                 on_rain_enabled=self._set_focus_rain_enabled,
                 on_rain_volume_changed=self._set_focus_rain_volume,
                 rain_available="mochi_rain" in self._focus_ambience.available_soundscapes,
@@ -491,19 +526,30 @@ class FocusSessionMixin:
 
         session = self._focus_session
         if session is not None:
+            self._focus_setup_visible = False
+            self._stop_focus_thinking_visual()
+            self._ensure_focus_visual()
             self._focus_window.present_session(session)
             return
 
-        # Reuse the ordinary computer emote as the setup "getting ready" beat.
-        # The existing emote owns its own eligibility checks, so opening Focus
-        # never force-interrupts a higher-priority interaction.
-        self._start_computer_emote()
+        self._focus_setup_visible = True
+        if getattr(self, "_fedora_mode_active", False):
+            self._stop_fedora_mode()
+        self._ensure_focus_thinking_visual()
         self._focus_window.present_setup(self._focus_plan)
+
+    def _on_focus_window_hidden(self) -> None:
+        if not self._focus_setup_visible:
+            return
+        self._focus_setup_visible = False
+        if self._focus_session is None and not self._focus_should_think():
+            self._stop_focus_thinking_visual()
 
     def _start_focus_session(self, plan: FocusPlan) -> None:
         if self._focus_session is not None and self._focus_session.active:
             return
 
+        self._focus_setup_visible = False
         self._focus_plan = plan
         self._focus_session = FocusSession(plan)
         self._focus_last_tick = time.monotonic()
@@ -512,6 +558,10 @@ class FocusSessionMixin:
 
         if self.state.current is MochiState.SLEEPING:
             self._wake_up()
+        if getattr(self, "_fedora_mode_active", False):
+            self._stop_fedora_mode()
+        if not self._focus_should_think():
+            self._stop_focus_thinking_visual()
         self._ensure_focus_visual()
         self._resume_focus_ambience()
 
@@ -626,6 +676,8 @@ class FocusSessionMixin:
         session = self._focus_session
         if session is None:
             if self._focus_window is not None:
+                self._focus_setup_visible = True
+                self._ensure_focus_thinking_visual()
                 self._focus_window.present_setup(self._focus_plan)
             return
 
@@ -640,6 +692,8 @@ class FocusSessionMixin:
         self._focus_completion_heart_pending = False
 
         if self._focus_window is not None:
+            self._focus_setup_visible = True
+            self._ensure_focus_thinking_visual()
             self._focus_window.present_setup(self._focus_plan)
         if not was_complete:
             self._show_focus_line(FOCUS_CANCEL_LINE)
@@ -656,6 +710,7 @@ class FocusSessionMixin:
         self._focus_completion_heart_pending = bool(
             self.state.current is MochiState.COMPUTER
             and self._current_animation in (
+                self.FOCUS_START_ANIMATION,
                 self.FOCUS_WORK_ANIMATION,
                 self.FOCUS_EXIT_ANIMATION,
             )
@@ -726,11 +781,19 @@ class FocusSessionMixin:
             and session.active
             and session.phase is FocusPhase.FOCUS
             and not session.paused
+            and not self._focus_should_think()
+        )
+
+    def _focus_should_think(self) -> bool:
+        return bool(
+            self._focus_context_menu_visible
+            or self._focus_setup_pending
+            or (self._focus_setup_visible and self._focus_session is None)
         )
 
     def _focus_allows_presence_action(self, action) -> bool:
         """Keep focused work quiet without touching AmbiSense queues or tuning."""
-        if not self._focus_should_work():
+        if not self._focus_should_work() and not self._focus_should_think():
             return True
         return getattr(action, "priority", 0) >= FOCUS_PRESENCE_PRIORITY_FLOOR
 
@@ -739,6 +802,68 @@ class FocusSessionMixin:
             self._focus_ambience.start_selected()
         else:
             self._focus_ambience.resume()
+
+    def _ensure_focus_thinking_visual(self) -> bool:
+        if not self._focus_should_think():
+            return False
+        # The shared flag also covers Mochi Lab. Only the user right-click
+        # menu owns this thinking animation.
+        if self._context_menu_open and not self._focus_context_menu_visible:
+            return False
+
+        if self.state.current is MochiState.SLEEPING:
+            self._wake_up()
+            return False
+
+        if self.state.current is MochiState.WALKING:
+            self._cancel_walk()
+            self._transition_to(MochiState.IDLE)
+            self._play_animation("idle")
+
+        if (
+            self.state.current is MochiState.IDLE_EMOTE
+            and self._current_animation
+            in (
+                self.FOCUS_THINK_START_ANIMATION,
+                self.FOCUS_THINK_LOOP_ANIMATION,
+                self.FOCUS_THINK_EXIT_ANIMATION,
+            )
+        ):
+            return True
+
+        if (
+            self.state.current is MochiState.COMPUTER
+            and self._current_animation
+            in (
+                self.FOCUS_START_ANIMATION,
+                self.FOCUS_WORK_ANIMATION,
+                self.FOCUS_EXIT_ANIMATION,
+            )
+        ):
+            self._stop_focus_visual()
+            return False
+
+        if self.state.current is not MochiState.IDLE:
+            self._cancel_active_emote()
+
+        if (
+            self.state.current is not MochiState.IDLE
+            or self.player.animation is not ANIMATIONS["idle"]
+        ):
+            return False
+        if not self._transition_to(MochiState.IDLE_EMOTE):
+            return False
+
+        self._play_animation(self.FOCUS_THINK_START_ANIMATION, after=None)
+        self._logger.debug("Focus setup thinking animation started")
+        return True
+
+    def _stop_focus_thinking_visual(self) -> None:
+        if self.state.current is not MochiState.IDLE_EMOTE:
+            return
+        if self._current_animation == self.FOCUS_THINK_LOOP_ANIMATION:
+            self._play_animation(self.FOCUS_THINK_EXIT_ANIMATION, after=None)
+        # Let the short thinking intro finish before playing its authored exit.
 
     def _ensure_focus_visual(self) -> bool:
         if not self._focus_should_work() or self._context_menu_open:
@@ -753,10 +878,26 @@ class FocusSessionMixin:
             self._transition_to(MochiState.IDLE)
             self._play_animation("idle")
 
+        if (
+            self.state.current is MochiState.IDLE_EMOTE
+            and self._current_animation
+            in (
+                self.FOCUS_THINK_START_ANIMATION,
+                self.FOCUS_THINK_LOOP_ANIMATION,
+                self.FOCUS_THINK_EXIT_ANIMATION,
+            )
+        ):
+            self._stop_focus_thinking_visual()
+            return False
+
         if self.state.current is MochiState.COMPUTER:
-            if self._current_animation == self.FOCUS_WORK_ANIMATION:
+            if self._current_animation in (
+                self.FOCUS_START_ANIMATION,
+                self.FOCUS_WORK_ANIMATION,
+                self.FOCUS_EXIT_ANIMATION,
+            ):
                 return True
-            self._play_animation(self.FOCUS_WORK_ANIMATION, after=None)
+            self._play_animation(self.FOCUS_START_ANIMATION, after=None)
             return True
 
         if self.state.current is not MochiState.IDLE:
@@ -770,32 +911,79 @@ class FocusSessionMixin:
         if not self._transition_to(MochiState.COMPUTER):
             return False
 
-        self._play_animation(self.FOCUS_WORK_ANIMATION, after=None)
-        self._logger.debug("Focus coworking reused computer typing loop")
+        self._play_animation(self.FOCUS_START_ANIMATION, after=None)
+        self._logger.debug("Focus writing animation started")
         return True
 
     def _stop_focus_visual(self) -> None:
         if self.state.current is not MochiState.COMPUTER:
             return
-        if self._current_animation == self.FOCUS_EXIT_ANIMATION:
-            return
-        self._play_animation(self.FOCUS_EXIT_ANIMATION, after="idle")
+        if self._current_animation == self.FOCUS_WORK_ANIMATION:
+            self._play_animation(self.FOCUS_EXIT_ANIMATION, after=None)
+        # Let the short sit-down finish before standing back up. The completion
+        # callback below chooses the exit whenever focus is no longer active.
 
     def _finish_reaction(self, finished_animation) -> None:
-        finishing_focus_exit = bool(
-            finished_animation is self._active_animation
-            and self._current_animation == self.FOCUS_EXIT_ANIMATION
-        )
-        super()._finish_reaction(finished_animation)
+        if finished_animation is self._active_animation:
+            if self._current_animation == self.FOCUS_THINK_START_ANIMATION:
+                self._pending_animation = None
+                if (
+                    self._focus_should_think()
+                    and self.state.current is MochiState.IDLE_EMOTE
+                ):
+                    self._play_animation(self.FOCUS_THINK_LOOP_ANIMATION, after=None)
+                elif self.state.current is MochiState.IDLE_EMOTE:
+                    self._play_animation(self.FOCUS_THINK_EXIT_ANIMATION, after=None)
+                else:
+                    super()._finish_reaction(finished_animation)
+                return
 
-        if (
-            finishing_focus_exit
-            and self._focus_completion_heart_pending
-            and self.state.current is MochiState.IDLE
-        ):
-            self._focus_completion_heart_pending = False
-            if self.state.dialogue_allowed:
-                self._start_heart_emote(ignore_cooldown=True)
+            if self._current_animation == self.FOCUS_THINK_EXIT_ANIMATION:
+                self._pending_animation = None
+                if self.state.current is MochiState.IDLE_EMOTE:
+                    self._transition_to(MochiState.IDLE)
+                    self._play_animation("idle")
+
+                if self._focus_should_work():
+                    self._ensure_focus_visual()
+                elif self._focus_should_think():
+                    self._ensure_focus_thinking_visual()
+                elif not self._maybe_resume_ambient_activity():
+                    self._schedule_computer_idle_emote()
+                return
+
+            if self._current_animation == self.FOCUS_START_ANIMATION:
+                self._pending_animation = None
+                if (
+                    self._focus_should_work()
+                    and self.state.current is MochiState.COMPUTER
+                ):
+                    self._play_animation(self.FOCUS_WORK_ANIMATION, after=None)
+                elif self.state.current is MochiState.COMPUTER:
+                    self._play_animation(self.FOCUS_EXIT_ANIMATION, after=None)
+                else:
+                    super()._finish_reaction(finished_animation)
+                return
+
+            if self._current_animation == self.FOCUS_EXIT_ANIMATION:
+                self._pending_animation = None
+                if self.state.current is MochiState.COMPUTER:
+                    self._transition_to(MochiState.IDLE)
+                    self._play_animation("idle")
+
+                if self._focus_should_work():
+                    self._ensure_focus_visual()
+                elif self._focus_completion_heart_pending:
+                    self._focus_completion_heart_pending = False
+                    if self.state.dialogue_allowed:
+                        self._start_heart_emote(ignore_cooldown=True)
+                elif self._focus_should_think():
+                    self._ensure_focus_thinking_visual()
+                elif not self._maybe_resume_ambient_activity():
+                    self._schedule_computer_idle_emote()
+                return
+
+        super()._finish_reaction(finished_animation)
 
     def _stop_focus_timer(self) -> None:
         source_id = self._focus_source_id
@@ -816,11 +1004,15 @@ class FocusSessionMixin:
     def _start_typing_emote(self) -> bool:
         if self._focus_should_work():
             return self._ensure_focus_visual()
+        if self._focus_should_think():
+            return self._ensure_focus_thinking_visual()
         return super()._start_typing_emote()
 
     def _maybe_resume_ambient_activity(self) -> bool:
         if self._focus_should_work():
             return self._ensure_focus_visual()
+        if self._focus_should_think():
+            return self._ensure_focus_thinking_visual()
         return super()._maybe_resume_ambient_activity()
 
     def _begin_sleep(self) -> None:
@@ -855,4 +1047,7 @@ class FocusSessionMixin:
         self._focus_session = None
         self._focus_last_tick = None
         self._focus_completion_heart_pending = False
+        self._focus_setup_visible = False
+        self._focus_context_menu_visible = False
+        self._focus_setup_pending = False
         super().shutdown_presence()

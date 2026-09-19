@@ -17,7 +17,7 @@ take a break → earn bond XP for focused time.
 - Adjustable rounds: 1–8.
 - Optional gentle encouragement.
 - A compact timer window that may be hidden while the session continues.
-- Mochi uses the existing computer-typing loop while the focus block is active.
+- Mochi uses the dedicated low-energy writing loop while the focus block is active.
 - Breaks return Mochi to normal behavior.
 - Pause/resume and stop are non-punitive.
 - Focus time earns 1 bond XP per completed focus minute.
@@ -27,12 +27,15 @@ take a break → earn bond XP for focused time.
 
 ## Character behavior
 
-Opening the setup window reuses Mochi's existing computer animation as a tiny
-"getting ready" beat.
+Opening the right-click menu or setup window starts Mochi's dedicated thinking
+loop. The loop continues without restarting while moving from the menu into
+setup. Closing both surfaces returns Mochi to ordinary behavior, while starting
+a session plays the authored thinking exit before the writing sequence begins.
 
-During a live focus block Mochi reuses the existing looping computer-typing
-animation. This is deliberately a session mode layered over the existing
-behavior architecture rather than a new competing animation controller.
+During a live focus block Mochi settles into the dedicated looping writing
+animation. The authored `focus_start`, `focus_loop`, and `focus_stop` phases are
+still a session mode layered over the existing behavior architecture rather
+than a new competing animation controller.
 
 Direct interaction may temporarily interrupt the visual. Focus time continues,
 and Mochi resumes working when the ordinary interaction returns to idle.
@@ -66,10 +69,10 @@ Focus rewards are relationship progress, not a score.
 
 Focus does not introduce a new MochiState.
 
-The active work visual deliberately reuses MochiState.COMPUTER and the existing
-computer_typing animation. The focus-session clock is separate from behavioral
-animation state, allowing click, drag, feed, level-up presentation, and similar
-temporary interactions to occur without destroying the timer.
+The active work visual deliberately reuses MochiState.COMPUTER with the
+focus-specific writing animation. The focus-session clock is separate from
+behavioral animation state, allowing click, drag, feed, level-up presentation,
+and similar temporary interactions to occur without destroying the timer.
 
 ## Audio follow-up
 
@@ -92,8 +95,10 @@ volume control in setup and during a live session.
 Verify on Fedora/GNOME/Wayland/XWayland:
 
 - Focus with Mochi opens from right-click.
+- Mochi thinks while the right-click menu is open and exits cleanly when it closes.
+- Mochi thinks while the setup window is open and exits cleanly when it closes.
 - Setup values are adjustable.
-- Starting replaces the setup beat with the looping work animation.
+- Starting transitions from thinking into the looping writing animation.
 - Closing the timer window does not stop the session.
 - Reopening Focus with Mochi returns to the live timer.
 - Pause freezes time and XP.

@@ -44,6 +44,10 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 ### Ambient / contextual activity
 
 - `computer` — computer-use emote source sequence.
+- `focus_start`, `focus_loop`, `focus_stop` — focus-session writing transition,
+  sustained loop, and exit transition.
+- `focus_thinking_start`, `focus_thinking_loop`, `focus_thinking_end` — user
+  menu/focus-setup thinking transition, sustained loop, and exit transition.
 - `typing_intro`, `typing_loop`, `typing_outro` — sustained typing state.
 - `terminal_intro`, `terminal_loop`, `terminal_outro` — focused-terminal coworking state with authored entry and exit transitions.
 - `watch` — media/watch-along state.

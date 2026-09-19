@@ -41,6 +41,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
             "focus_start", "focus_loop", "focus_stop",
+            "focus_thinking_start", "focus_thinking_loop", "focus_thinking_end",
             "watch", "dance", "searching", "drop", "side_eye", "table_flip",
             "level_up_default",
         }
@@ -212,6 +213,21 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(len(stop.frames), 4)
         self.assertEqual(stop.frame_duration_ms, 120)
         self.assertFalse(stop.looping)
+
+    def test_focus_thinking_animation_has_start_loop_and_end_phases(self) -> None:
+        start = ANIMATIONS["focus_thinking_start"]
+        loop = ANIMATIONS["focus_thinking_loop"]
+        end = ANIMATIONS["focus_thinking_end"]
+
+        self.assertEqual(len(start.frames), 5)
+        self.assertEqual(start.frame_duration_ms, 140)
+        self.assertFalse(start.looping)
+        self.assertEqual(len(loop.frames), 8)
+        self.assertEqual(loop.frame_duration_ms, 140)
+        self.assertTrue(loop.looping)
+        self.assertEqual(len(end.frames), 5)
+        self.assertEqual(end.frame_duration_ms, 140)
+        self.assertFalse(end.looping)
 
     def test_searching_emote_preserves_the_authored_twenty_frame_timing(self) -> None:
         searching = ANIMATIONS["searching"]

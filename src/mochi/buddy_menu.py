@@ -465,9 +465,9 @@ class BuddyMenuController:
             return
         if self._buddy._developer_menu.get_visible():
             self._buddy._developer_menu.popdown()
-        # Secondary-click is UI-only. It must never trigger/cancel a Mochi
-        # emote, stop walking, force idle, or feed the primary-click reaction
-        # pipeline. The popover may animate; Mochi himself does not.
+        # Keep secondary-click out of the primary-click reaction pipeline.
+        # Higher-level presence behavior may choose a menu-specific visual
+        # after this presentation path has established menu ownership.
         self._buddy._cancel_hover_heart()
         self._buddy._sleep_label.set_text(
             "Wake up" if self._buddy.state.current is MochiState.SLEEPING else "Sleep"
