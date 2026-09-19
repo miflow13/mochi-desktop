@@ -221,6 +221,16 @@ class FocusAmbienceManager:
 
     def set_volume(self, volume: float) -> None:
         self.volume = SoundManager._clamp_volume(volume)
+        active_name = self._active_name
+        was_paused = self._paused
+        if active_name is None:
+            return
+        # Long-running backends generally cannot adjust gain in place. A
+        # user-driven slider change is rare, so restart only here—not on timer
+        # ticks—to keep exactly one ambience process alive during focus.
+        self.stop()
+        if self.start(active_name) and was_paused:
+            self.pause()
 
     def _path_for(self, name: str) -> Path | None:
         candidate = self.asset_root / Path(str(name)).name

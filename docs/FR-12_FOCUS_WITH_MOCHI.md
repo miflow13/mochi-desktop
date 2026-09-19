@@ -84,6 +84,8 @@ backend or asset is unavailable.
 
 Approved `.ogg` or `.wav` loops can be added to `assets/audio/focus/` later.
 No soundscape chooser is shown until at least one approved asset is present.
+The supplied `mochi_rain.wav` enables a Rain sounds toggle and independent
+volume control in setup and during a live session.
 
 ## QA
 

@@ -69,3 +69,20 @@ def test_focus_ambience_uses_one_long_lived_backend_handle(tmp_path) -> None:
     assert len(backend.stopped) == 1
     assert manager.active_name is None
     assert manager.selected_name == "rain"
+
+
+def test_changing_ambience_volume_restarts_only_the_active_loop(tmp_path) -> None:
+    (tmp_path / "rain.ogg").touch()
+    backend = _Backend()
+    manager = FocusAmbienceManager(asset_root=tmp_path, backend=backend, volume=0.2)
+    manager.select("rain")
+    manager.start_selected()
+
+    manager.set_volume(0.7)
+
+    assert backend.started == [
+        (tmp_path / "rain.ogg", 0.2),
+        (tmp_path / "rain.ogg", 0.7),
+    ]
+    assert len(backend.stopped) == 1
+    assert manager.active_name == "rain"

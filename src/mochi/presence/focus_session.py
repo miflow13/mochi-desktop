@@ -82,7 +82,7 @@ class FocusWindow:
     """Small setup/timer surface that can be hidden without ending a session."""
 
     DEFAULT_WIDTH = 420
-    DEFAULT_HEIGHT = 390
+    DEFAULT_HEIGHT = 455
 
     def __init__(
         self,
@@ -91,11 +91,21 @@ class FocusWindow:
         on_start: Callable[[FocusPlan], None],
         on_pause: Callable[[], None],
         on_cancel: Callable[[], None],
+        on_rain_enabled: Callable[[bool], None],
+        on_rain_volume_changed: Callable[[float], None],
+        rain_available: bool,
+        rain_enabled: bool,
+        rain_volume: float,
         logger: logging.Logger | None = None,
     ) -> None:
         self._on_start = on_start
         self._on_pause = on_pause
         self._on_cancel = on_cancel
+        self._on_rain_enabled = on_rain_enabled
+        self._on_rain_volume_change = on_rain_volume_changed
+        self._rain_available = rain_available
+        self._rain_enabled = rain_enabled
+        self._rain_volume = rain_volume
         self._logger = logger or logging.getLogger(__name__)
 
         self.window = Gtk.Window()
@@ -198,6 +208,13 @@ class FocusWindow:
         encourage_row.append(self._encouragement)
         card.append(encourage_row)
 
+        if self._rain_available:
+            self._setup_rain_switch, self._setup_rain_volume = self._rain_controls()
+            card.append(self._soundscape_row(
+                self._setup_rain_switch,
+                self._setup_rain_volume,
+            ))
+
         note = Gtk.Label(
             label="Focus time earns bond XP. Breaks are yours — Mochi does not grade them."
         )
@@ -251,6 +268,13 @@ class FocusWindow:
 
         card.append(actions)
 
+        if self._rain_available:
+            self._session_rain_switch, self._session_rain_volume = self._rain_controls()
+            card.append(self._soundscape_row(
+                self._session_rain_switch,
+                self._session_rain_volume,
+            ))
+
         hint = Gtk.Label(
             label="You can close this window. The timer keeps going with Mochi."
         )
@@ -259,6 +283,39 @@ class FocusWindow:
         hint.add_css_class("mochi-focus-secondary")
         card.append(hint)
         return card
+
+    def _rain_controls(self) -> tuple[Gtk.Switch, Gtk.Scale]:
+        toggle = Gtk.Switch()
+        toggle.set_active(self._rain_enabled)
+        toggle.set_valign(Gtk.Align.CENTER)
+        toggle.connect("notify::active", self._on_rain_toggle_changed)
+
+        volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.0, 1.0, 0.05)
+        volume.set_value(self._rain_volume)
+        volume.set_draw_value(False)
+        volume.set_hexpand(True)
+        volume.set_sensitive(self._rain_enabled)
+        volume.connect("value-changed", self._handle_rain_volume_changed)
+        return toggle, volume
+
+    def _soundscape_row(self, toggle: Gtk.Switch, volume: Gtk.Scale) -> Gtk.Box:
+        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        label = Gtk.Label(label="Rain sounds")
+        label.set_xalign(0)
+        label.set_hexpand(True)
+        header.append(label)
+        header.append(toggle)
+        row.append(header)
+
+        volume_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        volume_label = Gtk.Label(label="Rain volume")
+        volume_label.set_xalign(0)
+        volume_label.add_css_class("mochi-focus-secondary")
+        volume_row.append(volume_label)
+        volume_row.append(volume)
+        row.append(volume_row)
+        return row
 
     def _spin_row(
         self,
@@ -296,6 +353,7 @@ class FocusWindow:
         self._break_minutes.set_value(plan.break_minutes)
         self._rounds.set_value(plan.rounds)
         self._encouragement.set_active(plan.encouragement_enabled)
+        self._sync_rain_controls()
         self._stack.set_visible_child_name("setup")
         self.window.present()
 
@@ -316,6 +374,7 @@ class FocusWindow:
         self._pause_button.set_sensitive(not complete)
         self._pause_button.set_label("Resume" if session.paused else "Pause")
         self._cancel_button.set_label("Done" if complete else "Stop session")
+        self._sync_rain_controls()
 
     def destroy(self) -> None:
         self.window.destroy()
@@ -334,6 +393,34 @@ class FocusWindow:
 
     def _on_cancel_clicked(self, _button: Gtk.Button) -> None:
         self._on_cancel()
+
+    def _on_rain_toggle_changed(self, switch: Gtk.Switch, _detail) -> None:
+        enabled = switch.get_active()
+        if enabled == self._rain_enabled:
+            return
+        self._rain_enabled = enabled
+        self._on_rain_enabled(enabled)
+        self._sync_rain_controls()
+
+    def _handle_rain_volume_changed(self, scale: Gtk.Scale) -> None:
+        volume = scale.get_value()
+        if abs(volume - self._rain_volume) < 0.001:
+            return
+        self._rain_volume = volume
+        self._on_rain_volume_change(volume)
+        self._sync_rain_controls()
+
+    def _sync_rain_controls(self) -> None:
+        for name in ("_setup_rain_switch", "_session_rain_switch"):
+            switch = getattr(self, name, None)
+            if switch is not None and switch.get_active() != self._rain_enabled:
+                switch.set_active(self._rain_enabled)
+        for name in ("_setup_rain_volume", "_session_rain_volume"):
+            scale = getattr(self, name, None)
+            if scale is not None:
+                scale.set_sensitive(self._rain_enabled)
+                if abs(scale.get_value() - self._rain_volume) >= 0.001:
+                    scale.set_value(self._rain_volume)
 
     def _on_close_request(self, _window: Gtk.Window) -> bool:
         self.window.hide()
@@ -389,6 +476,11 @@ class FocusSessionMixin:
                 on_start=self._start_focus_session,
                 on_pause=self._toggle_focus_pause,
                 on_cancel=self._cancel_focus_session,
+                on_rain_enabled=self._set_focus_rain_enabled,
+                on_rain_volume_changed=self._set_focus_rain_volume,
+                rain_available="mochi_rain" in self._focus_ambience.available_soundscapes,
+                rain_enabled=self._focus_ambience.selected_name == "mochi_rain",
+                rain_volume=self._focus_ambience.volume,
                 logger=self._logger,
             )
 
@@ -434,6 +526,27 @@ class FocusSessionMixin:
             plan.break_minutes,
             plan.rounds,
         )
+
+    def _set_focus_rain_enabled(self, enabled: bool) -> None:
+        if enabled:
+            if not self._focus_ambience.select("mochi_rain"):
+                return
+            session = self._focus_session
+            if session is not None and session.active and not session.paused:
+                self._focus_ambience.start_selected()
+            return
+        self._focus_ambience.select(None)
+
+    def _set_focus_rain_volume(self, volume: float) -> None:
+        self._focus_ambience.set_volume(volume)
+        session = self._focus_session
+        if (
+            session is not None
+            and session.active
+            and not session.paused
+            and self._focus_ambience.active_name is None
+        ):
+            self._focus_ambience.start_selected()
 
     def _focus_tick(self) -> bool:
         session = self._focus_session
@@ -496,7 +609,10 @@ class FocusSessionMixin:
             self._focus_ambience.pause()
         elif session.phase is FocusPhase.FOCUS:
             self._ensure_focus_visual()
-            self._focus_ambience.resume()
+            if self._focus_ambience.active_name is None:
+                self._focus_ambience.start_selected()
+            else:
+                self._focus_ambience.resume()
 
         if self._focus_window is not None:
             self._focus_window.update_session(session)
