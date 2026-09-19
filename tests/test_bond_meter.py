@@ -267,7 +267,7 @@ def test_focus_xp_award_keeps_orbs_and_suppresses_full_bond_hud() -> None:
 
     assert harness._bond_state == BondState(level=1, xp=101)
     harness._bond_orbs.queue_xp.assert_called_once_with(1)
-    harness._bond_orbs.show_gain_marker.assert_called_once_with(1)
+    harness._bond_orbs.show_gain_marker.assert_not_called()
     harness._bond_progress_overlay.notify_xp_gain.assert_not_called()
 
 
