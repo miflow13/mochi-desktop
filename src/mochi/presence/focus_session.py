@@ -13,9 +13,11 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.focus import FocusPhase, FocusPlan, FocusSession
+from mochi.menu_window import _window_coordinate_scale, menu_position_for_anchor
 from mochi.sound import FocusAmbienceManager
 from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState
+from mochi.x11 import get_window_position, move_window
 
 from .engine import speech_display_seconds
 
@@ -110,6 +112,8 @@ class FocusWindow:
         self._rain_enabled = rain_enabled
         self._rain_volume = rain_volume
         self._logger = logger or logging.getLogger(__name__)
+        self._owner = owner
+        self._position_serial = 0
 
         self.window = Gtk.Window()
         self.window.set_title("Focus with Mochi 🌱")
@@ -121,6 +125,7 @@ class FocusWindow:
         self.window.set_default_size(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
         self.window.set_size_request(360, 330)
         self.window.add_css_class("mochi-focus-window")
+        self.window.connect("map", self._on_map)
         self.window.connect("close-request", self._on_close_request)
 
         css = Gtk.CssProvider()
@@ -358,12 +363,12 @@ class FocusWindow:
         self._encouragement.set_active(plan.encouragement_enabled)
         self._sync_rain_controls()
         self._stack.set_visible_child_name("setup")
-        self.window.present()
+        self._present_beside_owner()
 
     def present_session(self, session: FocusSession) -> None:
         self._stack.set_visible_child_name("session")
         self.update_session(session)
-        self.window.present()
+        self._present_beside_owner()
 
     def update_session(self, session: FocusSession) -> None:
         self._phase_label.set_text(session.phase_label)
@@ -379,7 +384,74 @@ class FocusWindow:
         self._cancel_button.set_label("Done" if complete else "Stop session")
         self._sync_rain_controls()
 
+    def _present_beside_owner(self) -> None:
+        self._position_serial += 1
+        serial = self._position_serial
+        self.window.present()
+        # Window allocation settles after present(), so make one immediate and
+        # one short delayed positioning pass just like MenuWindow.
+        GLib.idle_add(self._position_if_current, serial)
+        GLib.timeout_add(24, self._position_if_current, serial)
+
+    def _on_map(self, _window: Gtk.Window) -> None:
+        GLib.idle_add(self._position_if_current, self._position_serial)
+
+    def _position_if_current(self, serial: int) -> bool:
+        if serial != self._position_serial or not self.window.get_visible():
+            return GLib.SOURCE_REMOVE
+
+        owner_position = get_window_position(self._owner)
+        if owner_position is None:
+            self._logger.debug(
+                "Focus window side-position unavailable: owner has no X11 root position"
+            )
+            return GLib.SOURCE_REMOVE
+
+        owner_x, owner_y = owner_position
+        scale = _window_coordinate_scale(self._owner)
+        owner_width = max(1, self._owner.get_width())
+        owner_height = max(1, self._owner.get_height())
+        anchor_x = owner_x + round(owner_width * scale / 2)
+        anchor_y = owner_y + round(owner_height * scale / 2)
+
+        width = self.window.get_width()
+        height = self.window.get_height()
+        if width <= 1:
+            width = self.DEFAULT_WIDTH
+        if height <= 1:
+            height = self.DEFAULT_HEIGHT
+
+        monitor_list = self._owner.get_display().get_monitors()
+        geometries = [
+            monitor_list.get_item(index).get_geometry()
+            for index in range(monitor_list.get_n_items())
+        ]
+        x, y = menu_position_for_anchor(
+            anchor_x,
+            anchor_y,
+            width,
+            height,
+            geometries,
+            coordinate_scale=scale,
+            anchor_width=owner_width,
+        )
+        moved = move_window(self.window, x, y)
+        self._logger.debug(
+            "Focus window positioned beside Mochi anchor=(%d,%d) target=(%d,%d) "
+            "size=(%d,%d) scale=%.2f moved=%s",
+            anchor_x,
+            anchor_y,
+            x,
+            y,
+            width,
+            height,
+            scale,
+            moved,
+        )
+        return GLib.SOURCE_REMOVE
+
     def destroy(self) -> None:
+        self._position_serial += 1
         self.window.destroy()
 
     def _on_start_clicked(self, _button: Gtk.Button) -> None:
@@ -430,6 +502,7 @@ class FocusWindow:
         return True
 
     def _hide(self) -> None:
+        self._position_serial += 1
         self.window.hide()
         self._on_hidden()
 
