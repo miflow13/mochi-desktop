@@ -1,3 +1,5 @@
+> **Historical scoped handoff:** This document describes a v0.2-era presentation task. Its "do not implement feeding/XP/progression" restrictions applied to that task only. v0.3 now intentionally ships non-punitive bond progression, feeding, level-up feedback, emote unlocks, and Focus with Mochi. Use the current README, roadmap, and project philosophy for present-day product scope.
+
 # Copilot Task — Mochi Nametag + Contextual Status Overlay
 
 Continue development of **Mochi v0.2-dev — Make Mochi Feel Alive**.
