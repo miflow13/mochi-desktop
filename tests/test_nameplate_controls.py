@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from mochi.presence.nameplate_controls import NameplateMixin
 
@@ -46,6 +47,15 @@ class _FakeBubble:
         self.visible = visible
 
 
+class _HoverBase:
+    def _on_enter(self, _controller, _x: float, _y: float) -> None:
+        self._hovered = True
+
+
+class _HoverHarness(NameplateMixin, _HoverBase):
+    pass
+
+
 def _make_mixin(
     *,
     nameplate_visible: bool,
@@ -67,6 +77,20 @@ def _make_mixin(
     mixin._nameplate_shown = True
     mixin._hovered = False
     return mixin, nameplate
+
+
+def _make_hover_harness(
+    *,
+    nameplate_visible: bool,
+    bubble,
+) -> tuple[_HoverHarness, _FakeNameplate]:
+    mixin, nameplate = _make_mixin(
+        nameplate_visible=nameplate_visible,
+        bubble=bubble,
+    )
+    harness = object.__new__(_HoverHarness)
+    harness.__dict__.update(mixin.__dict__)
+    return harness, nameplate
 
 
 class NameplateSpeechExclusivityTests(unittest.TestCase):
@@ -103,6 +127,54 @@ class NameplateSpeechExclusivityTests(unittest.TestCase):
         self.assertTrue(nameplate.visible)
         self.assertEqual(nameplate.show_calls, 1)
         self.assertEqual(nameplate.opacity, 1.0)
+
+    def test_hover_enter_respects_visible_speech_priority_immediately(self) -> None:
+        mixin, nameplate = _make_hover_harness(
+            nameplate_visible=False,
+            bubble=_FakeBubble(visible=True),
+        )
+
+        with patch("mochi.presence.nameplate_controls.time.monotonic", return_value=10.0):
+            mixin._on_enter(None, 0.0, 0.0)
+
+        self.assertTrue(mixin._hovered)
+        self.assertFalse(nameplate.visible)
+        self.assertEqual(nameplate.show_calls, 0)
+
+    def test_hover_enter_respects_bond_overlay_priority_immediately(self) -> None:
+        mixin, nameplate = _make_hover_harness(
+            nameplate_visible=False,
+            bubble=_FakeBubble(visible=False),
+        )
+        mixin._bond_progress_overlay = SimpleNamespace(
+            active=True,
+            visible=True,
+            resume=Mock(),
+            update_position=Mock(),
+        )
+
+        with patch("mochi.presence.nameplate_controls.time.monotonic", return_value=10.0):
+            mixin._on_enter(None, 0.0, 0.0)
+
+        self.assertTrue(mixin._hovered)
+        self.assertFalse(nameplate.visible)
+        self.assertEqual(nameplate.show_calls, 0)
+        mixin._bond_progress_overlay.resume.assert_called_once_with()
+        mixin._bond_progress_overlay.update_position.assert_called_once_with()
+
+    def test_hover_enter_respects_focus_hint_priority_immediately(self) -> None:
+        mixin, nameplate = _make_hover_harness(
+            nameplate_visible=False,
+            bubble=_FakeBubble(visible=False),
+        )
+        mixin._focus_bond_hint_active = lambda: True
+
+        with patch("mochi.presence.nameplate_controls.time.monotonic", return_value=10.0):
+            mixin._on_enter(None, 0.0, 0.0)
+
+        self.assertTrue(mixin._hovered)
+        self.assertFalse(nameplate.visible)
+        self.assertEqual(nameplate.show_calls, 0)
 
     def test_hover_leave_fades_then_hides_nameplate(self) -> None:
         mixin, nameplate = _make_mixin(
