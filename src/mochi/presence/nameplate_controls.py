@@ -9,9 +9,11 @@ change:
 - `_change_size()` (already runs when Mochi's size changes)
 - `shutdown_presence()` (already runs on application shutdown)
 
-The nameplate is intentionally ephemeral:
+The shared surface keeps one priority order while the nameplate itself remains
+ephemeral:
 
-    speech bubble > temporary feedback > hover/post-speech nameplate > hidden
+    speech bubble > bond progress > Focus hint > temporary feedback
+    > hover/post-speech nameplate > hidden
 
 It appears while Mochi is hovered, briefly after speech ends, or while short
 care/interaction feedback is active. Fade progression piggybacks on the
@@ -414,7 +416,10 @@ class NameplateMixin:
     def _on_enter(self, controller, x: float, y: float) -> None:
         super()._on_enter(controller, x, y)
         if self._nameplate_shown:
-            self._show_nameplate_full_opacity()
+            # Hover changes intent, but the shared resolver still decides which
+            # surface may own the anchor right now. This prevents a hover event
+            # from flashing the nameplate over speech, bond progress, or Focus.
+            self._sync_nameplate_with_speech()
 
     def _on_leave(self, controller) -> None:
         super()._on_leave(controller)
