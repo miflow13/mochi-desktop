@@ -146,9 +146,10 @@ class Buddy(Gtk.DrawingArea):
         self._autonomous_sleep = AutonomousSleepController(self)
         self.atlas = SpriteAtlas()
         self.player = AnimationPlayer(on_finished=self._finish_reaction)
-        self.player.play(ANIMATIONS["idle"])
+        initial_idle = self._animation_for("idle")
+        self.player.play(initial_idle)
         self._current_animation = "idle"
-        self._active_animation = ANIMATIONS["idle"]
+        self._active_animation = initial_idle
         self._pending_animation: str | None = None
         self._click_reactions = ClickReactionBuffer()
         self._idle_resume_position: tuple[int, int] | None = None
