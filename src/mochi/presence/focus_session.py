@@ -32,6 +32,86 @@ FOCUS_COMPLETE_LINE = "nice work. we did it 🌱"
 FOCUS_CANCEL_LINE = "stopped. no worries 🌱"
 
 
+def _focus_window_position_for_anchor(
+    anchor_x: int,
+    anchor_y: int,
+    owner_top_y: int,
+    owner_height: int,
+    window_width: int,
+    window_height: int,
+    geometries: list,
+    *,
+    gap: int = 16,
+    padding: int = 12,
+    coordinate_scale: float = 1.0,
+    anchor_width: int = 0,
+) -> tuple[int, int]:
+    """Place the large Focus window near Mochi without pinning it to screen bottom.
+
+    Horizontal placement deliberately reuses the proven menu helper. Vertical
+    placement is focus-specific: stay centered beside Mochi when that fits,
+    otherwise prefer a full-window placement above him, then below him, and
+    clamp only as a last resort.
+    """
+    scale = coordinate_scale if coordinate_scale > 0 else 1.0
+    x, _ = menu_position_for_anchor(
+        anchor_x,
+        anchor_y,
+        window_width,
+        window_height,
+        geometries,
+        gap=gap,
+        padding=padding,
+        coordinate_scale=scale,
+        anchor_width=anchor_width,
+    )
+
+    device_window_height = max(1, round(window_height * scale))
+    device_owner_height = max(1, round(owner_height * scale))
+    device_gap = round(gap * scale)
+
+    if not geometries:
+        return x, round(anchor_y - device_window_height / 2)
+
+    application_anchor_x = anchor_x / scale
+    application_anchor_y = anchor_y / scale
+
+    def distance_to_geometry(geometry) -> float:
+        nearest_x = max(
+            geometry.x,
+            min(application_anchor_x, geometry.x + geometry.width),
+        )
+        nearest_y = max(
+            geometry.y,
+            min(application_anchor_y, geometry.y + geometry.height),
+        )
+        return (
+            (application_anchor_x - nearest_x) ** 2
+            + (application_anchor_y - nearest_y) ** 2
+        )
+
+    monitor = min(geometries, key=distance_to_geometry)
+    top = round((monitor.y + padding) * scale)
+    bottom = round((monitor.y + monitor.height - padding) * scale)
+
+    owner_bottom_y = owner_top_y + device_owner_height
+    beside_y = round(anchor_y - device_window_height / 2)
+    above_y = owner_top_y - device_gap - device_window_height
+    below_y = owner_bottom_y + device_gap
+
+    if top <= beside_y and beside_y + device_window_height <= bottom:
+        y = beside_y
+    elif above_y >= top:
+        y = above_y
+    elif below_y + device_window_height <= bottom:
+        y = below_y
+    else:
+        max_y = max(top, bottom - device_window_height)
+        y = max(top, min(beside_y, max_y))
+
+    return x, y
+
+
 FOCUS_CSS = """
 window.mochi-focus-window {
     background-color: @theme_bg_color;
@@ -428,9 +508,11 @@ class FocusWindow:
             monitor_list.get_item(index).get_geometry()
             for index in range(monitor_list.get_n_items())
         ]
-        x, y = menu_position_for_anchor(
+        x, y = _focus_window_position_for_anchor(
             anchor_x,
             anchor_y,
+            owner_y,
+            owner_height,
             width,
             height,
             geometries,
