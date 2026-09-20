@@ -388,7 +388,7 @@ def test_scale_notification_is_guarded_by_last_rendered_scale() -> None:
 
 
 def test_card_hit_testing_ignores_gap_and_glow_padding() -> None:
-    canvas = object.__new__(EmoteCatalogueCanvas)
+    canvas = EmoteCatalogueCanvas.__new__(EmoteCatalogueCanvas)
     canvas._emotes = EMOTE_CATALOGUE[:EMOTES_PER_PAGE]
     first_x, first_y = EmoteCatalogueCanvas._card_origin(0)
     second_x, second_y = EmoteCatalogueCanvas._card_origin(1)
