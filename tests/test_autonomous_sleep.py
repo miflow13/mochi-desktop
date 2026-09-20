@@ -64,6 +64,29 @@ def test_start_schedules_one_random_nap_opportunity() -> None:
     )
 
 
+def test_trigger_now_replaces_pending_schedule_and_uses_normal_sleep_path() -> None:
+    controller, buddy, rng = _controller()
+    controller._nap_source_id = 41
+    rng.randint.return_value = 75
+
+    with (
+        patch("mochi.autonomous_sleep.GLib.source_remove") as remove,
+        patch(
+            "mochi.autonomous_sleep.GLib.timeout_add_seconds",
+            return_value=52,
+        ) as timeout,
+    ):
+        result = controller.trigger_now_for_testing()
+
+    assert result == 0
+    remove.assert_called_once_with(41)
+    buddy._begin_sleep.assert_called_once_with()
+    assert controller.owns_sleep is True
+    assert controller._nap_source_id is None
+    assert controller._wake_source_id == 52
+    timeout.assert_called_once_with(75, controller._wake_from_nap)
+
+
 def test_nap_starts_through_existing_buddy_sleep_path() -> None:
     controller, buddy, rng = _controller()
     controller._nap_source_id = 41
@@ -154,6 +177,30 @@ def test_owned_nap_wakes_through_existing_buddy_wake_path() -> None:
     assert controller._wake_source_id is None
     assert controller._nap_source_id == 61
     timeout.assert_called_once_with(1000, controller._try_start_nap)
+
+
+def test_scheduled_wake_releases_ownership_before_buddy_wake() -> None:
+    controller, buddy, rng = _controller()
+    buddy.state.current = MochiState.SLEEPING
+    controller._owns_sleep = True
+    controller._wake_source_id = 52
+    rng.randint.return_value = 1000
+    ownership_seen_during_wake = []
+
+    def wake_up():
+        ownership_seen_during_wake.append(controller.owns_sleep)
+        buddy.state.current = MochiState.WAKING
+
+    buddy._wake_up = Mock(side_effect=wake_up)
+
+    with patch(
+        "mochi.autonomous_sleep.GLib.timeout_add_seconds",
+        return_value=61,
+    ):
+        controller._wake_from_nap()
+
+    assert ownership_seen_during_wake == [False]
+    assert controller.owns_sleep is False
 
 
 def test_presence_idle_takes_over_instead_of_autonomous_wake() -> None:
