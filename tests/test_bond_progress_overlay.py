@@ -5,7 +5,10 @@ from __future__ import annotations
 from unittest.mock import Mock, patch
 
 from mochi.care import BondState
-from mochi.presence.bond_progress_overlay import BondProgressOverlay
+from mochi.presence.bond_progress_overlay import (
+    LEVEL_UP_REACTION_LINE,
+    BondProgressOverlay,
+)
 
 
 def _overlay_harness() -> BondProgressOverlay:
@@ -97,6 +100,7 @@ def test_level_up_switches_to_dedicated_celebration_card() -> None:
     overlay._normal_content.set_visible.assert_called_with(False)
     overlay._level_up_content.set_visible.assert_called_with(True)
     overlay._level_up_level.set_text.assert_called_with("Bond Level 2")
+    overlay._level_up_subtitle.set_text.assert_called_with(LEVEL_UP_REACTION_LINE)
     assert overlay._activity == "typing together"
     assert overlay.level_up_active is True
 

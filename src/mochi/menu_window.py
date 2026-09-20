@@ -64,6 +64,7 @@ def menu_position_for_anchor(
     gap: int = 12,
     padding: int = 12,
     coordinate_scale: float = 1.0,
+    anchor_width: int = 0,
 ) -> tuple[int, int]:
     """Place a menu beside an X11-root anchor and clamp it to the nearest monitor.
 
@@ -92,8 +93,11 @@ def menu_position_for_anchor(
     device_menu_width = max(1, round(menu_width * scale))
     device_menu_height = max(1, round(menu_height * scale))
     device_gap = round(gap * scale)
-    preferred_right = anchor_x + device_gap
-    preferred_left = anchor_x - device_gap - device_menu_width
+    device_anchor_half_width = max(0, round(anchor_width * scale / 2))
+    anchor_left = anchor_x - device_anchor_half_width
+    anchor_right = anchor_x + device_anchor_half_width
+    preferred_right = anchor_right + device_gap
+    preferred_left = anchor_left - device_gap - device_menu_width
     if preferred_right + device_menu_width <= right:
         x = preferred_right
     elif preferred_left >= left:
@@ -134,6 +138,7 @@ class MenuWindow:
         self._logger = logger or logging.getLogger(__name__)
         self._anchor_x = max(1, anchor_widget.get_width() // 2)
         self._anchor_y = max(1, anchor_widget.get_height() // 2)
+        self._anchor_width = max(1, anchor_widget.get_width())
         self._closed_callbacks: list[Callable[[MenuWindow], None]] = []
         self._position_serial = 0
         self._follow_source_id: int | None = None
@@ -186,6 +191,7 @@ class MenuWindow:
     def set_pointing_to(self, rectangle: Gdk.Rectangle) -> None:
         self._anchor_x = round(rectangle.x + rectangle.width / 2)
         self._anchor_y = round(rectangle.y + rectangle.height / 2)
+        self._anchor_width = max(1, rectangle.width)
 
     def get_visible(self) -> bool:
         return bool(self.window.get_visible())
@@ -350,6 +356,7 @@ class MenuWindow:
             height,
             geometries,
             coordinate_scale=scale,
+            anchor_width=self._anchor_width,
         )
         moved = move_window(self.window, x, y)
         if not quiet:

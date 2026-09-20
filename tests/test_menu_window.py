@@ -45,6 +45,30 @@ class MenuPositionTests(unittest.TestCase):
         self.assertGreater(x, 1000)
         self.assertLessEqual(x + 244 * 2, (1000 - 12) * 2)
 
+    def test_full_mochi_bounds_keep_menu_completely_to_the_right(self) -> None:
+        monitors = [geometry(0, 0, 1200, 800)]
+        x, _ = menu_position_for_anchor(
+            500,
+            300,
+            244,
+            176,
+            monitors,
+            anchor_width=128,
+        )
+        self.assertGreaterEqual(x, 500 + 64 + 12)
+
+    def test_full_mochi_bounds_flip_menu_completely_left_near_right_edge(self) -> None:
+        monitors = [geometry(0, 0, 1000, 800)]
+        x, _ = menu_position_for_anchor(
+            930,
+            300,
+            244,
+            176,
+            monitors,
+            anchor_width=128,
+        )
+        self.assertLessEqual(x + 244, 930 - 64 - 12)
+
     def test_scaled_x11_coordinates_preserve_left_edge_behavior(self) -> None:
         monitors = [geometry(0, 0, 1000, 800)]
         x, _ = menu_position_for_anchor(

@@ -18,6 +18,9 @@ from mochi.sprites import ANIMATIONS, SpriteAtlas
 from mochi.x11 import get_window_position, move_window, request_keep_above
 
 
+LEVEL_UP_REACTION_LINE = "we're closer now! 🌱"
+
+
 class EmoteUnlockPreview(Gtk.DrawingArea):
     """Static authored-frame preview used only by the unlock reward card."""
 
@@ -246,7 +249,10 @@ class BondProgressOverlay:
         level_up_level.add_css_class("mochi-level-up-level")
         celebration.append(level_up_level)
 
-        level_up_subtitle = Gtk.Label(label="Your bond grew stronger")
+        # This is Mochi's one-off reaction to a real milestone, not a recurring
+        # tier phrase bank. Keeping it in the existing presentation card makes
+        # the line readable without competing with the speech bubble surface.
+        level_up_subtitle = Gtk.Label(label=LEVEL_UP_REACTION_LINE)
         level_up_subtitle.set_halign(Gtk.Align.CENTER)
         level_up_subtitle.set_can_target(False)
         level_up_subtitle.add_css_class("mochi-level-up-subtitle")
@@ -331,7 +337,7 @@ class BondProgressOverlay:
         for label in (self._level_up_title, self._popover_level_up_title):
             label.set_text("✦  LEVEL UP!  ✦")
         for label in (self._level_up_subtitle, self._popover_level_up_subtitle):
-            label.set_text("Your bond grew stronger")
+            label.set_text(LEVEL_UP_REACTION_LINE)
         for preview in self._unlock_previews:
             preview.set_emote(None)
         self._set_level_up_content(True)

@@ -264,6 +264,97 @@
       "fps": 10,
       "loop": false
     },
+    "focus_start": {
+      "frames": [
+        "focus/focus_start_01.png",
+        "focus/focus_start_02.png",
+        "focus/focus_start_03.png",
+        "focus/focus_start_04.png"
+      ],
+      "frame_count": 4,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "focus_loop": {
+      "spritesheet": "focus/focus_loop.png",
+      "frame_count": 24,
+      "fps": 7.142857142857143,
+      "loop": true,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "focus_stop": {
+      "frames": [
+        "focus/focus_stop_01.png",
+        "focus/focus_stop_02.png",
+        "focus/focus_stop_03.png",
+        "focus/focus_stop_04.png"
+      ],
+      "frame_count": 4,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "focus_thinking_start": {
+      "frames": [
+        "focus_thinking/focus_thinking_start_01.png",
+        "focus_thinking/focus_thinking_start_02.png",
+        "focus_thinking/focus_thinking_start_03.png",
+        "focus_thinking/focus_thinking_start_04.png",
+        "focus_thinking/focus_thinking_start_05.png"
+      ],
+      "frame_count": 5,
+      "fps": 7.142857142857143,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "focus_thinking_loop": {
+      "frames": [
+        "focus_thinking/focus_thinking_loop_01.png",
+        "focus_thinking/focus_thinking_loop_02.png",
+        "focus_thinking/focus_thinking_loop_03.png",
+        "focus_thinking/focus_thinking_loop_04.png",
+        "focus_thinking/focus_thinking_loop_05.png",
+        "focus_thinking/focus_thinking_loop_06.png",
+        "focus_thinking/focus_thinking_loop_07.png",
+        "focus_thinking/focus_thinking_loop_08.png"
+      ],
+      "frame_count": 8,
+      "fps": 7.142857142857143,
+      "loop": true,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "focus_thinking_end": {
+      "frames": [
+        "focus_thinking/focus_thinking_end_01.png",
+        "focus_thinking/focus_thinking_end_02.png",
+        "focus_thinking/focus_thinking_end_03.png",
+        "focus_thinking/focus_thinking_end_04.png",
+        "focus_thinking/focus_thinking_end_05.png"
+      ],
+      "frame_count": 5,
+      "fps": 7.142857142857143,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
     "typing_loop": {
       "frames": [
         "typing/typing_loop_01.png",
@@ -488,6 +579,16 @@
     },
     "table_flip": {
       "spritesheet": "table_flip/table_flip.png",
+      "frame_count": 16,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "level_up_default": {
+      "spritesheet": "level_up_default/level_up_default.png",
       "frame_count": 16,
       "fps": 8.333333333333334,
       "loop": false,

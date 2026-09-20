@@ -6,6 +6,12 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ## Unreleased
 
+### Added
+
+- Added **Focus with Mochi** sessions with configurable focus/break rounds,
+  optional rain ambience, bond XP, and dedicated menu/setup-thinking and
+  writing animations.
+
 ### Changed
 
 - Continued Linux desktop reliability work around workspace changes, placement, multi-monitor behavior, and contextual reactions.

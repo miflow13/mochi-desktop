@@ -31,11 +31,16 @@ def test_bond_level_up_queues_revealable_emotes() -> None:
     assert "_pending_emote_unlocks.extend" in source
 
 
-def test_level_up_completion_chains_into_unlock_card() -> None:
-    source = inspect.getsource(BondMeterMixin._on_bond_level_up_finished)
+def test_level_up_completion_starts_unlock_card_before_delayed_demo() -> None:
+    finish_source = inspect.getsource(BondMeterMixin._on_bond_level_up_finished)
+    queue_source = inspect.getsource(BondMeterMixin._show_next_emote_unlock_or_finish)
+    demo_source = inspect.getsource(BondMeterMixin._start_pending_emote_demo)
 
-    assert "PresentationState.EMOTE_UNLOCK" in source
-    assert "overlay.show_emote_unlock(emote)" in source
+    assert "PresentationState.EMOTE_UNLOCK" in finish_source
+    assert "overlay.show_emote_unlock(emote)" in queue_source
+    assert "EMOTE_UNLOCK_DEMO_DELAY_MS" in queue_source
+    assert "_play_bond_presentation_animation" in demo_source
+    assert 'stage="emote_demo"' in demo_source
 
 
 def test_developer_menu_has_session_only_unlock_all_action() -> None:
