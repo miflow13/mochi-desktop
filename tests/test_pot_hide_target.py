@@ -31,6 +31,7 @@ def test_pot_asset_is_shipped_outside_animation_manifest() -> None:
 def test_drop_on_highlighted_pot_hides_without_normal_drop_settle() -> None:
     target = SimpleNamespace(
         visible=True,
+        hovered=False,
         update_hover=Mock(return_value=True),
         hide=Mock(),
     )
