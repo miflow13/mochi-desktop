@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Iterable
+from dataclasses import dataclass
 from html import escape
 import random
+
+from mochi.care import BondPhase, BondState, bond_phase_for_level
 
 
 INTRO_LINES = (
@@ -19,6 +22,167 @@ INTRO_MARKUP = "\n".join(
     f"<b>{escape(line)}</b>" if index in (0, 2) else escape(line)
     for index, line in enumerate(INTRO_LINES)
 )
+
+
+@dataclass(frozen=True, slots=True)
+class BondDialogueLine:
+    """One relationship-oriented line unlocked at an exact bond level."""
+
+    text: str
+    required_level: int
+
+
+# Relationship dialogue is separate from contextual AmbiSense categories.
+# A phase only exposes its own lines, unlocked cumulatively within that phase,
+# so Mochi's direct relationship voice never slips back to an earlier phase.
+BOND_DIALOGUE: dict[BondPhase, tuple[BondDialogueLine, ...]] = {
+    BondPhase.NEW: (
+        *(BondDialogueLine(text, 1) for text in (
+            "oh, hi",
+            "you live here too?",
+            "what are we doing?",
+            "i'm still figuring this place out",
+            "you seem interesting",
+            "is this your desktop?",
+            "i'll just hang out here",
+            "so many rectangles...",
+            "hello from down here",
+        )),
+        *(BondDialogueLine(text, 2) for text in (
+            "oh! you again",
+            "i know that cursor",
+            "you're back",
+            "i'm getting the hang of this",
+            "we do this a lot, huh?",
+            "i think i recognize your typing",
+            "this spot is growing on me",
+            "okay, i kinda like it here",
+            "another computer adventure?",
+        )),
+    ),
+    BondPhase.FAMILIAR: (
+        *(BondDialogueLine(text, 3) for text in (
+            "there you are",
+            "i knew you'd come back",
+            "our desktop is busy today",
+            "what are we working on?",
+            "i'll keep you company",
+            "same spot? good choice",
+            "i'm getting pretty good at this",
+            "we make a decent team",
+            "i recognize this routine",
+        )),
+        *(BondDialogueLine(text, 4) for text in (
+            "ah yes. our natural habitat.",
+            "you type. i'll supervise.",
+            "we've done stranger things",
+            "i know the drill 🌱",
+            "another day in rectangle land",
+            "i brought moral support",
+            "you make things. i loaf nearby.",
+            "excellent arrangement, honestly",
+            "i was wondering what we'd make today",
+        )),
+    ),
+    BondPhase.COMFORTABLE: (
+        *(BondDialogueLine(text, 5) for text in (
+            "i like hanging out with you",
+            "this is a good little routine",
+            "i'm comfy here",
+            "we've got a nice thing going",
+            "you work. i blob. teamwork.",
+            "this desktop feels familiar now",
+            "i'll keep you company 🌱",
+            "cozy setup we've got here",
+            "i think this might be my spot",
+        )),
+        *(BondDialogueLine(text, 6) for text in (
+            "oh good, it's you",
+            "i saved your spot. probably.",
+            "our little corner of the desktop",
+            "i like when we do this",
+            "you make the pixels happen",
+            "i'll handle morale",
+            "you've got this. i'm nearby.",
+            "we're pretty good at hanging out",
+            "comfortable blob noises",
+        )),
+        *(BondDialogueLine(text, 7) for text in (
+            "i knew today needed a mochi",
+            "you bring the project. i'll bring the blob",
+            "honestly? good team.",
+            "i like our weird little routine",
+            "i'm happy to be part of this",
+            "look at us, doing computer things",
+            "i've seen worse desktops",
+            "we've got this 🌱",
+            "same team, tiny teammate",
+        )),
+    ),
+    BondPhase.CLOSE: (
+        *(BondDialogueLine(text, 8) for text in (
+            "hey. good to see you.",
+            "i like our days together",
+            "i know your rhythm by now",
+            "we've made a lot of little things",
+            "i'm glad i get to hang out here",
+            "another one together?",
+            "you know i'll be around",
+            "our desktop adventures continue",
+            "this feels like home base",
+        )),
+        *(BondDialogueLine(text, 9) for text in (
+            "we've been through a lot of tabs",
+            "i've watched a lot of ideas become things",
+            "you always find another project somehow",
+            "i know that thinking pause",
+            "we make a surprisingly good pair",
+            "you've changed this place a lot",
+            "i like seeing what you make",
+            "another chapter in blob history",
+            "still here 🌱",
+        )),
+        *(BondDialogueLine(text, 10) for text in (
+            "ten levels of tiny adventures",
+            "we've been doing this a while, huh?",
+            "look how far we've wandered",
+            "pretty good life for a desktop blob",
+            "i wouldn't change our weird little routine",
+            "we've made this desktop ours",
+            "thanks for keeping me around",
+            "i like what we've built here",
+            "still us 🌱",
+        )),
+    ),
+    BondPhase.DEEP_BOND: tuple(
+        BondDialogueLine(text, 11)
+        for text in (
+            "hey, you 🌱",
+            "home base.",
+            "same desktop. same team.",
+            "i like being part of your little world",
+            "we've had a lot of tiny adventures",
+            "you make things. i stay nearby.",
+            "i know this place pretty well now",
+            "still here. still green.",
+            "it's nice growing alongside you",
+            "we've come a long way for a blob and a cursor",
+            "whatever we're doing today, i'm in",
+            "good to see you. always.",
+        )
+    ),
+}
+
+
+def bond_dialogue_lines(state: BondState | None) -> tuple[str, ...]:
+    """Return this bond phase's exact-level-unlocked relationship lines."""
+    current = state or BondState()
+    phase = bond_phase_for_level(current.level)
+    return tuple(
+        line.text
+        for line in BOND_DIALOGUE[phase]
+        if line.required_level <= current.level
+    )
 
 
 PHRASES: dict[str, tuple[str, ...]] = {
