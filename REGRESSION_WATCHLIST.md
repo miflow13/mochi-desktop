@@ -1,61 +1,143 @@
-known failure modes
-## input / Context Menu
+# Regression Watchlist
+
+Use this checklist for interaction/state changes and before release checkpoints. Automated tests are necessary but do not replace live Fedora/GNOME/Wayland/XWayland verification.
+
+## Input / Context Menu
 
 - [ ] Context menu does not leave an invisible GTK input grab
+- [ ] Context menu opens/closes repeatedly
 - [ ] Right-click works after Walk
 - [ ] Right-click works after Sleep/Wake
+- [ ] Right-click works during and after Focus
 - [ ] Drag still works after using the context menu
+- [ ] Feed and Focus actions close the menu before taking presentation ownership
+- [ ] Opening/closing the menu while Mochi is sleeping does not wake him unexpectedly
 
-## State Machine
+## State / Recovery
 
 - [ ] Blink returns behavioral state to `IDLE`
 - [ ] Temporary animation states always have an exit path
 - [ ] Pickup / drag / put-down cannot leave Mochi stuck
-- [ ] Direct user input correctly interrupts ambient behavior
+- [ ] Direct user input correctly interrupts lower-priority ambient behavior
+- [ ] Feed returns through heart/recovery without leaving `EATING` active
+- [ ] Focus visual interruptions recover to the writing loop while the timer remains valid
+- [ ] Level-up/unlock presentation returns to the appropriate behavior state
+- [ ] Shutdown clears long-running sources and does not leave persisted state stale
 
 ## Animation / Assets
 
-- [ ] Canonical PixelLab artwork remains active
+- [ ] Canonical artwork remains active
 - [ ] No legacy fallback artwork appears
 - [ ] No baked checkerboards
 - [ ] No gray matte / halo pixels
 - [ ] Eye highlights remain consistent
+- [ ] New one-shot animations play exactly once unless explicitly authored to loop
+- [ ] Level-up and emote-unlock sequencing does not visibly fight normal behavior
 
-## Timers
+## Timers / Long-running Sources
 
 - [ ] Ambient timers do not accumulate
 - [ ] Idle timers do not compete with direct interactions
 - [ ] Double-click correctly cancels pending single-click behavior
+- [ ] Focus start → stop → start creates only one active timer
+- [ ] Pause freezes Focus time and reward accumulation
+- [ ] Rain audio does not create duplicate playback channels
+- [ ] Focus/rain sources are removed on stop and shutdown
 
-## Before merging interaction changes
+## Bond Progression
 
-- [ ] Relevant unit tests pass
-- [ ] Full test suite passes
-- [ ] `git diff --check` passes
-- [ ] Live GTK/XWayland test passes
+- [ ] Bond state restores after restart
+- [ ] Typing awards bond XP without duplicate tick sources
+- [ ] Feed awards bond progress only after a completed feed
+- [ ] Repeated/spam feeding does not create unbounded orb backlog
+- [ ] XP progress UI matches persisted bond state
+- [ ] Crossing a level threshold advances exactly once
+- [ ] Repeated updates at the same level do not replay the level-up celebration
 
-## AmbiSense helper lifecycle (#58)
+## Feed
+
+- [ ] Feed is rejected safely during sleeping/waking/pickup/drag/Fedora/eating states
+- [ ] Feed can interrupt only allowed lower-priority behavior
+- [ ] Eating sound fires once at the authored frame
+- [ ] Completed feed chains into heart once
+- [ ] Interrupted/stale feed completion does not award progress or fire completion behavior
+- [ ] Feed → heart → idle leaves click/right-click/drag usable
+
+## Emote Catalogue
+
+- [ ] Catalogue opens from the normal UI path
+- [ ] `Ctrl + Alt + E` opens the catalogue when the GNOME helper is available
+- [ ] Locked, unlocked, and coming-soon states match the current bond level
+- [ ] Implemented emotes animate on hover without restarting uncontrollably
+- [ ] Placeholder/mystery entries remain non-interactive where intended
+- [ ] Closing/reopening the catalogue does not leak windows/timers
+- [ ] Newly unlocked idle emotes become eligible only at the correct bond level
+
+## Level-up / Unlock Presentation
+
+- [ ] Real level-up plays the authored level-up animation once
+- [ ] Level-up sound plays once for a real level-up
+- [ ] Level-up card reflects the new bond level
+- [ ] Unlock card appears only for newly unlocked emotes
+- [ ] Newly learned emote demo plays once after its anticipation delay
+- [ ] Focus/typing/feed XP crossing a threshold uses the same authoritative level-up flow
+- [ ] Direct interaction and shutdown cannot leave level-up presentation stuck
+
+## Focus with Mochi
+
+- [ ] Setup accepts 5–120 minute focus blocks, 1–30 minute breaks, and 1–8 rounds
+- [ ] Menu/setup thinking animation enters and exits cleanly
+- [ ] Start transitions into the writing loop
+- [ ] Pause → resume preserves elapsed/reward accounting
+- [ ] Stop keeps earned whole-minute XP and gives no completion bonus
+- [ ] Break time gives no XP
+- [ ] Full configured completion grants the completion bonus exactly once
+- [ ] Final-minute XP is retained at reward boundaries
+- [ ] Start → stop → start works without duplicate timers/audio
+- [ ] Hidden/reopened timer window reflects the same live session
+- [ ] Held primary click, drag, feed, and right-click can temporarily interrupt presentation without stopping the clock
+- [ ] Manual Sleep settles earned XP and pauses the Focus session
+- [ ] Focus crossing a bond level produces coherent level-up feedback
+- [ ] Application shutdown settles/persists pending earned XP
+
+## Focus Rain Audio
+
+- [ ] Rain starts only when enabled
+- [ ] Rain volume changes do not restart playback unnecessarily
+- [ ] Pause/stop/session transitions leave audio in the intended state
+- [ ] Missing/unavailable audio backend fails safely
+- [ ] Shutdown stops the long-running soundscape channel
+
+## AmbiSense Helper Lifecycle (#58)
 
 Automated coverage: `python -m pytest tests/test_helper_lifecycle.py`.
+
 With GJS installed and session-bus access, run the real D-Bus integration check:
-`MOCHI_RUN_DBUS_TESTS=1 python -m pytest tests/test_helper_dbus_integration.py`.
-It uses a private test name and covers all helper-backed adapters, late startup,
+
+`MOCHI_RUN_DBUS_TESTS=1 python -m pytest tests/test_helper_dbus_integration.py`
+
+It uses a private test name and covers helper-backed adapters, late startup,
 already-running startup, same-process extension restarts, and process restarts.
 It does not enable, disable, or replace the installed GNOME extension.
-The helper now exports `GetState` (idle, file-browser focus, YouTube focus,
-coarse app category). Update/reload the extension along with Mochi to enable
-initial snapshots. Older extensions still deliver live signals but cannot
-provide a snapshot. Adapter startup success means the name watch is installed;
-the helper may still be absent. No helper discovery timer is used.
 
 Fresh Fedora GNOME/Wayland/XWayland QA:
 
-- [ ] Start Mochi with the extension disabled, then enable it while a file
-      manager or terminal is focused; verify the current context appears.
-- [ ] Start Mochi with the extension already enabled; verify initial context.
-- [ ] Disable the extension while contextual behavior is active; verify stale
-      file/app/video/presence state clears and typing fallback still works.
-- [ ] Re-enable repeatedly; verify each transition is delivered once and current
-      context returns without restarting Mochi.
-- [ ] During a helper outage, verify MPRIS playback and Downloads activity remain
-      functional; stop Mochi and verify no later helper events affect it.
+- [ ] Start Mochi with the extension disabled, then enable it while a file manager or terminal is focused; verify the current context appears
+- [ ] Start Mochi with the extension already enabled; verify initial context
+- [ ] Disable the extension while contextual behavior is active; verify stale file/app/video/presence state clears and typing fallback still works
+- [ ] Re-enable repeatedly; verify each transition is delivered once and current context returns without restarting Mochi
+- [ ] During a helper outage, verify MPRIS playback and Downloads activity remain functional
+- [ ] Stop Mochi and verify no later helper events affect it
+
+## Release Gate
+
+- [ ] Relevant focused tests pass
+- [ ] Full `python -m pytest -q` suite passes
+- [ ] Python compilation passes
+- [ ] `git diff --check` passes
+- [ ] Fresh wheel builds
+- [ ] Wheel contains expected sprite/audio assets
+- [ ] Package/runtime version strings agree
+- [ ] README, changelog, wiki, and regression docs match shipped behavior
+- [ ] Live Fedora/GNOME/Wayland/XWayland smoke/torture test passes
+- [ ] Known issues are documented rather than silently claimed fixed
