@@ -97,11 +97,13 @@ class Buddy(Gtk.DrawingArea):
     DOUBLE_BLINK_CHANCE = 0.075
     DOUBLE_BLINK_PAUSE_MS = (120, 250)
     HOVER_HEART_DELAY_MS = 280
-    # Keep autonomous activity frequency stable as the catalogue grows. Adding
-    # an emote changes variety, not the overall chance that Mochi interrupts
-    # idle with an emote.
-    IDLE_WALK_CHANCE = 0.25
-    IDLE_CATALOGUE_EMOTE_CHANCE = 0.25
+    # Keep autonomous activity calm enough that Mochi feels present without
+    # constantly moving around the desktop. Adding catalogue emotes changes
+    # variety, not the overall interruption rate.
+    IDLE_ACTION_INTERVAL_SECONDS = (20, 45)
+    IDLE_WALK_CHANCE = 0.10
+    IDLE_CATALOGUE_EMOTE_CHANCE = 0.20
+    IDLE_BREATHING_ENABLED = False
     PREVIEW_ANIMATIONS = (
         "default",
         "idle",
@@ -144,9 +146,10 @@ class Buddy(Gtk.DrawingArea):
         self._autonomous_sleep = AutonomousSleepController(self)
         self.atlas = SpriteAtlas()
         self.player = AnimationPlayer(on_finished=self._finish_reaction)
-        self.player.play(ANIMATIONS["idle"])
+        initial_idle = self._animation_for("idle")
+        self.player.play(initial_idle)
         self._current_animation = "idle"
-        self._active_animation = ANIMATIONS["idle"]
+        self._active_animation = initial_idle
         self._pending_animation: str | None = None
         self._click_reactions = ClickReactionBuffer()
         self._idle_resume_position: tuple[int, int] | None = None
@@ -780,7 +783,15 @@ class Buddy(Gtk.DrawingArea):
         return name
 
     def _animation_for(self, name: str):
-        return ANIMATIONS[self._animation_name_for_mood(name)]
+        animation = ANIMATIONS[self._animation_name_for_mood(name)]
+        if name == "idle" and not self.IDLE_BREATHING_ENABLED:
+            return replace(
+                animation,
+                frames=(animation.frames[0],),
+                frame_duration_ms=1_000,
+                looping=True,
+            )
+        return animation
 
     def _is_idle_visual_active(self) -> bool:
         """True when Mochi is semantically in the standing-idle presentation."""
@@ -897,7 +908,8 @@ class Buddy(Gtk.DrawingArea):
     def _schedule_idle_action(self) -> None:
         if self._idle_action_source_id is None:
             self._idle_action_source_id = GLib.timeout_add_seconds(
-                random.randint(5, 15), self._choose_idle_action
+                random.randint(*self.IDLE_ACTION_INTERVAL_SECONDS),
+                self._choose_idle_action,
             )
 
     def _schedule_blink(self) -> None:

@@ -37,6 +37,7 @@ def _make_harness() -> _MoodHarness:
     harness.state = SimpleNamespace(current=MochiState.IDLE)
     harness.reject_transition = False
     harness._current_animation = "idle"
+    harness.IDLE_BREATHING_ENABLED = Buddy.IDLE_BREATHING_ENABLED
     harness.player = SimpleNamespace(animation=ANIMATIONS["idle"])
     harness.played = []
 
@@ -97,7 +98,12 @@ class NameplateMoodTransitionTests(unittest.TestCase):
         self.assertIs(harness.set_mochi_mood("sad"), MochiMood.SAD)
         self.assertEqual(harness._nameplate_mood, "sad")
         self.assertEqual(harness.played[-1], ("idle", None))
-        self.assertIs(harness.player.animation, ANIMATIONS["sad_idle"])
+        self.assertEqual(harness.player.animation.name, "sad_idle")
+        self.assertEqual(len(harness.player.animation.frames), 1)
+        self.assertEqual(
+            harness.player.animation.frames[0],
+            ANIMATIONS["sad_idle"].frames[0],
+        )
         self.assertTrue(harness._is_idle_visual_active())
 
         self.assertTrue(harness._transition_to(MochiState.WALKING))
@@ -108,7 +114,12 @@ class NameplateMoodTransitionTests(unittest.TestCase):
 
         self.assertTrue(harness._transition_to(MochiState.IDLE))
         harness._play_animation("idle")
-        self.assertIs(harness.player.animation, ANIMATIONS["sad_idle"])
+        self.assertEqual(harness.player.animation.name, "sad_idle")
+        self.assertEqual(len(harness.player.animation.frames), 1)
+        self.assertEqual(
+            harness.player.animation.frames[0],
+            ANIMATIONS["sad_idle"].frames[0],
+        )
 
     def test_clearing_explicit_mood_restores_contextual_mood(self) -> None:
         harness = _make_harness()
@@ -124,12 +135,22 @@ class NameplateMoodTransitionTests(unittest.TestCase):
     def test_clearing_sad_while_idle_restores_normal_semantic_idle(self) -> None:
         harness = _make_harness()
         harness.set_mochi_mood(MochiMood.SAD)
-        self.assertIs(harness.player.animation, ANIMATIONS["sad_idle"])
+        self.assertEqual(harness.player.animation.name, "sad_idle")
+        self.assertEqual(len(harness.player.animation.frames), 1)
+        self.assertEqual(
+            harness.player.animation.frames[0],
+            ANIMATIONS["sad_idle"].frames[0],
+        )
 
         self.assertIs(harness.clear_mochi_mood(), MochiMood.CONTENT)
 
         self.assertEqual(harness._current_animation, "idle")
-        self.assertIs(harness.player.animation, ANIMATIONS["idle"])
+        self.assertEqual(harness.player.animation.name, "idle")
+        self.assertEqual(len(harness.player.animation.frames), 1)
+        self.assertEqual(
+            harness.player.animation.frames[0],
+            ANIMATIONS["idle"].frames[0],
+        )
         self.assertTrue(harness._is_idle_visual_active())
 
     def test_blink_resumes_the_installed_sad_idle_animation(self) -> None:
@@ -149,7 +170,12 @@ class NameplateMoodTransitionTests(unittest.TestCase):
 
         Buddy._resume_idle(harness)
         self.assertEqual(harness._current_animation, "idle")
-        self.assertIs(harness.player.animation, ANIMATIONS["sad_idle"])
+        self.assertEqual(harness.player.animation.name, "sad_idle")
+        self.assertEqual(len(harness.player.animation.frames), 1)
+        self.assertEqual(
+            harness.player.animation.frames[0],
+            ANIMATIONS["sad_idle"].frames[0],
+        )
 
     def test_idle_look_restores_the_installed_sad_idle_animation(self) -> None:
         harness = _make_harness()
@@ -169,7 +195,12 @@ class NameplateMoodTransitionTests(unittest.TestCase):
         IdleLookMixin._restore_idle_after_look(harness, resume_ambient=False)
 
         self.assertEqual(harness._current_animation, "idle")
-        self.assertIs(harness.player.animation, ANIMATIONS["sad_idle"])
+        self.assertEqual(harness.player.animation.name, "sad_idle")
+        self.assertEqual(len(harness.player.animation.frames), 1)
+        self.assertEqual(
+            harness.player.animation.frames[0],
+            ANIMATIONS["sad_idle"].frames[0],
+        )
         self.assertFalse(harness._idle_look_active)
 
 
