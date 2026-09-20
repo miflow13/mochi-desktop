@@ -195,6 +195,18 @@ class FocusSession:
                 continue
 
             if self.phase is FocusPhase.FOCUS:
+                # A block always contains an integral number of configured
+                # minutes.  Reconcile at its exact boundary so accumulated
+                # sub-second floating-point error cannot discard the final
+                # minute's XP when the remainder is reset below.
+                expected_minutes = self.round_number * self.plan.focus_minutes
+                missing_minutes = max(
+                    0,
+                    expected_minutes - self.focus_minutes_completed,
+                )
+                if missing_minutes:
+                    xp_earned += missing_minutes * FOCUS_XP_PER_MINUTE
+                    self.focus_minutes_completed += missing_minutes
                 self._focus_xp_seconds = 0.0
                 if self.round_number >= self.plan.rounds:
                     self.phase = FocusPhase.COMPLETE
