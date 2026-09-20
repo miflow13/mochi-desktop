@@ -27,6 +27,7 @@ def test_catalogue_contains_the_complete_authored_emote_set() -> None:
         "bounce",
         "squish",
         "wave",
+        "coffee",
         "side-eye",
         "look",
         "table-flip",
@@ -38,6 +39,9 @@ def test_catalogue_contains_the_complete_authored_emote_set() -> None:
     state = BondState(level=1, xp=0)
     assert EMOTES_BY_ID["heart"].is_unlocked(state)
     assert EMOTES_BY_ID["wave"].is_unlocked(state)
+    assert EMOTES_BY_ID["coffee"].is_unlocked(state)
+    assert EMOTES_BY_ID["coffee"].available
+    assert EMOTES_BY_ID["coffee"].animation == "coffee"
     assert not EMOTES_BY_ID["look"].is_unlocked(state)
     assert not EMOTES_BY_ID["vs-code"].is_unlocked(state)
     assert not EMOTES_BY_ID["mochi-exe"].is_unlocked(state)
@@ -50,6 +54,7 @@ def test_catalogue_assigns_progressive_rarity_tiers() -> None:
         "common",
         "common",
         "uncommon",
+        "common",
         "common",
         "uncommon",
         "rare",
@@ -420,6 +425,13 @@ def test_hover_preview_animates_every_catalogue_emote() -> None:
             assert enabled is True, emote.id
         else:
             assert enabled is False, emote.id
+
+
+def test_coffee_uses_the_standard_animated_hover_preview() -> None:
+    coffee = EMOTES_BY_ID["coffee"]
+
+    assert EmoteCatalogueCanvas._preview_animation_enabled(coffee) is True
+    assert len(ANIMATIONS["coffee"].frames) == 21
 
 
 def test_hover_preview_uses_authored_frame_timing_and_loops() -> None:

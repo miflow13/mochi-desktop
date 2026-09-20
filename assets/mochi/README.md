@@ -42,6 +42,7 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 - `squish` — tactile click reaction.
 - `heart` — affectionate one-shot emote.
 - `wave` — friendly catalogue emote available from the starting bond level.
+- `coffee` — one-shot catalogue caffeine-break emote.
 - `vs_code` — bond-gated coding-themed catalogue emote.
 - `mochi_exe` — high-bond legendary catalogue emote.
 - `fedora_intro`, `fedora_loop`, `fedora_outro` — hidden six-click Fedora-mode hat transition, held loop, and exit transition.

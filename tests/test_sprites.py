@@ -1,4 +1,6 @@
 import hashlib
+from pathlib import Path
+import tomllib
 import unittest
 
 import cairo
@@ -44,7 +46,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "focus_start", "focus_loop", "focus_stop",
             "focus_thinking_start", "focus_thinking_loop", "focus_thinking_end",
             "watch", "dance", "searching", "drop", "side_eye", "table_flip",
-            "wave", "vs_code", "mochi_exe", "level_up_default",
+            "wave", "coffee", "vs_code", "mochi_exe", "level_up_default",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -210,6 +212,34 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(heart.frame_duration_ms, 120)
         self.assertFalse(heart.looping)
 
+    def test_coffee_preserves_the_authored_one_shot_timing(self) -> None:
+        coffee = ANIMATIONS["coffee"]
+        metadata = ASSET_SET.animations["coffee"]
+
+        self.assertEqual(len(coffee.frames), 21)
+        self.assertEqual(coffee.frame_duration_ms, 120)
+        self.assertFalse(coffee.looping)
+        self.assertEqual(coffee.next_state, "idle")
+        self.assertEqual(metadata.source_cell_size, (256, 256))
+        self.assertEqual(
+            tuple(frame.sprite for frame in coffee.frames),
+            tuple(
+                f"coffee/mochi_coffee_{index:04}.png"
+                for index in range(1, 22)
+            ),
+        )
+
+    def test_coffee_assets_are_included_in_installed_builds(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        with (project_root / "pyproject.toml").open("rb") as stream:
+            pyproject = tomllib.load(stream)
+
+        data_files = pyproject["tool"]["setuptools"]["data-files"]
+        self.assertEqual(
+            data_files["share/mochi/coffee"],
+            ["assets/mochi/coffee/*.png"],
+        )
+
     def test_level_up_default_preserves_authored_64px_spritesheet(self) -> None:
         level_up = ANIMATIONS["level_up_default"]
         metadata = ASSET_SET.animations["level_up_default"]
@@ -320,4 +350,3 @@ def test_new_catalogue_emotes_preserve_authored_64px_spritesheets() -> None:
         assert metadata.spritesheet_path == sheet_path
         assert metadata.source_cell_size == (64, 64)
         assert len(metadata.frame_paths) == frame_count
-

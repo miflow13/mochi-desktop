@@ -64,6 +64,7 @@ where = ["src"]
 "share/mochi/wave" = ["assets/mochi/wave/*.png"]
 "share/mochi/vs_code" = ["assets/mochi/vs_code/*.png"]
 "share/mochi/mochi_exe" = ["assets/mochi/mochi_exe/*.png"]
+"share/mochi/coffee" = ["assets/mochi/coffee/*.png"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
