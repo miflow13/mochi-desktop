@@ -43,6 +43,7 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 - `heart` — affectionate one-shot emote.
 - `wave` — friendly catalogue emote available from the starting bond level.
 - `coffee` — one-shot catalogue caffeine-break emote.
+- `this_is_fine` — rare one-shot catalogue emote unlocked at Bond Level 3.
 - `vs_code` — bond-gated coding-themed catalogue emote.
 - `mochi_exe` — high-bond legendary catalogue emote.
 - `fedora_intro`, `fedora_loop`, `fedora_outro` — hidden six-click Fedora-mode hat transition, held loop, and exit transition.
