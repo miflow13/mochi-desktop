@@ -3,207 +3,339 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#fbfbfe" />
+  <meta name="theme-color" content="#f4f3ea" />
   <meta
     name="description"
-    content="Mochi is a handcrafted Linux desktop companion with privacy-first AmbiSense awareness. Early public alpha, actively tested on Fedora GNOME Wayland."
+    content="Mochi v0.3 — Growing Together. A handcrafted, privacy-conscious Linux desktop companion with Bond, feeding, emotes, Focus sessions, and local AmbiSense awareness."
   />
-  <title>Mochi — Tiny desktop companion</title>
+  <meta property="og:title" content="Mochi v0.3 — Growing Together" />
+  <meta
+    property="og:description"
+    content="A tiny Linux desktop buddy that grows with you — without streaks, guilt, or cloud AI."
+  />
+  <meta
+    property="og:image"
+    content="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e"
+  />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://miflow13.github.io/mochi-desktop/" />
+  <link rel="canonical" href="https://miflow13.github.io/mochi-desktop/" />
+  <title>Mochi v0.3 — Growing Together</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="page-glow glow-left"></div>
-  <div class="page-glow glow-right"></div>
+  <div class="ambient-grid" aria-hidden="true"></div>
 
   <header class="site-header">
     <a class="brand" href="#top" aria-label="Mochi home">
-      <span class="brand-sprout"></span>
+      <span class="brand-mark" aria-hidden="true">
+        <span class="brand-leaf brand-leaf-left"></span>
+        <span class="brand-leaf brand-leaf-right"></span>
+        <span class="brand-stem"></span>
+      </span>
       <span>Mochi</span>
+      <span class="version-pill">v0.3</span>
     </a>
 
     <nav aria-label="Main navigation">
-      <a href="#about">About</a>
+      <a href="#new">What’s new</a>
+      <a href="#privacy">Privacy</a>
       <a href="#install">Install</a>
-      <a href="https://github.com/miflow13/mochi-desktop" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://github.com/miflow13/mochi-desktop" target="_blank" rel="noreferrer">GitHub ↗</a>
     </nav>
   </header>
 
   <main id="top">
     <section class="hero">
-      <p class="eyebrow">Early public alpha · Fedora + GNOME + Wayland</p>
-      <h1>Soft, playful, and quietly alive.</h1>
-      <p class="hero-copy">
-        Meet Mochi — a handcrafted Linux desktop companion who wanders, reacts,
-        chats, sleeps, and notices the broad shape of activity around your desktop
-        through privacy-first AmbiSense.
+      <div class="hero-copy-block">
+        <div class="release-chip"><span class="release-dot"></span> v0.3 · Growing Together</div>
+        <h1>A tiny desktop buddy that <em>grows with you.</em></h1>
+        <p class="hero-copy">
+          Mochi lives quietly on your Linux desktop — wandering, reacting, working beside
+          you, taking naps, sharing snacks, and building a bond through the time you
+          naturally spend together.
+        </p>
+
+        <div class="hero-actions">
+          <a class="button button-primary" href="#install">Bring Mochi home</a>
+          <a class="button button-secondary" href="#new">See what’s new</a>
+        </div>
+
+        <div class="hero-notes" aria-label="Mochi principles">
+          <span>No streaks</span>
+          <span>No decay</span>
+          <span>No cloud AI</span>
+          <span>Just a little guy 🌱</span>
+        </div>
+      </div>
+
+      <div class="hero-scene" aria-label="Mochi desktop preview">
+        <div class="scene-window">
+          <div class="scene-bar">
+            <span class="scene-dot"></span>
+            <span class="scene-dot"></span>
+            <span class="scene-dot"></span>
+            <span class="scene-label">mika@fedora · mochi</span>
+          </div>
+          <img
+            src="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e"
+            alt="Mochi hanging out on a Linux desktop"
+            class="hero-gif"
+          />
+        </div>
+        <div class="floating-card bond-card">
+          <span class="floating-label">Bond</span>
+          <strong>Level 3</strong>
+          <div class="mini-progress"><span></span></div>
+        </div>
+        <div class="floating-card focus-card">
+          <span class="floating-label">Focus with Mochi</span>
+          <strong>25:00</strong>
+          <span class="floating-small">quiet company</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="story-strip" aria-label="Mochi philosophy">
+      <p>
+        <strong>Mochi isn’t a productivity dashboard wearing a cute face.</strong>
+        He’s a small character designed to exist alongside whatever you’re already doing.
       </p>
+    </section>
 
-      <div class="hero-actions">
-        <a class="button button-primary" href="#install">Install Mochi</a>
-        <a class="button button-secondary" href="https://github.com/miflow13/mochi-desktop" target="_blank" rel="noreferrer">View on GitHub</a>
+    <section class="release-section" id="new">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">What’s new in v0.3</p>
+          <h2>Growing Together.</h2>
+        </div>
+        <p>
+          v0.3 makes Mochi feel less like a collection of reactions and more like one
+          persistent little companion.
+        </p>
       </div>
 
-      <div class="hero-visual">
-        <div class="hero-frame">
-          <img src="https://github.com/user-attachments/assets/f2030934-4153-4c03-9b84-350505b9f75e" alt="Mochi desktop preview" class="hero-gif" />
+      <div class="showcase-grid">
+        <article class="showcase-card showcase-feed">
+          <div class="showcase-media">
+            <img
+              src="https://raw.githubusercontent.com/miflow13/mochi-desktop/main/docs/media/v0.3/mochi-feed.gif"
+              alt="Mochi eating a snack"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-copy">
+            <span class="card-kicker">Feed Mochi</span>
+            <h3>Share a snack.</h3>
+            <p>
+              Feed Mochi from the context menu and watch his authored eating animation,
+              sound, and post-snack reaction. Feeding contributes to Bond without turning
+              care into a chore.
+            </p>
+          </div>
+        </article>
+
+        <article class="showcase-card showcase-emotes">
+          <div class="showcase-media">
+            <img
+              src="https://raw.githubusercontent.com/miflow13/mochi-desktop/main/docs/media/v0.3/emote-catalogue.gif"
+              alt="Mochi's emote catalogue"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-copy">
+            <span class="card-kicker">Emote Catalogue</span>
+            <h3>He learns new tricks.</h3>
+            <p>
+              Bond levels unlock new expressions and emotes. The catalogue shows what
+              Mochi knows, what’s still locked, rarity, and animated previews.
+            </p>
+          </div>
+        </article>
+
+        <article class="showcase-card showcase-focus">
+          <div class="showcase-media">
+            <img
+              src="https://raw.githubusercontent.com/miflow13/mochi-desktop/main/docs/media/v0.3/mochi-focus.gif"
+              alt="Focus with Mochi session"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-copy">
+            <span class="card-kicker">Focus with Mochi</span>
+            <h3>Work beside each other.</h3>
+            <p>
+              Set focus blocks, breaks, rounds, gentle encouragement, and optional local
+              rain. Mochi settles into a working loop while your session keeps its own
+              clock and lifecycle.
+            </p>
+          </div>
+        </article>
+
+        <article class="showcase-card showcase-context">
+          <div class="showcase-media">
+            <img
+              src="https://raw.githubusercontent.com/miflow13/mochi-desktop/main/docs/media/v0.3/mochi-terminal.gif"
+              alt="Mochi reacting while a terminal is in use"
+              loading="lazy"
+            />
+          </div>
+          <div class="showcase-copy">
+            <span class="card-kicker">Ambient companion</span>
+            <h3>Still paying attention.</h3>
+            <p>
+              Typing, coding, terminal use, media, music, file browsing, idle time, and
+              other broad contexts can shape what Mochi does — without reading your work.
+            </p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="bond-section" id="bond">
+      <div class="bond-copy">
+        <p class="eyebrow">Bond system</p>
+        <h2>Progress without punishment.</h2>
+        <p>
+          Bond grows from meaningful shared activity: typing, Focus time, feeding, and
+          simply using Mochi as part of your desktop routine. It never decays because you
+          got busy, closed the app, or skipped a day.
+        </p>
+
+        <div class="principle-list">
+          <div><span>01</span><p><strong>No hunger meter.</strong> Feeding is a cute interaction, not an obligation.</p></div>
+          <div><span>02</span><p><strong>No streak anxiety.</strong> Come back tomorrow, next week, whenever.</p></div>
+          <div><span>03</span><p><strong>No punishment loop.</strong> Bond only records time spent together.</p></div>
         </div>
       </div>
-    </section>
 
-    <section class="overview" id="about">
-      <div class="section-intro">
-        <p class="eyebrow">Why Mochi?</p>
-        <h2>A little creature, not another dashboard.</h2>
-        <p>
-          Desktop pets already exist. Mochi is an experiment in making one feel native
-          to Linux: expressive, context-aware, polished, easy to use, and pleasant to
-          leave running. There are no productivity scores, streaks, nagging prompts, or
-          requirements to interact with him.
-        </p>
-      </div>
-
-      <div class="feature-grid">
-        <article class="feature-card">
-          <h3>Handcrafted</h3>
-          <p>
-            Original pixel art and animation drawn frame by frame in
-            <a href="https://github.com/orama-interactive/pixelorama" target="_blank" rel="noreferrer"><strong>Pixelorama</strong></a>.
-          </p>
-        </article>
-        <article class="feature-card">
-          <h3>AmbiSense</h3>
-          <p>
-            A local rule-based awareness system that reacts to broad desktop activity
-            without reading or storing what you type.
-          </p>
-        </article>
-        <article class="feature-card">
-          <h3>Linux-native spirit</h3>
-          <p>
-            Built with Python, GTK4/PyGObject, Cairo, a GNOME Shell helper, D-Bus,
-            Wayland, and XWayland integration.
-          </p>
-        </article>
+      <div class="bond-demo" aria-label="Illustrative Bond progression">
+        <div class="bond-demo-top">
+          <span class="tiny-sprout">🌱</span>
+          <div>
+            <p>Mochi</p>
+            <strong>Bond Level 3</strong>
+          </div>
+          <span class="rarity-chip">growing</span>
+        </div>
+        <div class="bond-meter">
+          <span style="width: 68%"></span>
+        </div>
+        <div class="bond-events">
+          <div><span>⌨</span><p>typing together</p><strong>+1</strong></div>
+          <div><span>☂</span><p>focus minute</p><strong>+1</strong></div>
+          <div><span>♥</span><p>sharing a snack</p><strong>+30</strong></div>
+        </div>
+        <p class="bond-footnote">Illustrative UI · Bond never decays.</p>
       </div>
     </section>
 
-    <section class="overview" id="ambisense">
-      <div class="section-intro">
-        <p class="eyebrow">Privacy first</p>
-        <h2>Awareness without reading your work.</h2>
+    <section class="privacy-section" id="privacy">
+      <div class="section-heading privacy-heading">
+        <div>
+          <p class="eyebrow">AmbiSense · privacy first</p>
+          <h2>Context, not content.</h2>
+        </div>
         <p>
-          On GNOME, Mochi's Shell helper reduces desktop activity to small semantic
-          signals before they reach Mochi. Keyboard activity becomes an anonymous
-          <strong>Pulse</strong> over D-Bus — no key symbols, characters, words, or typed
-          content are sent to the app.
+          Mochi can react to the broad shape of desktop activity while deliberately
+          avoiding the private details of what you’re doing.
         </p>
       </div>
 
-      <div class="feature-grid">
-        <article class="feature-card">
-          <h3>Typing</h3>
-          <p>Anonymous activity timing and intensity only. Typed content is never stored or reconstructed.</p>
+      <div class="privacy-grid">
+        <article>
+          <span class="privacy-icon">⌨</span>
+          <h3>Anonymous typing pulses</h3>
+          <p>Activity timing and intensity only. No key symbols, characters, words, or typing history.</p>
         </article>
-        <article class="feature-card">
-          <h3>Context</h3>
-          <p>Applications are reduced to broad categories such as editor, terminal, browser, media, or pixel-art software.</p>
+        <article>
+          <span class="privacy-icon">◫</span>
+          <h3>Broad app categories</h3>
+          <p>Contexts such as editor, terminal, browser, media, or pixel-art software — not document names or screen contents.</p>
         </article>
-        <article class="feature-card">
+        <article>
+          <span class="privacy-icon">⌂</span>
           <h3>Local behavior</h3>
-          <p>AmbiSense is not an LLM or cloud AI service. It is a lightweight local rule-based behavior engine.</p>
+          <p>AmbiSense is a lightweight local rule-based system. It is not an LLM or cloud AI service.</p>
         </article>
       </div>
     </section>
 
-    <section class="download" id="install">
-      <div class="download-copy">
+    <section class="stack-section">
+      <p class="eyebrow">Built for Linux</p>
+      <div class="stack-row" aria-label="Technology stack">
+        <span>Python</span>
+        <span>GTK4</span>
+        <span>PyGObject</span>
+        <span>Cairo</span>
+        <span>GNOME Shell</span>
+        <span>D-Bus</span>
+        <span>Wayland</span>
+        <span>XWayland</span>
+      </div>
+    </section>
+
+    <section class="install-section" id="install">
+      <div class="install-copy">
         <p class="eyebrow">Early public alpha</p>
-        <h2>Bring Mochi home.</h2>
+        <h2>Give Mochi a corner of your desktop.</h2>
         <p>
-          Fedora + GNOME on Wayland is the recommended and actively tested environment.
-          The installer handles Fedora dependencies, Mochi's private Python environment,
-          the GNOME helper, app-grid entry, and local launchers. Other Linux setups may
-          work, but support is still broader than the current test matrix.
+          Fedora + GNOME + Wayland is the primary tested setup. The installer creates
+          Mochi’s private Python environment, installs the GNOME helper, and adds Mochi
+          to your app grid.
         </p>
+        <div class="install-actions">
+          <a class="button button-primary" href="https://github.com/miflow13/mochi-desktop#install" target="_blank" rel="noreferrer">Full installation guide ↗</a>
+          <a class="button button-secondary" href="https://github.com/miflow13/mochi-desktop/issues" target="_blank" rel="noreferrer">Report a bug</a>
+        </div>
       </div>
 
-      <div class="download-panel">
-        <div class="step">
-          <span class="step-number">01</span>
-          <div>
-            <h3>Clone Mochi</h3>
-            <p><code>git clone https://github.com/miflow13/mochi-desktop.git</code></p>
-          </div>
+      <div class="terminal-card">
+        <div class="terminal-top">
+          <span></span><span></span><span></span>
+          <p>terminal</p>
         </div>
-
-        <div class="step">
-          <span class="step-number">02</span>
-          <div>
-            <h3>Run the installer</h3>
-            <p><code>cd mochi-desktop &amp;&amp; ./install.sh</code></p>
-          </div>
-        </div>
-
-        <div class="step">
-          <span class="step-number">03</span>
-          <div>
-            <h3>Log out and back in once</h3>
-            <p>On first install under GNOME Wayland, this lets GNOME load Mochi's desktop-awareness helper. You do not need to reinstall afterward.</p>
-          </div>
-        </div>
-
-        <div class="step">
-          <span class="step-number">04</span>
-          <div>
-            <h3>Open Mochi</h3>
-            <p>Launch <strong>Mochi</strong> from the GNOME app grid, or run <code>mochi</code> from a terminal.</p>
-          </div>
-        </div>
-
-        <div class="download-actions">
-          <a class="button button-primary" href="https://github.com/miflow13/mochi-desktop#install" target="_blank" rel="noreferrer">Installation guide</a>
-          <a class="text-link" href="https://github.com/miflow13/mochi-desktop/issues" target="_blank" rel="noreferrer">Report an alpha bug</a>
+        <div class="terminal-body">
+          <p><span class="prompt">$</span> git clone https://github.com/miflow13/mochi-desktop.git</p>
+          <p><span class="prompt">$</span> cd mochi-desktop</p>
+          <p><span class="prompt">$</span> ./install.sh</p>
+          <p class="terminal-success">✓ Mochi is ready. 🌱</p>
         </div>
       </div>
     </section>
 
-    <section class="overview" id="limitations">
-      <div class="section-intro">
-        <p class="eyebrow">Alpha notes</p>
-        <h2>Small support boundary. Useful bug reports.</h2>
-        <p>
-          Mochi is still an alpha. GNOME gets the fullest AmbiSense experience, Niri
-          support is experimental, and mixed monitor layouts, scaling, workspaces, and
-          XWayland behavior can still expose edge cases. If something fails quietly,
-          that is worth reporting too.
-        </p>
+    <section class="alpha-note">
+      <div>
+        <span class="alpha-mark">α</span>
+        <div>
+          <p class="eyebrow">Still an alpha</p>
+          <h2>Odd behavior is useful information.</h2>
+        </div>
       </div>
-
-      <div class="feature-grid">
-        <article class="feature-card">
-          <h3>Primary target</h3>
-          <p>Fedora Linux + GNOME + Wayland is the main tested environment today.</p>
-        </article>
-        <article class="feature-card">
-          <h3>Still expanding</h3>
-          <p>Broader Linux compatibility, more AmbiSense contexts, and more environment testing are ongoing.</p>
-        </article>
-        <article class="feature-card">
-          <h3>Found something odd?</h3>
-          <p>Open a GitHub issue with your desktop/session, monitor setup, reproduction steps, and any useful terminal output.</p>
-        </article>
-      </div>
+      <p>
+        Mixed monitor layouts, fractional scaling, workspaces, XWayland, and non-GNOME
+        environments can still expose edge cases. If Mochi acts weird, a detailed issue
+        report genuinely helps.
+      </p>
     </section>
 
     <section class="closing">
-      <p>A few pixels. A little personality. 🌱</p>
+      <p class="closing-small">A few pixels. A little personality.</p>
+      <h2>Growing together, one tiny interaction at a time. 🌱</h2>
+      <a class="text-link" href="https://github.com/miflow13/mochi-desktop" target="_blank" rel="noreferrer">Explore Mochi on GitHub ↗</a>
     </section>
   </main>
 
   <footer class="site-footer">
-    <div class="footer-brand">Mochi</div>
-    <p>Handcrafted with love by Mika 💚.</p>
-    <a href="https://github.com/miflow13/mochi-desktop" target="_blank" rel="noreferrer">GitHub</a>
+    <div class="footer-brand">
+      <span class="footer-sprout">🌱</span>
+      <strong>Mochi</strong>
+    </div>
+    <p>Handcrafted with love by Mika 💚</p>
+    <div class="footer-links">
+      <a href="https://github.com/miflow13/mochi-desktop" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://dev.to/mikachu" target="_blank" rel="noreferrer">Dev.to</a>
+    </div>
   </footer>
 </body>
 </html>
