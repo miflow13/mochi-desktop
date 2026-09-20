@@ -252,6 +252,23 @@ class NameplatePositionTests(unittest.TestCase):
 
 
 class NameplateContentTests(unittest.TestCase):
+    def test_set_opacity_clamps_and_updates_both_surfaces(self) -> None:
+        plate = object.__new__(Nameplate)
+        values = {"window": [], "popover": []}
+        plate._window = SimpleNamespace(
+            set_opacity=lambda value: values["window"].append(value)
+        )
+        plate._popover = SimpleNamespace(
+            set_opacity=lambda value: values["popover"].append(value)
+        )
+
+        plate.set_opacity(1.5)
+        plate.set_opacity(-0.5)
+        plate.set_opacity(0.4)
+
+        self.assertEqual(values["window"], [1.0, 0.0, 0.4])
+        self.assertEqual(values["popover"], [1.0, 0.0, 0.4])
+
     def test_set_name_and_status_compose_two_line_text(self) -> None:
         plate = object.__new__(Nameplate)
         plate._name = "Mochi"
