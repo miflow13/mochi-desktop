@@ -46,7 +46,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "focus_start", "focus_loop", "focus_stop",
             "focus_thinking_start", "focus_thinking_loop", "focus_thinking_end",
             "watch", "dance", "searching", "drop", "side_eye", "table_flip",
-            "wave", "coffee", "vs_code", "mochi_exe", "level_up_default",
+            "this_is_fine", "wave", "coffee", "vs_code", "mochi_exe", "level_up_default",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -227,6 +227,28 @@ class SpriteDefinitionsTests(unittest.TestCase):
                 f"coffee/mochi_coffee_{index:04}.png"
                 for index in range(1, 22)
             ),
+        )
+
+    def test_this_is_fine_preserves_authored_one_shot_timing(self) -> None:
+        emote = ANIMATIONS["this_is_fine"]
+        metadata = ASSET_SET.animations["this_is_fine"]
+
+        self.assertEqual(len(emote.frames), 16)
+        self.assertEqual(emote.frame_duration_ms, 120)
+        self.assertFalse(emote.looping)
+        self.assertEqual(metadata.spritesheet_path, "this_is_fine/this_is_fine.png")
+        self.assertEqual(metadata.source_cell_size, (256, 256))
+        self.assertEqual(len(metadata.frame_paths), 16)
+
+    def test_this_is_fine_asset_is_included_in_installed_builds(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        with (project_root / "pyproject.toml").open("rb") as stream:
+            pyproject = tomllib.load(stream)
+
+        data_files = pyproject["tool"]["setuptools"]["data-files"]
+        self.assertEqual(
+            data_files["share/mochi/this_is_fine"],
+            ["assets/mochi/this_is_fine/*.png"],
         )
 
     def test_coffee_assets_are_included_in_installed_builds(self) -> None:
