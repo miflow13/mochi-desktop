@@ -13,13 +13,20 @@ def test_presentation_state_has_distinct_emote_unlock_mode() -> None:
     assert PresentationState.EMOTE_UNLOCK is not PresentationState.LEVEL_UP
 
 
-def test_idle_selector_uses_bond_gated_emote_pool() -> None:
-    selector_source = inspect.getsource(Buddy._choose_idle_action)
-    pool_source = inspect.getsource(BondMeterMixin._available_idle_emote_animations)
+def test_idle_selector_uses_catalogue_driven_bond_pool() -> None:
+    selector_source = inspect.getsource(Buddy._choose_idle_action_with_walk)
+    player_source = inspect.getsource(Buddy._play_autonomous_catalogue_emote)
+    pool_source = inspect.getsource(
+        BondMeterMixin._available_catalogue_emote_animations
+    )
 
-    assert "_available_idle_emote_animations" in selector_source
-    assert "MochiState.IDLE_EMOTE" in selector_source
-    assert "unlocked_idle_animation_names" in pool_source
+    assert "_available_catalogue_emote_animations" in selector_source
+    assert "IDLE_CATALOGUE_EMOTE_CHANCE" in selector_source
+    assert "random.choice(unlocked_emotes)" in selector_source
+    assert "MochiState.IDLE_EMOTE" in player_source
+    assert "looping=False" in player_source
+    assert 'next_state="idle"' in player_source
+    assert "unlocked_emote_animation_names" in pool_source
     assert "_dev_unlock_all_emotes" in pool_source
 
 
