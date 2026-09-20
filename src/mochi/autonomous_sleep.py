@@ -164,9 +164,12 @@ class AutonomousSleepController:
             self._schedule_next_nap()
             return GLib.SOURCE_REMOVE
 
+        # Release ownership before calling Buddy's wake path. Buddy treats an
+        # owned sleep as externally interrupted; clearing here distinguishes the
+        # controller's own scheduled wake from real user/UI wake requests.
+        self._owns_sleep = False
         if self._buddy.state.current is MochiState.SLEEPING:
             self._buddy._wake_up()
 
-        self._owns_sleep = False
         self._schedule_next_nap()
         return GLib.SOURCE_REMOVE
