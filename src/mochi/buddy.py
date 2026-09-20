@@ -875,8 +875,12 @@ class Buddy(Gtk.DrawingArea):
     def _wake_up(self) -> None:
         if not can_begin_wake(self.state.current):
             return
-        if self._autonomous_sleep.owns_sleep:
-            self._autonomous_sleep.note_external_wake()
+        try:
+            autonomous_sleep = object.__getattribute__(self, "_autonomous_sleep")
+        except AttributeError:
+            autonomous_sleep = None
+        if autonomous_sleep is not None and autonomous_sleep.owns_sleep:
+            autonomous_sleep.note_external_wake()
         self._transition_to(MochiState.WAKING)
         self._user_idle = False
         self._mark_interaction()
