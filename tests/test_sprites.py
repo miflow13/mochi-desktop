@@ -84,9 +84,9 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(len(idle.frames), 6)
         self.assertEqual(
             tuple(frame.duration_ms for frame in idle.frames),
-            (750, 500, 350, 900, 400, 1_000),
+            (900, 600, 450, 1_100, 500, 1_400),
         )
-        self.assertEqual(sum(frame.duration_ms or 0 for frame in idle.frames), 3900)
+        self.assertEqual(sum(frame.duration_ms or 0 for frame in idle.frames), 4950)
         self.assertTrue(idle.looping)
 
     def test_blink_uses_fast_per_frame_timing(self) -> None:
