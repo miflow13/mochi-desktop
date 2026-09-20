@@ -247,25 +247,147 @@ Before a release:
 
 Treat this as release housekeeping, not a runtime behavior bug.
 
+## 12. Feed finishes visually but bond/reaction state is wrong
+
+### Symptoms
+
+- eating animation completes but no heart follows
+- bond progress is awarded after an interrupted feed
+- repeated feeding creates an ever-growing visual orb backlog
+- Mochi remains in `EATING`
+
+### Rule
+
+Only the currently owned, successfully completed `eat` animation may trigger feed completion behavior.
+
+Interrupted/stale callbacks must not award progress, play completion feedback, or trigger the post-feed heart.
+
+### Verify
+
+- feed once → eating cue → heart → recover
+- interrupt feed where allowed → no stale reward
+- spam Feed → bounded visual backlog
+- right-click/drag still works afterward
+
+## 13. Bond level-up repeats or becomes stuck
+
+### Symptoms
+
+- celebration replays when the same level is restored/refreshed
+- unlock card and emote demo overlap incorrectly
+- presentation never returns to normal
+- restart replays an already-seen level-up
+
+### Rule
+
+Level-up is triggered by a real level transition, not by repeatedly observing the same saved state.
+
+The authoritative presentation sequence is:
+
+```text
+level changes
+→ level-up animation/sound
+→ level card
+→ optional unlock card
+→ learned-emote demo
+→ recover
+```
+
+Test real threshold crossings from typing, Feed, and Focus reward paths.
+
+## 14. Emote Catalogue leaks or shows the wrong lock state
+
+### Symptoms
+
+- catalogue cards do not update after bond changes
+- hover previews keep running after close
+- repeated open/close creates multiple windows/timers
+- locked emotes appear available
+
+### Verify
+
+- lock state matches Bond Level
+- newly unlocked entries refresh after level-up
+- hover animation stops/cleans up on close
+- `Ctrl + Alt + E` and normal UI open the same catalogue lifecycle
+- repeated open/close remains responsive
+
+## 15. Focus time, XP, or presentation drifts
+
+### Symptoms
+
+- final completed minute does not award XP
+- pause/stop loses already-earned whole minutes
+- break time earns XP
+- start → stop → start creates duplicate ticking
+- drag/menu/feed permanently replaces the writing presentation
+- manual Sleep leaves Focus running visually or rewards incorrectly
+
+### Rule
+
+The Focus clock and reward accounting are separate from temporary presentation ownership.
+
+Settle elapsed time before pause, stop, manual Sleep, and shutdown. Direct interactions may temporarily interrupt the visual while the session clock remains authoritative.
+
+### Verify
+
+- pause/resume
+- stop near a minute boundary
+- start → stop → start
+- hide/reopen timer
+- drag/feed/right-click during Focus
+- manual Sleep during Focus
+- full completion bonus exactly once
+- level-up during Focus
+- shutdown with pending earned XP
+
+## 16. Rain audio duplicates or survives the session
+
+### Symptoms
+
+- two rain loops play at once
+- volume changes restart the sound unexpectedly
+- rain continues after stop/shutdown
+- missing backend causes an exception
+
+### Rule
+
+Focus ambience is a long-running audio channel separate from short interaction sounds. It must have one owner and fail safely.
+
+### Verify
+
+- toggle Rain on/off
+- change volume repeatedly
+- pause/resume/stop
+- start a second session
+- shutdown during playback
+- test unavailable/missing audio backend where practical
+
 ## Regression checklist before merging interaction changes
 
 - [ ] context menu releases input before dispatch
-- [ ] right-click works after Walk
-- [ ] right-click works after Sleep/Wake
-- [ ] drag works after context menu
-- [ ] blink returns behavioral state to `IDLE`
-- [ ] every temporary state has an exit
-- [ ] pickup/drag/put-down interruption paths recover
-- [ ] direct input interrupts ambient behavior
-- [ ] no legacy art appears
-- [ ] no baked checkerboards
-- [ ] no gray matte/halo
-- [ ] eye highlights remain canonical
-- [ ] ambient timers do not accumulate
+- [ ] right-click works after Walk and Sleep/Wake
+- [ ] drag works after context-menu actions
+- [ ] menu open/close does not wake sleeping Mochi
+- [ ] blink and every temporary state recover
+- [ ] pickup/drag/release interruption paths recover
+- [ ] Feed → heart → recovery works and stale Feed callbacks do not reward
+- [ ] bond state persists across restart
+- [ ] real level-up/unlock presentation plays once and recovers
+- [ ] catalogue lock state/hover lifecycle is correct
+- [ ] Focus pause/resume/stop/start reward boundaries are correct
+- [ ] direct input during Focus resumes the correct presentation afterward
+- [ ] Rain has one playback owner and stops on teardown
+- [ ] direct input interrupts lower-priority ambient behavior
+- [ ] no legacy art/checkerboards/gray matte appears
+- [ ] ambient/Focus/audio timers do not accumulate
 - [ ] double-click cancels pending single-click
-- [ ] full tests pass
+- [ ] full pytest suite passes
+- [ ] Python compilation passes
 - [ ] `git diff --check` passes
-- [ ] live GTK/XWayland test passes
+- [ ] wheel/package asset audit passes
+- [ ] package/runtime versions agree
+- [ ] live Fedora/GNOME/Wayland/XWayland test passes
 
 ## When to stop and checkpoint
 
