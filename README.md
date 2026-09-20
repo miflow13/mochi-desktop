@@ -1,4 +1,26 @@
+<div align="center">
+
 # mochi 🌱
+
+**v0.3 · Growing Together**
+
+### A tiny Linux desktop buddy that grows with you.
+
+<img src="docs/media/v0.3/mochi-terminal.gif" width="800" alt="Mochi living on a Linux desktop beside a terminal">
+
+Mochi lives quietly on your Linux desktop — wandering, reacting, working beside
+you, taking naps, sharing snacks, learning new emotes, and building a bond
+through the time you naturally spend together.
+
+**No streaks · No decay · No cloud AI · Just a little guy 🌱**
+
+[Website](https://miflow13.github.io/mochi-desktop/) ·
+[Install](#install) ·
+[Documentation](docs/README.md) ·
+[Changelog](CHANGELOG.md) ·
+[Report a bug](#reporting-bugs)
+
+<br>
 
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![GTK4](https://img.shields.io/badge/GTK-4-7FE719?logo=gtk&logoColor=black)
@@ -9,44 +31,25 @@
 [![Tests](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml/badge.svg)](https://github.com/miflow13/mochi-desktop/actions/workflows/tests.yml)
 ![GitHub stars](https://img.shields.io/github/stars/miflow13/mochi-desktop?style=flat&logo=github)
 
-<p align="center">
-  <img src="docs/media/v0.3/mochi-terminal.gif" width="800" alt="Mochi living on a Linux desktop beside a terminal">
-</p>
+</div>
 
-<p align="center">
-  <strong>A tiny Linux desktop buddy that lives alongside what you're already doing.</strong>
-</p>
-
-Mochi walks around, sleeps, reacts to interaction and broad desktop activity,
-builds a persistent bond with you, unlocks little moods over time, and can even
-sit down for a focus session with you.
-
-The goal is not to turn your desktop into a chore list. Mochi is meant to feel
-like a small character sharing the space: expressive, local, non-punitive, and
-easy to ignore when you need to get things done.
-
-[Website](https://miflow13.github.io/mochi-desktop/) ·
-[Documentation](docs/README.md) ·
-[Changelog](CHANGELOG.md) ·
-[Report a bug](#reporting-bugs) ·
-[Asset guide](assets/mochi/README.md)
-
-> **Status:** early public alpha. Fedora + GNOME + Wayland is the primary tested
+> **Early public alpha.** Fedora + GNOME + Wayland is the primary tested
 > environment. On GNOME Wayland, Mochi uses XWayland for the buddy window where
 > native positioning restrictions require it.
 
 ---
 
-## v0.3 — growing together 🌱
+## v0.3 — Growing Together 🌱
 
-v0.3 is centered on one idea: **make spending time with Mochi feel meaningful
-without making care feel like work.**
+v0.3 is centered on one idea:
 
-Bond progress does not decay. There are no streaks to maintain, no missed-day
-penalties, and no punishment for closing the app. You build the relationship by
-doing ordinary things together.
+> **Make spending time with Mochi feel meaningful without making care feel like work.**
 
-### Feed Mochi
+Mochi is not a productivity dashboard wearing a cute face. He is meant to feel
+like a small character sharing your desktop: expressive, local, non-punitive,
+and easy to ignore when you need to get things done.
+
+### Share a snack
 
 <p align="center">
   <img src="docs/media/v0.3/mochi-feed.gif" width="800" alt="Feeding Mochi from the desktop">
@@ -56,27 +59,27 @@ The right-click menu now includes **Feed**. Mochi plays an authored eating
 animation and sound, then responds with a little heart. Feeding also participates
 in the bond system.
 
-This is intentionally a positive interaction rather than a hunger meter:
-Mochi does not become sick, sad, or demanding because you have been away.
+There is no hunger meter and no punishment for being away. Feeding is a cute
+interaction, not an obligation.
 
-### Persistent bond progression
+### Progress without punishment
 
-Mochi now has a persistent, non-decaying **Bond Level**.
-
-Bond XP can come from shared activities such as:
+Mochi has a persistent, non-decaying **Bond Level**. Bond XP comes from ordinary
+shared activity, including:
 
 - typing together,
 - feeding Mochi,
 - and completed Focus with Mochi time.
 
+There are **no streaks to maintain, no missed-day penalties, and no decay**.
+Bond records time spent together instead of turning Mochi into another thing
+you have to maintain.
+
 The current bond level and progress are visible from Mochi's controls. When a
 level boundary is crossed, Mochi gets a compact celebration sequence with an
 authored level-up animation, sound, visual feedback, and unlock presentation.
 
-Some bond levels also teach Mochi new idle moods, so progression changes how the
-character can behave rather than only increasing a number.
-
-### Emote Catalogue
+### He learns new tricks
 
 <p align="center">
   <img src="docs/media/v0.3/emote-catalogue.gif" width="800" alt="Mochi Emote Catalogue showing bond-gated emotes">
@@ -88,13 +91,12 @@ It includes:
 
 - bond-gated unlocks,
 - rarity tiers,
-- locked and coming-soon states,
-- animated hover previews for implemented emotes,
-- and newly learned idle moods.
+- locked states,
+- animated hover previews,
+- and newly learned behaviors that can join Mochi's ambient animation pool.
 
-Current catalogue entries include familiar interactions such as Heart, Bounce,
-Squish, and **Wave**, alongside bond unlocks such as **Side Eye**, **Table Flip**,
-**VS Code**, Dance, and the legendary **Mochi.exe**.
+Current catalogue entries include **Heart, Bounce, Squish, Wave, Side Eye,
+Look Around, Table Flip, VS Code, Dance, and Mochi.exe**.
 
 With the GNOME helper enabled, press:
 
@@ -102,7 +104,7 @@ With the GNOME helper enabled, press:
 
 to open the catalogue.
 
-### Focus with Mochi
+### Work beside each other
 
 <p align="center">
   <img src="docs/media/v0.3/mochi-focus.gif" width="800" alt="Mochi focusing beside the user">
@@ -128,11 +130,12 @@ early is not punished, and already-earned whole-minute XP is kept.
 
 ---
 
-## What Mochi already does
+## Lives alongside your desktop
 
 v0.3 builds on the existing desktop-companion foundation:
 
 - idle breathing, blinking, looking around, and autonomous walking,
+- unlocked catalogue emotes joining Mochi's ambient behavior,
 - persistent **Stay put** control,
 - click chirps, bounce, squish, heart, and triple-click dialogue,
 - pickup, velocity-aware dragging, and drop behavior,
@@ -141,19 +144,19 @@ v0.3 builds on the existing desktop-companion foundation:
 - terminal and coding coworking reactions,
 - music and media reactions,
 - edge roaming,
-- nameplates and lightweight speech bubbles,
+- lightweight speech and an ephemeral nameplate,
 - Mochi Lab developer controls,
 - and **AmbiSense**, Mochi's local contextual-awareness system.
 
-The intent is for these behaviors to cooperate through one character/state
-system rather than behave like unrelated GIF triggers.
+The goal is for these behaviors to cooperate through one character and state
+system rather than feel like unrelated GIF triggers.
 
-## AmbiSense and privacy
+## Context, not content
 
-AmbiSense is Mochi's local, rule-based awareness system.
+**AmbiSense** is Mochi's local, rule-based awareness system.
 
-Depending on the available desktop integrations, it can respond to signals such
-as:
+Depending on the available desktop integrations, it can respond to broad signals
+such as:
 
 - anonymous typing activity,
 - session presence,
@@ -174,6 +177,8 @@ model.
 ---
 
 ## Install
+
+### Give Mochi a corner of your desktop
 
 The installer has a supported dependency path for Fedora. It creates a private
 Python environment, installs the GNOME helper, adds Mochi to the application
@@ -285,6 +290,10 @@ More detailed recovery steps are in
 
 ---
 
+## Built for Linux
+
+`Python` · `GTK4` · `PyGObject` · `Cairo` · `GNOME Shell` · `D-Bus` · `Wayland` · `XWayland`
+
 ## Development
 
 Complete the Fedora runtime/helper installation first, then use a separate
@@ -344,4 +353,12 @@ around and want to support continued development:
 
 ---
 
+<div align="center">
+
+**A few pixels. A little personality.**
+
+Growing together, one tiny interaction at a time. 🌱
+
 Mochi is released under the [MIT License](LICENSE).
+
+</div>
