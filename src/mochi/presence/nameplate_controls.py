@@ -211,14 +211,17 @@ class NameplateMixin:
         self._cancel_nameplate_fade()
         self._refresh_nameplate_content()
 
-    def clear_nameplate_feedback(self) -> None:
+    def clear_nameplate_feedback(self, *, now: float | None = None) -> None:
         """Clear temporary feedback and fade the nameplate when appropriate."""
         self._nameplate_feedback = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since = None
         self._refresh_nameplate_content()
-        if not getattr(self, "_hovered", False) and not self._post_speech_nameplate_active():
-            self._begin_nameplate_fade()
+        if (
+            not getattr(self, "_hovered", False)
+            and not self._post_speech_nameplate_active(now=now)
+        ):
+            self._begin_nameplate_fade(now=now)
 
     def _refresh_nameplate_content(self) -> None:
         nameplate = self._nameplate
@@ -311,7 +314,7 @@ class NameplateMixin:
             self._nameplate_feedback_remaining_seconds - elapsed,
         )
         if self._nameplate_feedback_remaining_seconds <= 0.0:
-            self.clear_nameplate_feedback()
+            self.clear_nameplate_feedback(now=now)
 
     def _transition_to(self, next_state: MochiState) -> bool:
         """Update mood only after the core state machine accepts a transition."""
