@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import random
-
+from mochi.care import BondPhase, bond_phase_for_level
 from mochi.quick_start import QuickStartMixin
 from mochi.sound import SoundEvent
 
@@ -22,19 +21,12 @@ from .integration import (
 )
 from .music_dance import MusicDanceMixin
 from .nameplate_controls import NameplateMixin
+from .phrases import bond_dialogue_lines
 from .terminal_cowork import TerminalCoworkMixin
 
 
-CLICK_BURST_PHRASES = (
-    "owie!",
-    "hey, i'm soft!",
-    "gentle!",
-    "eep!",
-    "tiny creature here!",
-)
-
 class ClickDialogueMixin:
-    """Add immediate click audio and a playful three-click response."""
+    """Add immediate click audio and a bond-aware three-click response."""
 
     def __init__(self, *args, **kwargs) -> None:
         self._click_burst_detector = ClickBurstDetector(
@@ -45,7 +37,6 @@ class ClickDialogueMixin:
             required_clicks=6,
             window_seconds=2.4,
         )
-        self._last_click_burst_phrase: str | None = None
         self._preserve_presence_bubble_for_press = False
         super().__init__(*args, **kwargs)
 
@@ -101,13 +92,7 @@ class ClickDialogueMixin:
         if bubble is None or not tuning.speech_enabled or tuning.quiet_mode:
             return False
 
-        choices = tuple(
-            phrase
-            for phrase in CLICK_BURST_PHRASES
-            if phrase != self._last_click_burst_phrase
-        ) or CLICK_BURST_PHRASES
-        text = random.choice(choices)
-        self._last_click_burst_phrase = text
+        text, level, phase = self._choose_bond_dialogue()
 
         # This is a direct user interaction, not unsolicited ambient speech.
         # Replace any current bubble and do not spend AmbiSense cooldown budget.
@@ -118,8 +103,44 @@ class ClickDialogueMixin:
         )
         if shown:
             self._ambient_presence_engine.phrases.remember(text)
-            self._logger.debug("[presence] triple-click dialogue text=%r", text)
+            self._logger.debug(
+                "[presence] triple-click bond dialogue level=%d phase=%s text=%r",
+                level,
+                phase.name,
+                text,
+            )
         return shown
+
+    def _choose_bond_dialogue(self) -> tuple[str, int, BondPhase]:
+        """Use the production phrase selector for direct relationship dialogue."""
+        state = self._bond_state
+        phase = bond_phase_for_level(state.level)
+        text = self._ambient_presence_engine.phrases.choose_from(
+            bond_dialogue_lines(state),
+            exclude_recent=True,
+        )
+        return text, state.level, phase
+
+    def _preview_bond_dialogue(self, _button=None) -> None:
+        """Preview production bond dialogue without touching XP or cooldowns."""
+        bubble = self._presence_bubble
+        if bubble is None:
+            self._logger.debug("[presence] bond dialogue preview unavailable: no bubble")
+            return
+
+        text, level, phase = self._choose_bond_dialogue()
+        self._dismiss_presence_bubble(user_initiated=False)
+        if bubble.show(
+            text,
+            duration_seconds=min(3.0, speech_display_seconds(text)),
+        ):
+            self._ambient_presence_engine.phrases.remember(text)
+            self._logger.debug(
+                "[presence] bond dialogue preview level=%d phase=%s text=%r",
+                level,
+                phase.name,
+                text,
+            )
 
     def _preview_presence_category(self, category: str) -> None:
         """Preview production-style typing presentation from Mochi Lab on demand."""
