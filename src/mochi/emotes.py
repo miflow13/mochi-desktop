@@ -30,6 +30,7 @@ EMOTE_CATALOGUE = (
     EmoteDefinition("heart", "Heart", "heart", 1, rarity="common"),
     EmoteDefinition("bounce", "Bounce", "bounce", 1, rarity="common"),
     EmoteDefinition("squish", "Squish", "squish", 1, rarity="uncommon"),
+    EmoteDefinition("wave", "Wave", "wave", 1, rarity="common"),
     EmoteDefinition(
         "side-eye",
         "Side Eye",
@@ -49,10 +50,23 @@ EMOTE_CATALOGUE = (
         idle_eligible=True,
         reveal_on_unlock=True,
     ),
+    EmoteDefinition(
+        "vs-code",
+        "VS Code",
+        "vs_code",
+        4,
+        rarity="epic",
+        reveal_on_unlock=True,
+    ),
     EmoteDefinition("dance", "Dance", "dance", 5, rarity="epic"),
-    EmoteDefinition("mystery-1", "Mystery Emote I", None, None, False, "legendary"),
-    EmoteDefinition("mystery-2", "Mystery Emote II", None, None, False, "legendary"),
-    EmoteDefinition("mystery-3", "Mystery Emote III", None, None, False, "legendary"),
+    EmoteDefinition(
+        "mochi-exe",
+        "Mochi.exe",
+        "mochi_exe",
+        6,
+        rarity="legendary",
+        reveal_on_unlock=True,
+    ),
 )
 EMOTES_BY_ID = {emote.id: emote for emote in EMOTE_CATALOGUE}
 

@@ -93,7 +93,8 @@ It includes:
 - and newly learned idle moods.
 
 Current catalogue entries include familiar interactions such as Heart, Bounce,
-and Squish alongside bond unlocks such as **Side Eye** and **Table Flip**.
+Squish, and **Wave**, alongside bond unlocks such as **Side Eye**, **Table Flip**,
+**VS Code**, Dance, and the legendary **Mochi.exe**.
 
 With the GNOME helper enabled, press:
 
