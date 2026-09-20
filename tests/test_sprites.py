@@ -43,7 +43,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
             "focus_start", "focus_loop", "focus_stop",
             "focus_thinking_start", "focus_thinking_loop", "focus_thinking_end",
             "watch", "dance", "searching", "drop", "side_eye", "table_flip",
-            "level_up_default",
+            "wave", "vs_code", "mochi_exe", "level_up_default",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -272,3 +272,23 @@ def test_bond_idle_emotes_use_authored_64px_spritesheets() -> None:
     assert table_flip.spritesheet_path == "table_flip/table_flip.png"
     assert table_flip.source_cell_size == (64, 64)
     assert len(table_flip.frame_paths) == 16
+
+def test_new_catalogue_emotes_preserve_authored_64px_spritesheets() -> None:
+    expected = {
+        "wave": ("wave/wave.png", 8, 120),
+        "vs_code": ("vs_code/vs_code.png", 14, 240),
+        "mochi_exe": ("mochi_exe/mochi_exe.png", 16, 120),
+    }
+
+    for animation_name, (sheet_path, frame_count, duration_ms) in expected.items():
+        animation = ANIMATIONS[animation_name]
+        metadata = ASSET_SET.animations[animation_name]
+
+        assert len(animation.frames) == frame_count
+        assert animation.frame_duration_ms == duration_ms
+        assert animation.looping is False
+        assert animation.next_state == "idle"
+        assert metadata.spritesheet_path == sheet_path
+        assert metadata.source_cell_size == (64, 64)
+        assert len(metadata.frame_paths) == frame_count
+
