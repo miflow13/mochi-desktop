@@ -43,7 +43,7 @@ class AmbientActivityController:
             or self._buddy._context_menu_open
             or (
                 self._buddy.state.current is MochiState.IDLE
-                and self._buddy.player.animation is not ANIMATIONS["idle"]
+                and not self._buddy._is_idle_visual_active()
             )
         ):
             return False
@@ -97,7 +97,7 @@ class AmbientActivityController:
             or self._buddy._context_menu_open
             or (
                 self._buddy.state.current is MochiState.IDLE
-                and self._buddy.player.animation is not ANIMATIONS["idle"]
+                and not self._buddy._is_idle_visual_active()
             )
         ):
             return False
@@ -116,7 +116,7 @@ class AmbientActivityController:
             or not self._buddy._media_monitor.youtube_playing
             or self._buddy.state.current is not MochiState.IDLE
             or self._buddy._context_menu_open
-            or self._buddy.player.animation is not ANIMATIONS["idle"]
+            or not self._buddy._is_idle_visual_active()
         ):
             return False
         return self._buddy._start_watching_emote()
@@ -141,7 +141,7 @@ class AmbientActivityController:
             or self._buddy._context_menu_open
             or (
                 self._buddy.state.current is MochiState.IDLE
-                and self._buddy.player.animation is not ANIMATIONS["idle"]
+                and not self._buddy._is_idle_visual_active()
             )
         ):
             return False
@@ -160,7 +160,7 @@ class AmbientActivityController:
             or not self._buddy._file_activity_monitor.file_activity_active
             or self._buddy.state.current is not MochiState.IDLE
             or self._buddy._context_menu_open
-            or self._buddy.player.animation is not ANIMATIONS["idle"]
+            or not self._buddy._is_idle_visual_active()
         ):
             return False
         return self._buddy._start_searching_emote()

@@ -959,7 +959,7 @@ class FocusSessionMixin:
 
         if (
             self.state.current is not MochiState.IDLE
-            or self.player.animation is not ANIMATIONS["idle"]
+            or not self._is_idle_visual_active()
         ):
             return False
         if not self._transition_to(MochiState.IDLE_EMOTE):
@@ -1020,7 +1020,7 @@ class FocusSessionMixin:
 
         if (
             self.state.current is not MochiState.IDLE
-            or self.player.animation is not ANIMATIONS["idle"]
+            or not self._is_idle_visual_active()
         ):
             return False
         if not self._transition_to(MochiState.COMPUTER):

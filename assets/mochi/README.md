@@ -27,6 +27,8 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 
 - `default` — canonical single-frame fallback.
 - `idle` — breathing/base idle loop.
+- `sad_idle` — optional sad-mood breathing loop selected through the mood
+  resolver while Mochi remains semantically idle.
 - `blink` — one-shot blink layered into idle behavior.
 - `walk`, `walk_left` — autonomous/manual walking loops.
 - `pickup` — transition into being held.

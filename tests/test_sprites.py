@@ -37,6 +37,7 @@ class SpriteDefinitionsTests(unittest.TestCase):
     def test_required_visible_states_use_manifest_art(self) -> None:
         required = {
             "default", "idle", "blink", "walk", "walk_left", "bounce",
+            "sad_idle",
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
@@ -88,6 +89,34 @@ class SpriteDefinitionsTests(unittest.TestCase):
         )
         self.assertEqual(sum(frame.duration_ms or 0 for frame in idle.frames), 3900)
         self.assertTrue(idle.looping)
+
+    def test_sad_idle_uses_six_128px_frames_at_a_slow_breathing_cadence(
+        self,
+    ) -> None:
+        sad_idle = ANIMATIONS["sad_idle"]
+        metadata = ASSET_SET.animations["sad_idle"]
+
+        self.assertEqual(
+            tuple(frame.sprite for frame in sad_idle.frames),
+            tuple(f"sad_idle/sad_idle_{index:02}.png" for index in range(1, 7)),
+        )
+        self.assertEqual(sad_idle.frame_duration_ms, 500)
+        self.assertTrue(sad_idle.looping)
+        self.assertEqual(metadata.source_cell_size, (128, 128))
+
+        loaded = ASSET_SET.load_frames("sad_idle")
+        self.assertTrue(
+            all(
+                (surface.get_width(), surface.get_height()) == (256, 256)
+                for surface in loaded.values()
+            )
+        )
+
+        atlas = SpriteAtlas()
+        self.assertEqual(
+            atlas._source_visible_bounds(sad_idle.frames[0].sprite),
+            atlas._source_visible_bounds(ANIMATIONS["idle"].frames[0].sprite),
+        )
 
     def test_blink_uses_fast_per_frame_timing(self) -> None:
         blink = ANIMATIONS["blink"]

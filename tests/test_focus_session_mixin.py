@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from unittest.mock import Mock, patch
 
+from mochi.buddy import Buddy
 from mochi.focus import FocusPhase, FocusPlan, FocusSession
 from mochi.presence.focus_session import FocusSessionMixin, FocusWindow
 from mochi.sprites import ANIMATIONS
@@ -77,6 +78,10 @@ def _harness() -> _Harness:
     harness._fedora_mode_active = False
     harness.state = StateMachine()
     harness.player = SimpleNamespace(animation=object())
+    harness._is_idle_visual_active = MethodType(
+        Buddy._is_idle_visual_active,
+        harness,
+    )
     harness.base_typing_calls = 0
     harness.base_resume_calls = 0
     harness.base_sleep_calls = 0
