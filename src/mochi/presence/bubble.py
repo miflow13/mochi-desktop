@@ -24,7 +24,7 @@ class SpeechBubble:
     Wayland falls back to a Gtk.Popover anchored to the Buddy widget.
     """
 
-    FOLLOW_INTERVAL_MS = 33
+    FOLLOW_INTERVAL_MS = 22
     FADE_IN_SECONDS = 0.20
     FADE_OUT_SECONDS = 0.26
     GAP_PX = 8
