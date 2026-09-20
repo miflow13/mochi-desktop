@@ -178,7 +178,7 @@ The installer has a supported dependency path for Fedora. It creates a private
 Python environment, installs the GNOME helper, adds Mochi to the application
 grid, and installs `mochi` and `mochi-uninstall` under `~/.local/bin`.
 
-### Current stable checkout
+### Current alpha checkout
 
 ```bash
 git clone https://github.com/miflow13/mochi-desktop.git
@@ -186,16 +186,8 @@ cd mochi-desktop
 ./install.sh
 ```
 
-### Test the v0.3 development branch
-
-```bash
-git clone https://github.com/miflow13/mochi-desktop.git
-cd mochi-desktop
-git switch v0.3
-./install.sh
-```
-
-The installer installs the source currently checked out in Git.
+The v0.3 development line has been promoted to `main`. The installer installs
+the source currently checked out in Git.
 
 After the first GNOME Wayland installation, log out and back in once so GNOME
 can load Mochi's optional awareness helper. Mochi still runs without the helper,
