@@ -82,9 +82,9 @@ class NameplateMixin:
             logger=self._logger,
         )
         ## Debugging sad state, uncomment the following lines to refresh the nameplate and context status
-        # self._refresh_nameplate_content()
-        # self._refresh_context_status()
-        self.set_mochi_mood("sad")
+        self._refresh_nameplate_content()
+        self._refresh_context_status()
+        ## self.set_mochi_mood("sad")
 
     @staticmethod
     def _normalize_nameplate_text(value: str | None) -> str | None:
