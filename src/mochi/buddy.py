@@ -685,7 +685,7 @@ class Buddy(Gtk.DrawingArea):
         hide_in_pot = bool(
             target is not None
             and target.visible
-            and target.update_hover(self._press)
+            and (target.hovered or target.update_hover(self._press))
         )
         if target is not None:
             target.hide()
