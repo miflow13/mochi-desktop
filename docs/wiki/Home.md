@@ -4,8 +4,9 @@
 
 Mochi is a small pixel-art Linux desktop companion built to feel like a quiet little creature living on the desktop rather than a dashboard, widget, or chatbot.
 
-Mochi is in early alpha. The focus is interaction quality, input reliability,
-and public-alpha readiness, tracked in [issue #37](https://github.com/miflow13/mochi-desktop/issues/37).
+Mochi is in early public alpha. The current v0.3 line adds persistent bond progression, feeding, bond-gated emotes, level-up feedback, and Focus with Mochi on top of the existing interaction core.
+
+Release QA is tracked in [issue #37](https://github.com/miflow13/mochi-desktop/issues/37).
 The [current known issues](../../README.md#known-issues) include unresolved
 workspace/Overview freezing (#45) and drag-direction latency (#68).
 
@@ -19,7 +20,7 @@ Mochi is designed to be:
 - visually consistent pixel art with crisp nearest-neighbor rendering
 - Linux-native, with Fedora + GNOME as the primary development environment
 
-The project intentionally keeps the creature core small. Systems such as health, hunger, XP, shops, accessories, and deeper progression belong to later phases, not the current alpha foundation.
+The project intentionally keeps care lightweight. v0.3 ships bond XP and positive feeding/focus rewards, but it still avoids punitive hunger/health decay, streaks, shops, and obligation-heavy progression.
 
 ## Wiki map
 
@@ -36,28 +37,30 @@ The project intentionally keeps the creature core small. Systems such as health,
 
 ## Current development focus
 
-The interaction core is the immediate priority:
+v0.3 feature development is complete on `main`; the current focus is release stabilization and real-world tester feedback.
+
+The interaction core now has to remain dependable while longer-lived v0.3 systems run around it:
 
 ```text
 IDLE
-├── click → SQUISH → IDLE
-├── double-click → HEART → IDLE
-├── ambient → TYPING → IDLE
-├── context menu → WALK / SLEEP / EMOTE / COMPUTER
-└── PICKUP → HELD / DRAG → PUT_DOWN → IDLE
+├── click / heart / dialogue → reaction → IDLE
+├── context menu → WALK / SLEEP / FEED / FOCUS / controls
+├── PICKUP → DRAG → release-settle → IDLE
+├── bond XP → LEVEL-UP / UNLOCK presentation → recover
+└── FOCUS clock → writing/break presentation while direct input may interrupt visually
 ```
 
-The most important rule underneath every interaction is simple:
+The most important rule underneath every interaction remains:
 
 > **Mochi must always recover and remain interactable.**
 
-Every temporary animation state needs a deterministic exit path. Direct user input takes priority over ambient behavior. A feature is not complete if it looks correct but leaves Mochi unable to click, drag, right-click, wake, or return to idle.
+Direct user input takes priority over ambient presentation. Bond, Focus, catalogue, and level-up features are not complete if they look correct but leave Mochi unable to click, drag, right-click, sleep/wake, or return to normal behavior.
 
 ## Canonical visual rules
 
 Mochi's runtime art uses a fixed pixel-art presentation:
 
-- 128×128 logical runtime canvas
+- 256×256 asset frames scaled to the configured runtime window
 - bottom-center anchoring
 - transparent RGBA artwork
 - nearest-neighbor scaling only
@@ -79,10 +82,9 @@ Mochi's runtime art uses a fixed pixel-art presentation:
 
 Mochi is under active development, and local development work may temporarily be ahead of the default branch. Treat the current branch, issue tracker, test results, and explicit checkpoint commits as the authoritative source when debugging an in-progress feature.
 
-Package/runtime metadata is `0.2.0a0`. Published release labels have
-[documented discrepancies](../../CHANGELOG.md#release-metadata-note); use the
-tested commit to identify a build. This wiki's dated handoffs and conceptual
-roadmaps are not evidence that a feature shipped or a release gate passed.
+Package/runtime metadata for the v0.3 release-prep line is `0.3.0a1` (the Python packaging form of `0.3.0-alpha.1`).
+
+The earlier `v0.3.0-alpha` GitHub tag is an older development snapshot. Use the current README/changelog and the tested commit when identifying a build. This wiki's dated handoffs remain historical unless explicitly marked current.
 
 ## Development discipline
 
