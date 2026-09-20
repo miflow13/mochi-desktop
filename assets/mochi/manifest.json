@@ -596,6 +596,36 @@
         64,
         64
       ]
+    },
+    "wave": {
+      "spritesheet": "wave/wave.png",
+      "frame_count": 8,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "vs_code": {
+      "spritesheet": "vs_code/vs_code.png",
+      "frame_count": 14,
+      "fps": 4.166666666666667,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
+    },
+    "mochi_exe": {
+      "spritesheet": "mochi_exe/mochi_exe.png",
+      "frame_count": 16,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        64,
+        64
+      ]
     }
   }
 }
