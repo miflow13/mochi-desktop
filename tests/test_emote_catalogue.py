@@ -15,32 +15,34 @@ from mochi.presence.emote_catalogue import (
     EmoteCatalogueMixin,
     EmoteCatalogueWindow,
     bond_xp_until_level,
-    emote_status_text,
     next_emote_unlock,
 )
 from mochi.sprites import ANIMATIONS
 
 
 
-def test_catalogue_contains_unlocked_locked_and_future_placeholder_emotes() -> None:
+def test_catalogue_contains_the_complete_authored_emote_set() -> None:
     assert tuple(emote.id for emote in EMOTE_CATALOGUE) == (
         "heart",
         "bounce",
         "squish",
+        "wave",
         "side-eye",
         "look",
         "table-flip",
+        "vs-code",
         "dance",
-        "mystery-1",
-        "mystery-2",
-        "mystery-3",
+        "mochi-exe",
     )
 
     state = BondState(level=1, xp=0)
     assert EMOTES_BY_ID["heart"].is_unlocked(state)
+    assert EMOTES_BY_ID["wave"].is_unlocked(state)
     assert not EMOTES_BY_ID["look"].is_unlocked(state)
-    assert not EMOTES_BY_ID["mystery-1"].is_unlocked(BondState(level=99, xp=0))
-    assert emote_status_text(EMOTES_BY_ID["mystery-1"], state) == "COMING SOON"
+    assert not EMOTES_BY_ID["vs-code"].is_unlocked(state)
+    assert not EMOTES_BY_ID["mochi-exe"].is_unlocked(state)
+    assert all(emote.available for emote in EMOTE_CATALOGUE)
+    assert all(emote.animation is not None for emote in EMOTE_CATALOGUE)
 
 
 def test_catalogue_assigns_progressive_rarity_tiers() -> None:
@@ -48,12 +50,12 @@ def test_catalogue_assigns_progressive_rarity_tiers() -> None:
         "common",
         "common",
         "uncommon",
+        "common",
         "uncommon",
         "rare",
         "rare",
         "epic",
-        "legendary",
-        "legendary",
+        "epic",
         "legendary",
     )
     assert RARITY_STYLES["legendary"].ornament_count > RARITY_STYLES["epic"].ornament_count
@@ -68,11 +70,13 @@ def test_exact_xp_remaining_to_level_three_uses_current_progress() -> None:
     )
 
 
-def test_next_unlock_advances_from_look_to_dance() -> None:
+def test_next_unlock_advances_through_new_catalogue_levels() -> None:
     assert next_emote_unlock(BondState(level=1, xp=0)).id == "side-eye"
     assert next_emote_unlock(BondState(level=2, xp=0)).id == "look"
-    assert next_emote_unlock(BondState(level=3, xp=0)).id == "dance"
-    assert next_emote_unlock(BondState(level=5, xp=0)) is None
+    assert next_emote_unlock(BondState(level=3, xp=0)).id == "vs-code"
+    assert next_emote_unlock(BondState(level=4, xp=0)).id == "dance"
+    assert next_emote_unlock(BondState(level=5, xp=0)).id == "mochi-exe"
+    assert next_emote_unlock(BondState(level=6, xp=0)) is None
 
 
 def test_catalogue_uses_single_compact_canvas_without_scrolling() -> None:
@@ -409,7 +413,7 @@ def test_developer_unlock_override_reaches_catalogue_window() -> None:
 
 
 
-def test_hover_preview_animates_all_real_emotes_but_not_placeholders() -> None:
+def test_hover_preview_animates_every_catalogue_emote() -> None:
     for emote in EMOTE_CATALOGUE:
         enabled = EmoteCatalogueCanvas._preview_animation_enabled(emote)
         if emote.available and emote.animation is not None:
