@@ -6,6 +6,7 @@ import unittest
 
 from mochi.mood import MochiMood
 from mochi.mood_behavior import behavior_profile_for, resolve_mood_animation
+from mochi.sprites import ANIMATIONS
 
 
 class MoodBehaviorTests(unittest.TestCase):
@@ -21,6 +22,20 @@ class MoodBehaviorTests(unittest.TestCase):
         self.assertEqual(
             resolve_mood_animation(MochiMood.SAD, "idle", available),
             "sad_idle",
+        )
+
+    def test_installed_sad_idle_resolves_without_installing_sad_walks(self) -> None:
+        self.assertEqual(
+            resolve_mood_animation(MochiMood.SAD, "idle", ANIMATIONS),
+            "sad_idle",
+        )
+        self.assertEqual(
+            resolve_mood_animation(MochiMood.SAD, "walk", ANIMATIONS),
+            "walk",
+        )
+        self.assertEqual(
+            resolve_mood_animation(MochiMood.SAD, "walk_left", ANIMATIONS),
+            "walk_left",
         )
 
     def test_missing_mood_asset_falls_back_to_base_animation(self) -> None:

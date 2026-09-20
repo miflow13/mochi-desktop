@@ -43,6 +43,23 @@
       "fps": 1.5,
       "loop": true
     },
+    "sad_idle": {
+      "frames": [
+        "sad_idle/sad_idle_01.png",
+        "sad_idle/sad_idle_02.png",
+        "sad_idle/sad_idle_03.png",
+        "sad_idle/sad_idle_04.png",
+        "sad_idle/sad_idle_05.png",
+        "sad_idle/sad_idle_06.png"
+      ],
+      "frame_count": 6,
+      "fps": 2,
+      "loop": true,
+      "source_cell_size": [
+        128,
+        128
+      ]
+    },
     "look": {
       "frames": [
         "look/look_01.png",

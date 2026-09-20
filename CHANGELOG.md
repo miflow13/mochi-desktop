@@ -11,6 +11,7 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 - Added **Focus with Mochi** sessions with configurable focus/break rounds,
   optional rain ambience, bond XP, and dedicated menu/setup-thinking and
   writing animations.
+- Added a dedicated breathing idle animation for Mochi's persistent sad mood.
 
 ### Changed
 
