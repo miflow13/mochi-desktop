@@ -564,7 +564,9 @@ class Buddy(Gtk.DrawingArea):
             if not self._begin_pickup():
                 self._drag_started = False
                 return
-            self._show_pot_hide_target()
+            show_target = getattr(self, "_show_pot_hide_target", None)
+            if callable(show_target):
+                show_target()
             if self._placement.layer_shell_enabled:
                 self._begin_drag_visual(
                     self._drag_origin.x + offset_x,
@@ -583,7 +585,9 @@ class Buddy(Gtk.DrawingArea):
                 self._drag_origin.x + round(offset_x),
                 self._drag_origin.y - round(offset_y),
             )
-            self._update_pot_hide_target()
+            update_target = getattr(self, "_update_pot_hide_target", None)
+            if callable(update_target):
+                update_target()
         if self._placement.layer_shell_enabled:
             self._update_drag_visual(
                 self._drag_origin.x + offset_x,
@@ -650,7 +654,9 @@ class Buddy(Gtk.DrawingArea):
             self._drag_sample_time = None
             self._drag_frame_index = 0
             self._sound.play(SoundEvent.PICKUP)
-            self._show_pot_hide_target()
+            show_target = getattr(self, "_show_pot_hide_target", None)
+            if callable(show_target):
+                show_target()
             # Wayland forbids applications from directly moving top-level windows.
             # begin_move asks the compositor to perform the user's active drag.
             surface.begin_move(
