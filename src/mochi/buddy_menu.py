@@ -234,6 +234,14 @@ class BuddyMenuController:
         card.append(computer_button)
         animated_rows.append(computer_button)
 
+        nap_button, _ = self._buddy._make_menu_button(
+            "Test autonomous nap",
+            "weather-clear-night-symbolic",
+            self._buddy._test_autonomous_nap,
+        )
+        card.append(nap_button)
+        animated_rows.append(nap_button)
+
         card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         appearance_label = Gtk.Label(label="Appearance")
@@ -583,6 +591,13 @@ class BuddyMenuController:
 
     def _test_computer_emote(self, _button: Gtk.Button) -> None:
         self._buddy._close_developer_menu_then(self._buddy._start_computer_emote)
+
+    def _test_autonomous_nap(self, _button: Gtk.Button) -> None:
+        def start_nap() -> None:
+            self._buddy._autonomous_sleep.trigger_now_for_testing()
+            self._buddy.queue_draw()
+
+        self._buddy._close_developer_menu_then(start_nap)
 
     def _reset_position(self, _button: Gtk.Button) -> None:
         def reset_position() -> None:
