@@ -124,7 +124,7 @@ class MusicDanceMixin:
             or self._context_menu_open
             or (
                 self.state.current is MochiState.IDLE
-                and self.player.animation is not ANIMATIONS["idle"]
+                and not self._is_idle_visual_active()
             )
         ):
             return False
@@ -144,7 +144,7 @@ class MusicDanceMixin:
             or self._user_idle
             or self.state.current is not MochiState.IDLE
             or self._context_menu_open
-            or self.player.animation is not ANIMATIONS["idle"]
+            or not self._is_idle_visual_active()
         ):
             return False
         return self._start_dancing_emote()
