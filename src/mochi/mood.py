@@ -1,11 +1,13 @@
-"""Small event-driven mood model derived from Mochi's behavior state.
+"""Mood vocabulary and persistent affect state for Mochi.
 
-Mood is intentionally not a second behavior engine. It observes successful
-MochiState transitions and exposes a compact emotional interpretation for the
-reusable UI surface above Mochi.
+MochiState answers what Mochi is doing right now (idle, walking, sleeping,
+typing, and so on). MochiMood answers how Mochi feels while doing it.
 
-Transient mechanical states (blink/pickup/drag/drop) do not change mood; they
-preserve the last meaningful mood until Mochi enters another mapped state.
+By default the model still derives lightweight mood labels from accepted
+behavior transitions for v0.3 compatibility. A persistent override can sit
+above those observations so systems such as care/needs can later make Mochi
+sad, happy, or otherwise affected without creating state-machine combinations
+like SAD_WALKING or SAD_IDLE.
 """
 
 from __future__ import annotations
@@ -16,13 +18,14 @@ from mochi.state import MochiState
 
 
 class MochiMood(Enum):
-    """Stable v0.3 mood vocabulary shown by the nameplate."""
+    """Small mood vocabulary shared by behavior and presentation."""
 
     CONTENT = "content"
     COZY = "cozy"
     CURIOUS = "curious"
     SLEEPY = "sleepy"
     EXCITED = "excited"
+    SAD = "sad"
 
 
 _STATE_MOODS: dict[MochiState, MochiMood] = {
@@ -43,27 +46,48 @@ _STATE_MOODS: dict[MochiState, MochiMood] = {
 }
 
 
+def _coerce_mood(mood: MochiMood | str) -> MochiMood:
+    if isinstance(mood, MochiMood):
+        return mood
+    return MochiMood(str(mood).strip().lower())
+
+
 class MoodModel:
-    """Derive Mochi's current mood from meaningful behavior transitions."""
+    """Track observed mood plus an optional persistent affect override."""
 
     def __init__(self, initial: MochiMood = MochiMood.CONTENT) -> None:
-        self.current = initial
+        self._observed = initial
+        self._override: MochiMood | None = None
+
+    @property
+    def current(self) -> MochiMood:
+        return self._override or self._observed
+
+    @property
+    def observed(self) -> MochiMood:
+        return self._observed
+
+    @property
+    def override(self) -> MochiMood | None:
+        return self._override
 
     @property
     def label(self) -> str:
         return self.current.value
 
-    def observe_state(self, state: MochiState) -> MochiMood | None:
-        """Observe one successful behavior-state transition.
+    def set_override(self, mood: MochiMood | str) -> MochiMood:
+        """Persist a mood until explicitly cleared."""
+        self._override = _coerce_mood(mood)
+        return self.current
 
-        Returns the mapped mood when the state is emotionally meaningful.
-        States absent from `_STATE_MOODS` are intentionally mood-neutral and
-        return ``None`` while preserving the previous mood. This keeps
-        animation/mechanical states such as BLINKING, PICKUP, DRAGGED, and
-        DROPPING from making the nameplate flicker between unrelated labels.
-        """
+    def clear_override(self) -> MochiMood:
+        self._override = None
+        return self.current
+
+    def observe_state(self, state: MochiState) -> MochiMood | None:
+        """Observe one accepted behavior transition."""
         mood = _STATE_MOODS.get(state)
         if mood is None:
             return None
-        self.current = mood
-        return mood
+        self._observed = mood
+        return self.current

@@ -30,7 +30,8 @@ import time
 
 from gi.repository import Gtk
 
-from mochi.mood import MoodModel
+from mochi.mood import MochiMood, MoodModel
+from mochi.mood_behavior import behavior_profile_for, resolve_mood_animation
 from mochi.state import MochiState
 
 from .nameplate import Nameplate
@@ -168,6 +169,49 @@ class NameplateMixin:
 
     def clear_nameplate_mood(self) -> None:
         self.set_nameplate_mood(None)
+
+    def set_mochi_mood(self, mood: MochiMood | str) -> MochiMood:
+        """Set a persistent Sims-like mood without changing MochiState."""
+        selected = self._mood_model.set_override(mood)
+        self.set_nameplate_mood(selected.value)
+        self._refresh_mood_visual()
+        return selected
+
+    def clear_mochi_mood(self) -> MochiMood:
+        """Return to the most recent behavior-derived contextual mood."""
+        selected = self._mood_model.clear_override()
+        self.set_nameplate_mood(selected.value)
+        self._refresh_mood_visual()
+        return selected
+
+    def _resolve_mood_animation_name(
+        self,
+        base_name: str,
+        available_animations: dict[str, object],
+    ) -> str:
+        return resolve_mood_animation(
+            self._mood_model.current,
+            base_name,
+            available_animations,
+        )
+
+    def _mood_walk_speed_multiplier(self) -> float:
+        return behavior_profile_for(
+            self._mood_model.current
+        ).walk_speed_multiplier
+
+    def _refresh_mood_visual(self) -> None:
+        """Apply a changed mood immediately when idle/walking owns presentation."""
+        state = getattr(getattr(self, "state", None), "current", None)
+        current_animation = getattr(self, "_current_animation", None)
+        if state is MochiState.IDLE and current_animation == "idle":
+            self._play_animation("idle")
+        elif (
+            state is MochiState.WALKING
+            and current_animation in ("walk", "walk_left")
+        ):
+            # Walk position remains owned by WalkMotion; only swap the gait.
+            self._play_animation(current_animation)
 
     def show_nameplate_feedback(
         self,
