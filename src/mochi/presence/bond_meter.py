@@ -224,6 +224,19 @@ class BondMeterMixin:
         card.append(real_level_button)
         animated_rows.append(real_level_button)
 
+        preview_dialogue = getattr(self, "_preview_bond_dialogue", None)
+        if callable(preview_dialogue):
+            dialogue_button, _ = self._make_menu_button(
+                "Preview bond dialogue",
+                "chat-bubble-text-symbolic",
+                preview_dialogue,
+            )
+            dialogue_button.set_tooltip_text(
+                "Visual-only preview of dialogue for the current bond level"
+            )
+            card.append(dialogue_button)
+            animated_rows.append(dialogue_button)
+
         unlock_button, self._dev_unlock_all_label = self._make_menu_button(
             "Unlock all emotes",
             "changes-allow-symbolic",
