@@ -1,6 +1,6 @@
 # Development and Testing
 
-Mochi's development process should optimize for reliable iteration rather than maximum change volume.
+Mochi's development process optimizes for reliable iteration rather than maximum change volume.
 
 ## Core workflow
 
@@ -15,7 +15,7 @@ one meaningful change
 → next change
 ```
 
-This is especially important for animation, input, context-menu, and state-machine changes because several past regressions only appeared after one feature interrupted another.
+This is especially important for animation, input, context-menu, bond, Focus, and state-machine changes because lifecycle regressions often appear only when one system interrupts another.
 
 ## Development environment
 
@@ -29,8 +29,7 @@ Primary environment:
 - GTK4 / PyGObject
 - Cairo
 
-Complete the [Fedora runtime/helper setup](../../README.md#install), then create
-an editable environment from the repository:
+Complete the [Fedora runtime/helper setup](../../README.md#install), then create an editable environment:
 
 ```bash
 python3 -m venv --system-site-packages .venv
@@ -45,118 +44,121 @@ Launch:
 mochi
 ```
 
-Useful development commands:
+Useful modes:
 
 ```bash
 mochi --debug
 mochi --reset-position
 mochi --preview-animations
-python3 -m unittest discover -s tests -v
 ```
 
 ## Test layers
 
-Mochi needs more than one kind of validation.
+### 1. Focused regression tests
 
-### 1. Focused unit/regression tests
+Run the smallest relevant test first.
 
-Run the smallest relevant test first when diagnosing a bug.
+Examples include:
 
-Examples:
-
-- animation definition tests
-- state-transition tests
-- drag motion tests
-- click/double-click arbitration tests
+- animation/state transition tests
 - context-menu lifecycle tests
-- asset alpha/dimension tests
+- drag/pickup tests
+- bond/persistence tests
+- feeding tests
+- emote catalogue/shortcut tests
+- level-up presentation tests
+- Focus/reward/audio tests
+- helper lifecycle tests
 
 A good bug fix starts with a reproducible failure whenever practical.
 
-### 2. Full unit suite
+### 2. Full pytest suite
 
 Before declaring a behavior change complete:
 
 ```bash
-python3 -m unittest discover -s tests -v
+python -m pytest -q
 ```
 
-A focused test passing is not enough if another interaction regressed.
+Some D-Bus/GJS integration coverage is opt-in because it requires session-bus access:
+
+```bash
+MOCHI_RUN_DBUS_TESTS=1 python -m pytest tests/test_helper_dbus_integration.py
+```
+
+Report environmental skips accurately rather than treating them as passes.
 
 ### 3. Python compilation
 
-Run:
-
 ```bash
-python3 -m compileall -q src tests
+python -m compileall -q src tests
 ```
 
-This catches syntax/import errors across files that a narrow test might not import.
-
 ### 4. Diff validation
-
-Run:
 
 ```bash
 git diff --check
 ```
 
-This catches whitespace/errors that should not reach a checkpoint.
-
 ### 5. Package build
 
-Build a fresh wheel:
-
 ```bash
-python3 -m pip wheel . --no-deps --no-build-isolation -w /tmp/mochi-wheel
+python -m pip wheel . --no-deps --no-build-isolation -w /tmp/mochi-wheel
 ```
 
-Then inspect the wheel contents when assets changed.
+When packaging or assets changed, inspect the wheel and verify:
 
-Verify:
-
-- manifest is included
-- expected PNG/spritesheets are included
-- no obsolete art is packaged unintentionally
-- package metadata is correct
+- package/runtime version
+- manifest
+- expected PNG assets
+- level-up/feed/focus/emote assets
+- short interaction audio
+- Focus soundscape audio
+- no obsolete art
 
 ### 6. Live GTK/XWayland validation
 
-Some bugs cannot be proven away with pure unit tests.
+Unit tests cannot prove away compositor/input issues.
 
 Live tests are required for:
 
 - context-menu input grabs
-- drag responsiveness
-- re-grabbing
-- right-click after movement
-- animation continuity
+- drag responsiveness and re-grab
+- right-click after movement/reactions
+- catalogue window lifecycle
+- Focus timer/setup window behavior
+- Rain audio lifecycle
+- level-up/unlock presentation
 - transparency/visual artifacts
-- compositor/window behavior
+- workspace/Overview behavior
+- multi-monitor/scaling behavior
 
-## Interaction torture test
+## v0.3 interaction torture test
 
-After changes to input/state code, deliberately try to break Mochi.
-
-Suggested sequence:
+Deliberately try to break Mochi:
 
 ```text
 idle
 → click
-→ click
 → double-click
-→ drag
-→ drop
+→ triple-click
+→ drag/drop
 → drag again
-→ drop
-→ right-click → Computer
-→ right-click → Emote
-→ right-click → Walk
-→ interrupt/continue interactions
-→ Sleep
-→ Wake
-→ drag
-→ heart
+→ right-click → Feed
+→ heart/recover
+→ open Emote Catalogue → hover several entries → close/reopen
+→ right-click → Focus
+→ start → pause → resume
+→ drag during Focus
+→ right-click during Focus
+→ Feed during Focus
+→ Stop
+→ Start again
+→ manual Sleep during Focus
+→ wake
+→ complete a short Focus session
+→ trigger/cross a bond level if practical
+→ right-click
 → drag
 ```
 
@@ -165,34 +167,45 @@ Also test messy input:
 - rapid click/double-click
 - repeated right-click open/close
 - immediate release after pickup
-- re-grab during or immediately after put-down
-- drag after context menu closes
-- direct input during ambient typing
+- re-grab during release settle
+- menu while sleeping
+- feed spam
+- catalogue open/close loops
+- Focus start/stop/start loops
+- hide/reopen Focus timer
+- Rain volume changes
+- direct input while Focus writing is active
+- shutdown during active Focus
+- shutdown while bond XP is pending
 
 Pass conditions:
 
 - no freeze
 - no invisible input interception
 - no Python exception
-- no persistent GTK warning
-- no stuck behavioral state
-- no duplicate ambient timers
+- no stuck behavioral/presentation state
+- no duplicate ambient/focus/audio timers
+- correct bond persistence
+- correct reward boundaries
+- no repeated level-up from stale state
 - no legacy sprite popping
 - no checkerboards/gray halo
 - right-click and drag still work afterward
 
 ## Soak testing
 
-Before alpha checkpoints, leave Mochi running and interact with him repeatedly for an extended period.
+Before alpha checkpoints, leave Mochi running for an extended period and use normal desktop activity.
 
 Watch for:
 
-- rising CPU use
-- rising memory use
+- rising CPU/memory
 - timer accumulation
+- audio sources that never stop
 - repeated warnings
 - state drift
-- one-shot animations that fail to return
+- repeated level-up/unlock presentation
+- Focus reward drift
+- catalogue/window leaks
 - context menu eventually becoming unresponsive
 
 A short smoke test proves launch stability. A soak test helps expose lifecycle leaks.
@@ -202,68 +215,66 @@ A short smoke test proves launch stability. A soak test helps expose lifecycle l
 When a regression appears:
 
 1. reproduce the exact interaction sequence
-2. record the observed state/action order
-3. rank likely causes
-4. add a focused regression test when possible
-5. make the smallest fix that addresses the confirmed cause
+2. record observed state/action order
+3. identify the owning subsystem
+4. add a focused regression test when practical
+5. make the smallest fix addressing the confirmed cause
 6. run focused tests
 7. run the full suite
 8. test the real GTK interaction
 9. checkpoint
 
-Do not begin with a repository-wide cleanup or architectural rewrite unless evidence shows the architecture itself is the root cause.
+Fix the source of a bad event/state rather than merely hiding its visible animation.
 
 ## Git checkpoint discipline
 
 Checkpoint before:
 
-- replacing a canonical animation set
+- replacing canonical animation assets
 - changing context-menu lifecycle
 - changing drag architecture
-- modifying state priority
+- changing state priority
+- changing bond persistence/progression
+- changing Focus timer/reward lifecycle
+- changing long-running audio ownership
 - broad file cleanup
-- packaging changes
+- packaging/version changes
 
-After a successful feature:
+Typical verification:
 
 ```bash
 git status
 git diff --check
-python3 -m unittest discover -s tests -v
-git add -A
-git commit -m "Describe the completed change"
+python -m pytest -q
+python -m compileall -q src tests
 ```
 
-Avoid allowing several unrelated changes to accumulate uncommitted.
+Avoid accumulating unrelated changes in one branch.
 
 ## Development permissions
 
-Automated GUI testing may trigger GNOME/Wayland remote-desktop or synthetic-input permissions.
+Development automation may use desktop-control permissions.
 
-These permissions belong to the development/test environment only.
-
-Mochi's normal runtime must not request:
+Mochi's normal runtime must not require:
 
 - remote desktop
 - screen sharing
 - screen recording
 - synthetic input control
 
-If a runtime code change introduces one of these dependencies, treat it as a design regression unless explicitly justified.
+If runtime code introduces one of these dependencies, treat it as a design regression unless explicitly justified.
 
 ## Definition of a completed runtime change
 
-A behavior change is complete when:
-
 - [ ] implementation is scoped
 - [ ] relevant focused tests pass
-- [ ] full test suite passes
+- [ ] full pytest suite passes
 - [ ] Python compilation passes
 - [ ] `git diff --check` passes
-- [ ] package builds when packaging is affected
-- [ ] asset package audit passes when assets are affected
+- [ ] package builds when relevant
+- [ ] packaged assets are audited when relevant
 - [ ] live interaction behaves correctly
+- [ ] persistence/reward behavior is verified when relevant
 - [ ] no unrelated behavior changed
+- [ ] documentation/regression list updated when public behavior changed
 - [ ] clean Git checkpoint exists
-
-This process may feel slower than stacking many features in one session, but it makes development much faster over time because working states remain recoverable.
