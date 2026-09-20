@@ -24,6 +24,8 @@ from .engine import speech_display_seconds
 
 FOCUS_TIMER_TICK_MS = 500
 FOCUS_PRESENCE_PRIORITY_FLOOR = 40
+FOCUS_START_LINE = "focus session started! Lets go :)"
+FOCUS_PAUSE_LINE = "session paused. we'll resume soon 🌱"
 FOCUS_BREAK_LINE = "break time 🌱"
 FOCUS_RESUME_LINE = "back to it. i'm with you 🌱"
 FOCUS_COMPLETE_LINE = "nice work. we did it 🌱"
@@ -158,7 +160,7 @@ class FocusWindow:
         root.append(title)
 
         subtitle = Gtk.Label(
-            label="A gentle focus timer. No streaks, no punishment, just time together."
+            label="A gentle focus timer. Your bond grows as you focus."
         )
         subtitle.set_xalign(0)
         subtitle.set_wrap(True)
@@ -619,9 +621,10 @@ class FocusSessionMixin:
             self._stop_focus_thinking_visual()
 
     def _start_focus_session(self, plan: FocusPlan) -> None:
+        
         if self._focus_session is not None and self._focus_session.active:
             return
-
+        
         self._focus_setup_visible = False
         self._focus_plan = plan
         self._focus_session = FocusSession(plan)
@@ -647,6 +650,8 @@ class FocusSessionMixin:
 
         if self._focus_window is not None:
             self._focus_window.present_session(self._focus_session)
+
+            self._show_focus_line(FOCUS_START_LINE)
 
         self._logger.info(
             "Focus session started: %dm focus / %dm break / %d rounds",
@@ -700,6 +705,8 @@ class FocusSessionMixin:
             self._show_focus_encouragement()
 
         if advance.transitions:
+            ## Logging mochi's focus session transitions
+            self._logger.info("Focus session transitioned: %s", session.phase)
             if session.phase is FocusPhase.COMPLETE:
                 self._complete_focus_session()
             elif session.phase is FocusPhase.BREAK:
@@ -722,11 +729,17 @@ class FocusSessionMixin:
             self._focus_window.update_session(session)
 
         if session.phase is FocusPhase.COMPLETE:
+            
+            
             self._focus_source_id = None
             return GLib.SOURCE_REMOVE
         return GLib.SOURCE_CONTINUE
 
+
+
+
     def _toggle_focus_pause(self) -> None:
+
         session = self._focus_session
         if session is None or not session.active:
             return
@@ -736,6 +749,7 @@ class FocusSessionMixin:
         if paused:
             self._stop_focus_visual()
             self._focus_ambience.pause()
+            self._show_focus_line(FOCUS_PAUSE_LINE)
         else:
             if session.phase is FocusPhase.FOCUS:
                 self._ensure_focus_visual()
