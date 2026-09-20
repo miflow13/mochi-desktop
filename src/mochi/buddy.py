@@ -48,6 +48,7 @@ from mochi.sound import SoundEvent, SoundManager
 from mochi.state import MochiState, StateMachine
 from mochi.state_controller import BehaviorStateController
 from mochi.presence_activity import PresenceActivityMonitor
+from mochi.pot_hide_target import PotHideTarget
 from mochi.typing_activity import TypingActivityMonitor
 from mochi.windowing import WindowPlacement
 
@@ -164,6 +165,7 @@ class Buddy(Gtk.DrawingArea):
         self._drag_move_started = False
         self._drag_release_handled = False
         self._drag_end_handled = False
+        self._pot_hide_target: PotHideTarget | None = None
         self._drag_motion = DragMotionModel(
             max_velocity=self._tuning.drag_heavy_velocity_px_per_second,
             pose_selector=DragPoseSelector(
@@ -498,6 +500,40 @@ class Buddy(Gtk.DrawingArea):
         self._play_animation("computer", after="idle")
         return True
 
+    def _show_pot_hide_target(self) -> None:
+        if self._preview_mode:
+            return
+        if self._pot_hide_target is None:
+            try:
+                self._pot_hide_target = PotHideTarget(
+                    owner=self._window,
+                    placement=self._placement,
+                    logger=self._logger,
+                )
+            except Exception as exc:
+                self._logger.debug("Pot hide target unavailable: %s", exc)
+                return
+        self._pot_hide_target.show()
+
+    def _update_pot_hide_target(self) -> bool:
+        target = self._pot_hide_target
+        if target is None:
+            return False
+        return target.update_hover(self._press)
+
+    def _hide_pot_hide_target(self) -> None:
+        target = self._pot_hide_target
+        if target is not None:
+            target.hide()
+
+    def _complete_pot_hide(self, origin_x: int, origin_y: int) -> bool:
+        # Hide first so restoring the pre-drag position cannot visibly snap Mochi
+        # away from the pot before he disappears.
+        self._window.hide()
+        self._placement.move_to(origin_x, origin_y)
+        self._logger.info("Mochi tucked into the pot and is temporarily hidden")
+        return GLib.SOURCE_REMOVE
+
     def _on_pressed(
         self, _gesture: Gtk.GestureClick, _presses: int, x: float, y: float
     ) -> None:
@@ -508,6 +544,7 @@ class Buddy(Gtk.DrawingArea):
         self._drag_move_started = False
         self._drag_release_handled = False
         self._drag_end_handled = False
+        self._hide_pot_hide_target()
         self._update_pointer_cursor()
 
     def _on_drag_begin(self, _gesture: Gtk.GestureDrag, _x: float, _y: float) -> None:
@@ -525,6 +562,7 @@ class Buddy(Gtk.DrawingArea):
             if not self._begin_pickup():
                 self._drag_started = False
                 return
+            self._show_pot_hide_target()
             if self._placement.layer_shell_enabled:
                 self._begin_drag_visual(
                     self._drag_origin.x + offset_x,
@@ -543,6 +581,7 @@ class Buddy(Gtk.DrawingArea):
                 self._drag_origin.x + round(offset_x),
                 self._drag_origin.y - round(offset_y),
             )
+            self._update_pot_hide_target()
         if self._placement.layer_shell_enabled:
             self._update_drag_visual(
                 self._drag_origin.x + offset_x,
@@ -609,6 +648,7 @@ class Buddy(Gtk.DrawingArea):
             self._drag_sample_time = None
             self._drag_frame_index = 0
             self._sound.play(SoundEvent.PICKUP)
+            self._show_pot_hide_target()
             # Wayland forbids applications from directly moving top-level windows.
             # begin_move asks the compositor to perform the user's active drag.
             surface.begin_move(
@@ -632,11 +672,41 @@ class Buddy(Gtk.DrawingArea):
     def _finish_drag_interaction(self) -> bool:
         if not self._drag_started:
             return False
+
+        target = getattr(self, "_pot_hide_target", None)
+        hide_in_pot = bool(
+            target is not None
+            and target.visible
+            and target.update_hover(self._press)
+        )
+        if target is not None:
+            target.hide()
+
         self._drag_started = False
         self._drag_release_handled = True
         self._drag_move_started = False
         self._drag_sample_position = None
         self._drag_sample_time = None
+
+        if hide_in_pot:
+            self._drag_end_handled = True
+            self._drag_motion.reset()
+            self._drag_visual_key = None
+            if self.state.current in (MochiState.PICKUP, MochiState.DRAGGED):
+                self._transition_to(MochiState.IDLE)
+                self._play_animation("idle")
+
+            bubble = getattr(self, "_presence_bubble", None)
+            if bubble is not None and getattr(bubble, "visible", False):
+                bubble.hide()
+            nameplate = getattr(self, "_nameplate", None)
+            if nameplate is not None and getattr(nameplate, "visible", False):
+                nameplate.hide()
+
+            origin = self._drag_origin
+            GLib.idle_add(self._complete_pot_hide, origin.x, origin.y)
+            return True
+
         if self.state.current in (MochiState.PICKUP, MochiState.DRAGGED):
             self._transition_to(MochiState.DROPPING)
             self._play_drag_settle()
