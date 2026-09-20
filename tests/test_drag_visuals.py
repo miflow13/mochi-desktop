@@ -39,6 +39,7 @@ class DragVisualTests(unittest.TestCase):
             _maybe_resume_ambient_activity=Mock(return_value=False),
             queue_draw=Mock(),
             TICK_MS=Buddy.TICK_MS,
+            IDLE_BREATHING_ENABLED=Buddy.IDLE_BREATHING_ENABLED,
             atlas=SpriteAtlas(),
         )
         for name in (
@@ -130,4 +131,9 @@ class DragVisualTests(unittest.TestCase):
                 for _ in range(30):
                     self.sample(0)
                 self.assertEqual(self.buddy.state.current, MochiState.IDLE)
-                self.assertIs(self.buddy.player.animation, ANIMATIONS["idle"])
+                self.assertEqual(self.buddy.player.animation.name, "idle")
+                self.assertEqual(len(self.buddy.player.animation.frames), 1)
+                self.assertEqual(
+                    self.buddy.player.animation.frames[0],
+                    ANIMATIONS["idle"].frames[0],
+                )
