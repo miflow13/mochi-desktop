@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import gi
 import pytest
@@ -10,10 +10,16 @@ gi.require_version("Gtk", "4.0")
 
 from mochi.presence.context import AmbientContext, TypingIntensity
 from mochi.presence.cooldowns import CooldownTracker
-from mochi.presence.engine import PresenceEngine, PresenceTuning, speech_display_seconds
+from mochi.presence.engine import (
+    PresenceAction,
+    PresenceEngine,
+    PresenceTuning,
+    speech_display_seconds,
+)
 from mochi.presence.integration import PresenceBuddyMixin
 from mochi.presence.phrases import PhraseBank
 from mochi.presence.signals import NetworkSignalAdapter, TypingIntensityTracker, UPowerSignalAdapter
+from mochi.state import MochiState, StateMachine
 
 
 class Clock:
@@ -472,6 +478,53 @@ def test_real_category_change_runs_normal_transition_path():
     buddy._on_user_active.assert_called_once_with()
     buddy._schedule_vscode_coworking.assert_called_once_with()
     buddy._stop_vscode_coworking.assert_not_called()
+
+
+@pytest.mark.parametrize("app_category", ("vscode", "terminal"))
+def test_contextual_speech_reaches_bubble_during_focused_app_coworking(
+    app_category,
+):
+    """Exercise the live evaluator seam used while focused work owns TYPING."""
+    action = PresenceAction(
+        "speech",
+        app_category,
+        f"{app_category} context",
+        10,
+    )
+    engine = Mock()
+    engine.typing_snapshot.return_value = (TypingIntensity.LOW, 0.0)
+    engine.evaluate.return_value = action
+    bubble = Mock(visible=False)
+    bubble.show.return_value = True
+
+    buddy = object.__new__(PresenceBuddyMixin)
+    buddy._presence_shutting_down = False
+    buddy._ambient_presence_engine = engine
+    buddy._media_monitor = None
+    buddy._system_signal_monitor = None
+    buddy._session_signal_monitor = None
+    buddy._user_idle = False
+    buddy._presence_active_session_started_at = 0.0
+    buddy._presence_app_category = app_category
+    buddy._context_menu_open = False
+    buddy._press = None
+    buddy._drag_started = False
+    buddy._presence_bubble = bubble
+    buddy.state = StateMachine()
+    buddy.state.transition_to(MochiState.TYPING)
+
+    with patch("mochi.presence.integration.time.monotonic", return_value=30.0):
+        result = PresenceBuddyMixin._evaluate_ambient_presence(buddy)
+
+    context = engine.evaluate.call_args.args[0]
+    assert context.current_app_category == app_category
+    assert context.mochi_state == "typing"
+    bubble.show.assert_called_once_with(
+        action.text,
+        duration_seconds=action.display_seconds,
+    )
+    engine.record_delivered.assert_called_once_with(action, now=30.0)
+    assert result
 
 
 @pytest.mark.parametrize(
