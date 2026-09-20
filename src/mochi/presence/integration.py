@@ -32,6 +32,7 @@ class PresenceBuddyMixin:
         # developer stress-test profile rather than defining normal behavior.
         self._presence_chatty_test_mode = False
         self._presence_chatty_switch: Gtk.Switch | None = None
+        self._presence_context_preview_selector: Gtk.DropDown | None = None
         self._stay_put = False
         self._stay_put_switch: Gtk.Switch | None = None
         self._presence_started_at = time.monotonic()
@@ -83,6 +84,7 @@ class PresenceBuddyMixin:
         )
         self._system_signal_monitor.start()
         self._app_category_monitor = AppCategorySignalAdapter(
+            on_category_snapshot=self._on_presence_app_category_snapshot,
             on_category_changed=self._on_presence_app_category_changed,
             logger=self._logger,
         )
@@ -230,6 +232,21 @@ class PresenceBuddyMixin:
             "system-run-symbolic",
             self._test_presence_contextual,
         )
+        context_preview_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+        )
+        context_preview_row.add_css_class("mochi-setting-row")
+        context_preview_label = Gtk.Label(label="Context preview")
+        context_preview_label.set_xalign(0)
+        context_preview_label.set_hexpand(True)
+        context_preview_row.append(context_preview_label)
+        self._presence_context_preview_selector = Gtk.DropDown.new_from_strings(
+            ("Current app", "Browser", "VS Code", "Terminal", "Editor", "Pixel art")
+        )
+        context_preview_row.append(self._presence_context_preview_selector)
+        card.append(context_preview_row)
+        animated_rows.append(context_preview_row)
         card.append(contextual_button)
         animated_rows.append(contextual_button)
 
@@ -417,13 +434,25 @@ class PresenceBuddyMixin:
         self._preview_presence_category("ambient")
 
     def _test_presence_contextual(self, _button: Gtk.Button) -> None:
-        category = {
+        selected = (
+            0
+            if self._presence_context_preview_selector is None
+            else self._presence_context_preview_selector.get_selected()
+        )
+        forced_category = {
+            1: "browser",
+            2: "vscode",
+            3: "terminal",
+            4: "developer",
+            5: "creative",
+        }.get(selected)
+        category = forced_category or {
             "vscode": "vscode",
             "editor": "developer",
-            "terminal": "developer",
+            "terminal": "terminal",
             "pixel_art": "creative",
             "media": "media",
-            "browser": "focus",
+            "browser": "browser",
         }.get(self._presence_app_category, "ambient")
         self._preview_presence_category(category)
 
@@ -604,9 +633,15 @@ class PresenceBuddyMixin:
         self._ambient_presence_engine.note_session_returned()
         self._on_user_active()
 
+    def _on_presence_app_category_snapshot(self, category: str) -> None:
+        """Synchronize startup context without inventing a focus transition."""
+        self._presence_app_category = category
+        self._logger.debug("[presence] context app=%s (baseline)", category)
+
     def _on_presence_app_category_changed(self, category: str) -> None:
         previous = self._presence_app_category
         self._presence_app_category = category
+        self._logger.debug("[presence] context app=%s -> %s", previous, category)
         if category != previous and category in ("terminal", "vscode"):
             self._on_user_active()
         if category == "vscode":

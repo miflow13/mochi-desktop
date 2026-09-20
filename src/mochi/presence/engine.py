@@ -15,6 +15,25 @@ from .phrases import EVENT_PHRASES, PhraseBank
 from .signals import TypingIntensityTracker
 
 
+# Context changes only the mix of an existing speech opportunity. It never
+# creates another opportunity or bypasses cooldown/suppression rules. These
+# profiles keep ordinary Mochi personality dominant while making coarse app
+# context noticeable often enough to be useful.
+_CONTEXT_CATEGORY_WEIGHTS: dict[str, dict[str, float]] = {
+    "vscode": {"developer": 12.0, "vscode": 28.0},
+    "editor": {"developer": 15.0},
+    "terminal": {"developer": 8.0, "terminal": 16.0},
+    "browser": {"browser": 18.0},
+    "pixel_art": {"creative": 18.0},
+}
+
+_CONTEXT_ONLY_CATEGORIES = frozenset(
+    category
+    for profile in _CONTEXT_CATEGORY_WEIGHTS.values()
+    for category in profile
+)
+
+
 @dataclass(slots=True)
 class PresenceTuning:
     # Mochi's default personality is intentionally lively. These are candidate
@@ -313,6 +332,12 @@ class PresenceEngine:
         if timestamp < self._next_ambient_at:
             return None
         self._next_ambient_at = timestamp + self._ambient_delay()
+        self._logger.debug(
+            "[presence] context app=%s typing=%s session=%.0fs",
+            context.current_app_category,
+            context.typing_intensity.value,
+            context.session_duration,
+        )
         if self._rng.random() < self.tuning.ambient_silence_probability:
             self._logger.debug("[presence] candidate=ambient suppressed: silence roll")
             return None
@@ -465,16 +490,11 @@ class PresenceEngine:
 
     def _select_unsolicited_category(self, context: AmbientContext) -> str | None:
         weights = dict(self.tuning.category_weights)
-        if context.current_app_category == "vscode":
-            # Keep VS Code's total coding-flavored weight at roughly 3x a
-            # generic editor, but reserve two thirds of that weight for lines
-            # that explicitly belong to Mochi's VS Code coworking context.
-            developer_weight = weights.get("developer", 0.0)
-            weights["vscode"] = developer_weight * 2.0
-        elif context.current_app_category not in ("editor", "terminal"):
-            weights.pop("developer", None)
-        if context.current_app_category != "pixel_art":
-            weights.pop("creative", None)
+        for category in _CONTEXT_ONLY_CATEGORIES:
+            weights.pop(category, None)
+        weights.update(
+            _CONTEXT_CATEGORY_WEIGHTS.get(context.current_app_category, {})
+        )
         if context.typing_intensity is TypingIntensity.LOW:
             weights.pop("focus", None)
         if context.session_duration < 60 * 60.0:

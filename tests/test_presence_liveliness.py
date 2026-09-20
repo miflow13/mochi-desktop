@@ -42,14 +42,25 @@ def test_large_phrase_bank_is_loaded_by_category():
         "body_care": 42,
         "rest": 31,
         "frustration": 32,
-        "creative": 34,
+        "creative": 35,
         "mischief": 47,
         "companionship": 28,
     }
     for category, expected in expected_counts.items():
         assert len(PHRASES[category]) == expected
         assert len(set(PHRASES[category])) == expected
-    assert sum(len(PHRASES[name]) for name in expected_counts) == 403
+    assert sum(len(PHRASES[name]) for name in expected_counts) == 404
+
+
+def test_coarse_browser_and_terminal_phrase_banks_stay_truthful():
+    assert len(PHRASES["browser"]) >= 10
+    assert len(PHRASES["terminal"]) >= 10
+    assert all("tab" not in phrase for phrase in PHRASES["browser"])
+    assert all(
+        claim not in phrase
+        for phrase in PHRASES["terminal"]
+        for claim in ("succeeded", "failed", "error")
+    )
 
 
 def test_context_only_lines_do_not_leak_into_random_ambient_pool():
@@ -57,6 +68,27 @@ def test_context_only_lines_do_not_leak_into_random_ambient_pool():
     assert CONTEXT_PHRASES["screenshot_taken"] == ("cheese 📸",)
     assert "the tabs are reproducing" not in PHRASES["ambient"]
     assert "cheese 📸" not in PHRASES["ambient"]
+
+
+def test_undetected_semantic_phrases_remain_out_of_weighted_categories():
+    dormant = {
+        "long_coding_session",
+        "git_dirty_long",
+        "many_browser_tabs",
+        "download_finished",
+        "update_available",
+        "error_notification",
+        "screenshot_taken",
+        "github_opened",
+    }
+    weighted_lines = {
+        phrase
+        for phrases in PHRASES.values()
+        for phrase in phrases
+    }
+
+    for context in dormant:
+        assert set(CONTEXT_PHRASES[context]).isdisjoint(weighted_lines), context
 
 
 def test_supported_context_events_use_specific_lines():
