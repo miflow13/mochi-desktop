@@ -1,52 +1,84 @@
 # Roadmap and Public Alpha
 
-Mochi's roadmap is intentionally staged. The public alpha should prove that the creature core is dependable before adding deeper care/progression systems.
+Mochi's roadmap is staged around one requirement: new personality and progression features must preserve the dependable creature core underneath them.
 
-> **Current release gate:** [issue #37](https://github.com/miflow13/mochi-desktop/issues/37)
-> owns QA results. The older checklist and phase roadmap below are design
-> guidance, not a second readiness tracker or a list of shipped features.
-> GNOME Overview/workspace freezing ([#45](https://github.com/miflow13/mochi-desktop/issues/45))
-> remains an alpha blocker; drag-direction latency
-> ([#68](https://github.com/miflow13/mochi-desktop/issues/68)) remains under investigation.
-> See the [changelog](../../CHANGELOG.md#release-metadata-note) for version discrepancies.
+> **Current release line:** v0.3 — Growing Together
+>
+> **Current QA tracker:** [issue #37](https://github.com/miflow13/mochi-desktop/issues/37)
+>
+> GNOME Overview/workspace freezing ([#45](https://github.com/miflow13/mochi-desktop/issues/45)) remains a known alpha issue, and drag-direction latency ([#68](https://github.com/miflow13/mochi-desktop/issues/68)) remains under investigation.
 
 ## Current phase
 
-**Phase 2 — Make Mochi Feel Alive**
+**v0.3 — Growing Together / release stabilization**
 
-Current priorities:
+The v0.3 feature work is now on `main`. Current priorities are:
 
-- interaction continuity
-- animation polish
-- reliable click/double-click behavior
-- pickup/drag/drop
-- context-menu stability
-- walk polish
-- sleep/wake reliability
-- a small set of expressive emotes
-- visual consistency
-- packaging and desktop reliability
+- regression testing and long-session reliability
+- bond/feed/focus lifecycle hardening
+- context-menu and drag reliability
+- packaging/version consistency
+- Fedora/GNOME/Wayland/XWayland QA
+- tester feedback from different monitor/compositor setups
+- documentation and release polish
 
-## Public alpha goal
+This phase is no longer about adding another major system before the release checkpoint.
 
-The public alpha does **not** need every future Mochi feature.
+## What v0.3 adds
 
-It needs a small, polished, dependable companion that users can install, interact with, and leave running without obvious breakage.
+### Relationship without punishment
 
-### Public-alpha creature core
+Mochi now has persistent, non-decaying bond progression.
+
+The design intentionally avoids:
+
+- daily streaks
+- relationship decay
+- missed-day penalties
+- punishment for closing Mochi
+- failure states for not interacting
+
+Bond grows through ordinary shared activity such as typing, feeding, and Focus with Mochi.
+
+### Feeding
+
+Feed is a positive direct interaction with authored animation/audio, bond progress, and post-feed heart feedback.
+
+It is **not** a hunger/fullness survival system. Mochi does not become sick or unhappy because the user was away.
+
+### Emote progression
+
+The Emote Catalogue exposes bond-gated expressions, rarity, lock state, hover previews, and newly learned idle moods.
+
+### Level-up feedback
+
+Bond level changes use one coherent presentation path: authored level-up animation, sound, level card, optional unlock card, and newly learned emote demonstration.
+
+### Focus with Mochi
+
+Focus sessions add configurable focus/break rounds, a dedicated coworking presentation, optional Rain ambience, and bond XP for completed focus time.
+
+Focus remains intentionally non-punitive: pauses and early stops do not create penalties.
+
+## Public-alpha goal
+
+The public alpha should be a small, dependable companion that users can install, leave running, interact with, and test across real Linux desktops.
+
+v0.3 expands the surface that must remain reliable:
 
 ```text
 IDLE
-├── click → reaction → IDLE
-├── double-click → HEART → IDLE
-├── ambient → TYPING → IDLE
-├── context menu → WALK / SLEEP / EMOTE / COMPUTER
-└── PICKUP → HELD / DRAG → PUT_DOWN → IDLE
+├── click / double-click / dialogue → reaction → IDLE
+├── ambient context → temporary presentation → IDLE
+├── context menu → WALK / SLEEP / FEED / FOCUS / controls
+├── PICKUP → DRAG → release-settle → IDLE
+├── bond XP → optional LEVEL-UP / UNLOCK presentation → prior behavior
+└── FOCUS clock → writing/break presentation while direct interaction may interrupt visually
 ```
 
 ## Alpha blockers
 
-Do not call the build public-alpha ready while any of these are reproducible:
+Do not call the build release-ready while any of these are reproducible:
 
 - crash during ordinary interaction
 - permanent input freeze
@@ -54,10 +86,14 @@ Do not call the build public-alpha ready while any of these are reproducible:
 - drag cannot recover after another action
 - pickup/put-down can leave Mochi stuck
 - one-shot animation leaves behavioral state invalid
+- Focus creates duplicate clocks/audio or loses earned XP
+- level-up/unlock presentation becomes stuck or repeats from stale state
+- bond persistence corrupts or resets unexpectedly
 - ambient timers multiply or fight direct input
 - legacy/noncanonical art appears unexpectedly
 - baked checkerboard/obvious gray matte appears in runtime art
 - package installs with wrong/missing runtime assets
+- package/runtime version strings disagree
 - normal runtime requests remote-desktop/screen-control permissions
 
 ## Alpha definition of done
@@ -70,40 +106,26 @@ Do not call the build public-alpha ready while any of these are reproducible:
 - [ ] no unexpected permission prompts
 - [ ] no immediate GTK/Python errors
 
-### Idle
+### Core interaction
 
-- [ ] idle/breathing loop is stable
-- [ ] blink returns to true `IDLE`
-- [ ] ambient behavior is low-frequency and interruptible
-- [ ] no duplicate idle timers
+- [ ] idle/blink/walk remain stable
+- [ ] click and double-click arbitration remains correct
+- [ ] pickup/drag/drop always recovers
+- [ ] context menu opens/closes repeatedly
+- [ ] Sleep/Wake remains reliable
+- [ ] direct interaction outranks ambient behavior
 
-### Clicks
+### v0.3 systems
 
-- [ ] single click produces tactile reaction
-- [ ] single-click reaction returns to idle
-- [ ] double-click produces heart reaction
-- [ ] double-click cancels pending single-click reaction
-- [ ] input remains responsive afterward
-
-### Drag
-
-- [ ] pickup transition is seamless
-- [ ] held/drag state remains responsive
-- [ ] visual inertia is subtle
-- [ ] drop position remains accurate
-- [ ] put-down transition is seamless
-- [ ] quick release recovers safely
-- [ ] immediate re-grab works
-
-### Context menu
-
-- [ ] opens repeatedly
-- [ ] closes before behavior dispatch
-- [ ] Walk works
-- [ ] Sleep/Wake works
-- [ ] Emote works
-- [ ] Computer works
-- [ ] later click/right-click/drag still works
+- [ ] bond state persists across restart
+- [ ] feeding completes once and recovers
+- [ ] catalogue lock/unlock/hover behavior remains correct
+- [ ] real level-up feedback plays once
+- [ ] newly unlocked emote demonstration plays once
+- [ ] Focus start/pause/resume/stop/start remains stable
+- [ ] Focus reward boundaries are correct
+- [ ] Rain audio starts/stops cleanly
+- [ ] shutdown persists pending bond/Focus progress
 
 ### Visual integrity
 
@@ -124,102 +146,82 @@ Do not call the build public-alpha ready while any of these are reproducible:
 - [ ] packaged assets audited
 - [ ] extended live soak passes
 - [ ] no stuck states observed
-- [ ] no timer/input lock observed
+- [ ] no timer/input/audio-source leak observed
 
-### Documentation
+### Documentation / release
 
 - [ ] installation instructions match actual package
-- [ ] version metadata reconciled
-- [ ] issue template exists
-- [ ] regression watchlist current
-- [ ] wiki current
-- [ ] known limitations documented
+- [ ] package and runtime metadata agree
+- [ ] changelog matches shipped features
+- [ ] regression watchlist is current
+- [ ] wiki reflects the current release line
+- [ ] known limitations are documented
 
 ## Version roadmap
 
-The original conceptual phase labels below are not package versions or promises
-about the contents of similarly named GitHub tags. Care/progression remains
-outside the public-alpha polish pass.
+These labels describe direction, not promises that every listed idea will ship.
 
 ### v0.1 — Exists
 
 Core desktop buddy functionality.
 
-### v0.2 — Feels alive
+### v0.2 — Feels Alive
 
-Animation polish, reactions, sleep/wake behavior, status/UI work, and desktop reliability.
+Animation polish, reactions, sleep/wake behavior, contextual awareness, and desktop reliability.
 
-### v0.3 — Needs care
+### v0.3 — Growing Together
 
-Potential future systems:
+Shipped direction:
 
-- health
-- fullness
-- feeding
-- XP
-- leveling
+- persistent bond progression
+- feeding as a positive interaction
+- bond-gated emotes
+- level-up/unlock feedback
+- Focus with Mochi
+- continued contextual personality and reliability work
 
-Do not pull these into the public-alpha interaction-core sprint prematurely.
+### v0.4 — Develops Personality
 
-### v0.4 — Develops personality
+Potential future direction:
 
-Potential future systems:
+- broader unlockable behavior sets
+- richer phrase/personality variation
+- cosmetic personalization
+- deeper non-punitive relationship rewards
 
-- unlockable behaviors
-- expressions
-- traits
-- cosmetic progression
+### v0.5 — Lives on Your Desktop
 
-### v0.5 — Lives on your desktop
+Potential future direction:
 
-Potential deeper environment interaction:
+- broader desktop-environment integration
+- more environment-aware reactions
+- compositor/platform coverage
+- richer spatial behavior
 
-- windows
-- cursor behavior
-- screen edges
-- richer desktop-environment awareness
+## What not to add during v0.3 release stabilization
 
-These later versions are direction, not a promise of exact implementation.
+Until the release checkpoint is stable, avoid expanding into:
 
-## Near-term work order
-
-Historical interaction-integration plan (use issue #37 for current work order):
-
-1. finish/validate pickup and put-down
-2. verify all new transition art
-3. verify typing/computer transparency
-4. run full interaction torture tests
-5. build/audit package
-6. create a known-good checkpoint
-7. add/maintain philosophy and alpha-checklist documentation
-8. only then return to optional art/animation polish
-
-## What not to add before alpha stability
-
-Unless the scope changes intentionally, avoid using the alpha sprint for:
-
-- hunger/feeding
-- health systems
-- XP/leveling
-- inventory/shop
-- AI/chat features
-- large UI/dashboard systems
+- punitive hunger/fullness decay
+- health/failure systems
+- shops/inventory/economies
+- daily streaks or obligation mechanics
+- AI/chat systems
+- large dashboard UI
 - repository-wide architecture rewrites
-- unnecessary platform integrations
+- unrelated platform integrations
 
-Feature restraint is part of the alpha strategy.
+Feature restraint still matters; v0.3 should stabilize before another major feature wave.
 
-## After public alpha
+## After the v0.3 alpha
 
-Use real user feedback to decide what matters next.
+Use tester feedback to decide what matters next:
 
-Useful questions:
+- Which bond interactions feel meaningful versus noisy?
+- Do unlocked emotes make Mochi feel more expressive?
+- Is Focus pleasant to leave running for real work sessions?
+- Does Mochi remain reliable across monitors, scaling, and compositor differences?
+- Which lifecycle bugs appear only after hours of use?
+- Which future personality/care features can add delight without obligation?
 
-- Which interactions do users naturally discover?
-- Does Mochi stay running for long sessions without annoyance?
-- Which animations feel delightful versus repetitive?
-- Does the context menu expose the right controls?
-- Are resource use and Wayland behavior acceptable across machines?
-- Do users want deeper care systems, more personality, or more environment interaction first?
-
-Do not assume the later roadmap is correct until users validate the creature core.
+Do not let roadmap ideas outrun what real users validate.
