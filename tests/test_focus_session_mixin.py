@@ -162,6 +162,32 @@ def test_start_creates_one_timer_and_second_start_is_ignored() -> None:
     harness._focus_ambience.start_selected.assert_called_once_with()
 
 
+def test_stopped_session_can_start_again_with_one_fresh_timer() -> None:
+    harness = _harness()
+    harness._stop_focus_timer = FocusSessionMixin._stop_focus_timer.__get__(harness)
+    plan = FocusPlan(focus_minutes=5, break_minutes=1, rounds=1)
+
+    with patch(
+        "mochi.presence.focus_session.GLib.timeout_add",
+        side_effect=(41, 42),
+    ) as add, patch(
+        "mochi.presence.focus_session.GLib.source_remove",
+    ) as remove, patch(
+        "mochi.presence.focus_session.time.monotonic",
+        side_effect=(10.0, 11.0, 12.0),
+    ):
+        harness._start_focus_session(plan)
+        first_session = harness._focus_session
+        harness._cancel_focus_session()
+        harness._start_focus_session(plan)
+
+    assert add.call_count == 2
+    remove.assert_called_once_with(41)
+    assert harness._focus_source_id == 42
+    assert harness._focus_session is not None
+    assert harness._focus_session is not first_session
+
+
 def test_start_exits_persistent_fedora_mode_before_writing() -> None:
     harness = _harness()
     harness._fedora_mode_active = True
@@ -197,6 +223,20 @@ def test_pause_and_resume_exclude_paused_wall_time_and_xp() -> None:
     harness._focus_ambience.resume.assert_called_once_with()
 
 
+def test_pause_settles_elapsed_time_since_the_last_timer_tick() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    harness._focus_session = session
+    harness._focus_last_tick = 10.0
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=70.0):
+        harness._toggle_focus_pause()
+
+    harness._award_bond.assert_called_once_with(1, persist=False)
+    assert session.focus_minutes_completed == 1
+    assert session.paused is True
+
+
 def test_stop_keeps_earned_xp_without_completion_bonus() -> None:
     harness = _harness()
     session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
@@ -214,6 +254,19 @@ def test_stop_keeps_earned_xp_without_completion_bonus() -> None:
     harness._ensure_focus_thinking_visual.assert_called_once_with()
     harness._focus_window.present_setup.assert_called_once_with(session.plan)
     harness._show_focus_line.assert_called_once()
+
+
+def test_stop_settles_elapsed_time_since_the_last_timer_tick() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    harness._focus_session = session
+    harness._focus_last_tick = 10.0
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=70.0):
+        harness._cancel_focus_session()
+
+    harness._award_bond.assert_called_once_with(1, persist=False)
+    assert session.focus_minutes_completed == 1
 
 
 def test_hidden_window_reopens_the_same_live_session() -> None:
@@ -267,6 +320,17 @@ def test_right_click_menu_owns_thinking_visual_while_open() -> None:
     assert harness._focus_context_menu_visible is False
     assert harness._focus_should_think() is False
     harness._stop_focus_thinking_visual.assert_called_once_with()
+
+
+def test_right_click_menu_does_not_wake_a_sleeping_mochi() -> None:
+    harness = _harness()
+    harness._focus_context_menu_visible = True
+    harness._context_menu_open = True
+    harness.state.current = MochiState.SLEEPING
+
+    assert FocusSessionMixin._ensure_focus_thinking_visual(harness) is False
+
+    harness._wake_up.assert_not_called()
 
 
 def test_right_click_menu_temporarily_replaces_active_focus_writing() -> None:
@@ -387,6 +451,21 @@ def test_focus_visual_resumes_after_temporary_interactions() -> None:
     assert harness._ensure_focus_visual.call_count == 2
     assert harness.base_resume_calls == 0
     assert harness.base_typing_calls == 0
+
+
+def test_focus_tick_does_not_retake_visual_during_a_primary_press() -> None:
+    harness = _harness()
+    harness._focus_session = FocusSession(FocusPlan())
+    harness._press = (20.0, 30.0)
+    harness.state.current = MochiState.IDLE
+    harness.player.animation = ANIMATIONS["idle"]
+    harness._transition_to = Mock()
+    harness._play_animation = Mock()
+
+    assert FocusSessionMixin._ensure_focus_visual(harness) is False
+
+    harness._transition_to.assert_not_called()
+    harness._play_animation.assert_not_called()
 
 
 def test_focus_visual_plays_writing_start_loop_and_stop_sequence() -> None:
@@ -523,6 +602,21 @@ def test_automatic_sleep_is_deferred_but_manual_sleep_pauses_focus() -> None:
     assert harness.base_toggle_sleep_calls == 1
 
 
+def test_manual_sleep_settles_elapsed_focus_time_before_pausing() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    harness._focus_session = session
+    harness._focus_last_tick = 10.0
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=70.0):
+        harness._toggle_sleep()
+
+    harness._award_bond.assert_called_once_with(1, persist=False)
+    assert session.focus_minutes_completed == 1
+    assert session.paused is True
+    assert harness.base_toggle_sleep_calls == 1
+
+
 def test_wake_during_break_does_not_pause_the_running_break() -> None:
     harness = _harness()
     session = FocusSession(FocusPlan())
@@ -585,3 +679,17 @@ def test_shutdown_removes_timer_and_flushes_pending_bond_xp() -> None:
     window.destroy.assert_called_once_with()
     assert harness._focus_window is None
     assert harness.base_shutdown_calls == 1
+
+
+def test_shutdown_settles_elapsed_time_before_persisting() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    harness._focus_session = session
+    harness._focus_last_tick = 10.0
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=70.0):
+        harness.shutdown_presence()
+
+    harness._award_bond.assert_called_once_with(1, persist=False)
+    assert session.focus_minutes_completed == 1
+    harness._persist_focus_xp_if_needed.assert_called_once_with()
