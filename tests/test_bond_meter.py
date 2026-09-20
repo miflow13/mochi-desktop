@@ -298,7 +298,7 @@ def test_focus_bond_hint_geometry_sits_above_visible_mochi_bounds() -> None:
         128,
     )
 
-    assert y + bar_height < 42.0
+    assert y + bar_height <= 42.0 - 7.0
 
 
 def test_focus_bond_hint_draws_only_track_and_progress_fill() -> None:
