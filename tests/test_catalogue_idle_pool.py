@@ -29,7 +29,9 @@ class IdleEmoteHarness:
         self._play_animation("idle")
 
     def __getattr__(self, name):
-        return getattr(Buddy, name).__get__(self)
+        attribute = getattr(Buddy, name)
+        descriptor = getattr(attribute, "__get__", None)
+        return descriptor(self) if descriptor is not None else attribute
 
     def _play(self, animation, **_kwargs) -> None:
         self.player.animation = animation
@@ -40,6 +42,9 @@ class IdleEmoteHarness:
 
     def _schedule_idle_action(self) -> None:
         pass
+
+    def _maybe_resume_ambient_activity(self) -> bool:
+        return False
 
     def _start_walk(self) -> None:
         self.walks += 1
