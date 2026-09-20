@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import time
 
 import gi
 
@@ -11,10 +12,11 @@ from gi.repository import GLib, Gtk  # noqa: E402
 
 from mochi.animation import Animation, AnimationPlayer
 from mochi.care import (
-    BOND_FEED_XP,
+    BOND_FEED_REWARD_WINDOW_SECONDS,
     BOND_TYPING_XP_PER_SECOND,
     BondAdvance,
     BondState,
+    bond_feed_reward_xp,
 )
 from mochi.bond_orbs import MAX_ACTIVE_ORBS, XpOrbField
 from mochi.emotes import (
@@ -33,6 +35,7 @@ BOND_TYPING_TICK_SECONDS = 1
 BOND_PERSIST_INTERVAL_XP = 15
 BOND_FEED_HOLD_SECONDS = 2.4
 BOND_FEED_VISUAL_ORB_LIMIT = MAX_ACTIVE_ORBS * 2
+BOND_DEV_SWARM_XP = 60
 LEVEL_UP_DEFAULT_ANIMATION = "level_up_default"
 EMOTE_UNLOCK_DEMO_DELAY_MS = 150
 FOCUS_BOND_BAR_MIN_WIDTH_FRACTION = 0.34
@@ -77,6 +80,8 @@ class BondMeterMixin:
         self._bond_progress_overlay: BondProgressOverlay | None = None
         self._bond_typing_source_id: int | None = None
         self._bond_unsaved_xp = 0
+        self._bond_feed_last_completed_at: float | None = None
+        self._bond_feed_count_in_window = 0
         self._dev_unlock_all_emotes = False
         self._dev_unlock_all_label: Gtk.Label | None = None
         self._pending_emote_unlocks: list[EmoteDefinition] = []
@@ -256,10 +261,10 @@ class BondMeterMixin:
     def _test_bond_swarm(self, _button=None) -> None:
         """Preview a feed-sized particle swarm without mutating bond progress."""
         self._bond_orbs.queue_xp_bounded(
-            BOND_FEED_XP,
-            max_outstanding=BOND_FEED_XP,
+            BOND_DEV_SWARM_XP,
+            max_outstanding=BOND_DEV_SWARM_XP,
         )
-        self._bond_orbs.show_gain_marker(BOND_FEED_XP)
+        self._bond_orbs.show_gain_marker(BOND_DEV_SWARM_XP)
         queue_draw = getattr(self, "queue_draw", None)
         if callable(queue_draw):
             queue_draw()
@@ -603,18 +608,47 @@ class BondMeterMixin:
             previous_level=previous_level,
         )
 
+    def _next_feed_bond_reward(self, *, now: float | None = None) -> int:
+        """Return this feed's XP and advance the in-session reward window.
+
+        Feeding itself is never blocked. The window only limits repeat XP so
+        feeding stays a cute interaction instead of the fastest bond grind.
+        Ten minutes without a completed feed resets the reward sequence.
+        """
+
+        current = time.monotonic() if now is None else float(now)
+        last = self._bond_feed_last_completed_at
+        if (
+            last is None
+            or current < last
+            or current - last >= BOND_FEED_REWARD_WINDOW_SECONDS
+        ):
+            self._bond_feed_count_in_window = 0
+
+        reward = bond_feed_reward_xp(self._bond_feed_count_in_window)
+        self._bond_feed_count_in_window += 1
+        self._bond_feed_last_completed_at = current
+        return reward
+
     def _on_feed_animation_completed(self) -> None:
-        """A completed feed gives a visible one-time relationship boost."""
-        # Establish the reason first so the +XP pulse and any level-up message
-        # inherit the correct activity instead of flashing generic "bonding".
-        self._show_bond_progress("sharing a snack")
-        self._award_bond(
-            BOND_FEED_XP,
-            persist=True,
-            visual_orb_limit=BOND_FEED_VISUAL_ORB_LIMIT,
-        )
-        if self._bond_progress_overlay is not None:
-            self._bond_progress_overlay.finish_activity(BOND_FEED_HOLD_SECONDS)
+        """Award diminishing bond XP while always preserving feed feedback."""
+        reward = self._next_feed_bond_reward()
+        if reward > 0:
+            # Establish the reason first so the +XP pulse and any level-up
+            # message inherit the correct activity instead of flashing generic
+            # "bonding".
+            self._show_bond_progress("sharing a snack")
+            self._award_bond(
+                reward,
+                persist=True,
+                visual_orb_limit=BOND_FEED_VISUAL_ORB_LIMIT,
+            )
+            if self._bond_progress_overlay is not None:
+                self._bond_progress_overlay.finish_activity(BOND_FEED_HOLD_SECONDS)
+        else:
+            self._logger.debug(
+                "Feed completed without bond XP; repeat-feed reward window active"
+            )
 
         next_hook = getattr(super(), "_on_feed_animation_completed", None)
         if callable(next_hook):
