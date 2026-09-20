@@ -10,11 +10,14 @@ from mochi.care import BondState, bond_xp_required
 from mochi.presence.emote_catalogue import (
     EMOTE_CATALOGUE,
     EMOTES_BY_ID,
+    EMOTES_PER_PAGE,
     RARITY_STYLES,
     EmoteCatalogueCanvas,
     EmoteCatalogueMixin,
     EmoteCatalogueWindow,
     bond_xp_until_level,
+    catalogue_page_count,
+    catalogue_page_slice,
     next_emote_unlock,
 )
 from mochi.sprites import ANIMATIONS
@@ -47,6 +50,99 @@ def test_catalogue_contains_the_complete_authored_emote_set() -> None:
     assert not EMOTES_BY_ID["mochi-exe"].is_unlocked(state)
     assert all(emote.available for emote in EMOTE_CATALOGUE)
     assert all(emote.animation is not None for emote in EMOTE_CATALOGUE)
+
+
+def test_catalogue_paginates_six_emotes_per_page_in_canonical_order() -> None:
+    assert catalogue_page_count(len(EMOTE_CATALOGUE)) == 2
+    assert tuple(emote.id for emote in catalogue_page_slice(EMOTE_CATALOGUE, 0)) == (
+        "heart",
+        "bounce",
+        "squish",
+        "wave",
+        "coffee",
+        "side-eye",
+    )
+    assert tuple(emote.id for emote in catalogue_page_slice(EMOTE_CATALOGUE, 1)) == (
+        "look",
+        "table-flip",
+        "vs-code",
+        "dance",
+        "mochi-exe",
+    )
+
+
+def test_catalogue_page_slice_clamps_out_of_range_pages() -> None:
+    assert catalogue_page_slice(EMOTE_CATALOGUE, -10) == catalogue_page_slice(
+        EMOTE_CATALOGUE, 0
+    )
+    assert catalogue_page_slice(EMOTE_CATALOGUE, 99) == catalogue_page_slice(
+        EMOTE_CATALOGUE, 1
+    )
+
+
+def test_canvas_height_is_fixed_to_three_rows_even_as_catalogue_grows() -> None:
+    expected = (
+        3 * EmoteCatalogueCanvas.CARD_HEIGHT
+        + 2 * EmoteCatalogueCanvas.GAP
+        + EmoteCatalogueCanvas.GLOW_PAD * 2
+    )
+    assert EmoteCatalogueCanvas.HEIGHT == expected
+
+
+def test_page_change_swaps_canvas_slice_and_updates_navigation() -> None:
+    window = object.__new__(EmoteCatalogueWindow)
+    window._current_page = 0
+    window._state = BondState(level=1, xp=0)
+    window._unlock_all = False
+    window._logger = Mock()
+    window._canvas = SimpleNamespace(set_emotes=Mock(), refresh=Mock())
+    window._page_label = SimpleNamespace(set_text=Mock())
+    window._previous_page_button = SimpleNamespace(set_sensitive=Mock())
+    window._next_page_button = SimpleNamespace(set_sensitive=Mock())
+
+    changed = EmoteCatalogueWindow._set_page(window, 1)
+
+    assert changed is True
+    assert window._current_page == 1
+    window._canvas.set_emotes.assert_called_once_with(
+        catalogue_page_slice(EMOTE_CATALOGUE, 1)
+    )
+    window._canvas.refresh.assert_called_once_with(
+        window._state,
+        unlock_all=False,
+    )
+    window._page_label.set_text.assert_called_with("2 / 2")
+    window._previous_page_button.set_sensitive.assert_called_with(True)
+    window._next_page_button.set_sensitive.assert_called_with(False)
+
+
+def test_page_change_at_boundary_is_noop_and_keeps_button_state_correct() -> None:
+    window = object.__new__(EmoteCatalogueWindow)
+    window._current_page = 0
+    window._state = BondState(level=1, xp=0)
+    window._unlock_all = False
+    window._logger = Mock()
+    window._canvas = SimpleNamespace(set_emotes=Mock(), refresh=Mock())
+    window._page_label = SimpleNamespace(set_text=Mock())
+    window._previous_page_button = SimpleNamespace(set_sensitive=Mock())
+    window._next_page_button = SimpleNamespace(set_sensitive=Mock())
+
+    changed = EmoteCatalogueWindow._set_page(window, -1)
+
+    assert changed is False
+    window._canvas.set_emotes.assert_not_called()
+    window._canvas.refresh.assert_not_called()
+    window._page_label.set_text.assert_called_with("1 / 2")
+    window._previous_page_button.set_sensitive.assert_called_with(False)
+    window._next_page_button.set_sensitive.assert_called_with(True)
+
+
+def test_catalogue_keyboard_supports_left_right_page_navigation() -> None:
+    source = inspect.getsource(EmoteCatalogueWindow._on_key_pressed)
+
+    assert "Gdk.KEY_Left" in source
+    assert "Gdk.KEY_Right" in source
+    assert "self._set_page" in source
 
 
 def test_catalogue_assigns_progressive_rarity_tiers() -> None:
@@ -84,7 +180,7 @@ def test_next_unlock_advances_through_new_catalogue_levels() -> None:
     assert next_emote_unlock(BondState(level=6, xp=0)) is None
 
 
-def test_catalogue_uses_single_compact_canvas_without_scrolling() -> None:
+def test_catalogue_uses_fixed_paged_canvas_without_scrolling() -> None:
     mixin_source = inspect.getsource(EmoteCatalogueMixin)
     window_source = inspect.getsource(EmoteCatalogueWindow)
 
@@ -92,13 +188,18 @@ def test_catalogue_uses_single_compact_canvas_without_scrolling() -> None:
     assert "DEFAULT_WIDTH = 900" in window_source
     assert "DEFAULT_HEIGHT = 900" in window_source
     assert "EmoteCatalogueCanvas" in window_source
+    assert "self._page_label" in window_source
+    assert "self._previous_page_button" in window_source
+    assert "self._next_page_button" in window_source
     assert "Gtk.Grid()" not in window_source
     assert "Gtk.GridView" not in window_source
     assert "Gtk.ScrolledWindow" not in window_source
 
 
-def test_canvas_uses_long_two_column_rarity_cards() -> None:
+def test_canvas_uses_fixed_three_by_two_page_of_long_rarity_cards() -> None:
+    assert EMOTES_PER_PAGE == 6
     assert EmoteCatalogueCanvas.COLUMNS == 2
+    assert EmoteCatalogueCanvas.ROWS == 3
     assert EmoteCatalogueCanvas.CARD_WIDTH > EmoteCatalogueCanvas.CARD_HEIGHT * 3
     source = inspect.getsource(EmoteCatalogueCanvas)
 
@@ -140,7 +241,7 @@ def test_card_rasterization_has_no_repeating_render_timer() -> None:
     source = inspect.getsource(EmoteCatalogueCanvas._render_card_surfaces)
 
     assert "GLib.timeout_add" not in source
-    assert "for emote in EMOTE_CATALOGUE" in source
+    assert "for emote in self._emotes" in source
     assert "self._card_surfaces = surfaces" in source
     assert source.count("self.queue_draw()") == 1
 
@@ -287,13 +388,15 @@ def test_scale_notification_is_guarded_by_last_rendered_scale() -> None:
 
 
 def test_card_hit_testing_ignores_gap_and_glow_padding() -> None:
+    canvas = EmoteCatalogueCanvas.__new__(EmoteCatalogueCanvas)
+    canvas._emotes = EMOTE_CATALOGUE[:EMOTES_PER_PAGE]
     first_x, first_y = EmoteCatalogueCanvas._card_origin(0)
     second_x, second_y = EmoteCatalogueCanvas._card_origin(1)
 
-    assert EmoteCatalogueCanvas.card_index_at(first_x + 10, first_y + 10) == 0
-    assert EmoteCatalogueCanvas.card_index_at(second_x + 10, second_y + 10) == 1
+    assert canvas.card_index_at(first_x + 10, first_y + 10) == 0
+    assert canvas.card_index_at(second_x + 10, second_y + 10) == 1
     assert (
-        EmoteCatalogueCanvas.card_index_at(
+        canvas.card_index_at(
             first_x + EmoteCatalogueCanvas.CARD_WIDTH + 2,
             first_y + 10,
         )
