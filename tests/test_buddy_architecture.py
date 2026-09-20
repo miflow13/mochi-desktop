@@ -7,6 +7,7 @@ import logging
 from unittest.mock import Mock
 
 from mochi.ambient_activity import AmbientActivityController
+from mochi.autonomous_sleep import AutonomousSleepController
 from mochi.buddy import Buddy
 from mochi.buddy_menu import BuddyMenuController
 from mochi.state import MochiState, StateMachine
@@ -19,6 +20,8 @@ def test_buddy_uses_composition_instead_of_more_behavior_mixins() -> None:
     source = inspect.getsource(Buddy.__init__)
     assert "self._menu_ui = BuddyMenuController(self)" in source
     assert "self._ambient_activity = AmbientActivityController(self)" in source
+    assert "self._autonomous_sleep = AutonomousSleepController(self)" in source
+    assert "self._autonomous_sleep.start()" in source
 
 
 def test_buddy_menu_hooks_are_thin_controller_delegates() -> None:
@@ -80,3 +83,16 @@ def test_menu_animation_serial_is_owned_by_buddy() -> None:
 
     assert 'getattr(self._buddy, "_menu_animation_serial", 0)' in source
     assert 'getattr(self, "_menu_animation_serial", 0)' not in source
+
+
+def test_autonomous_sleep_remains_composition_owned() -> None:
+    assert AutonomousSleepController not in Buddy.__mro__
+    wake_source = inspect.getsource(Buddy._wake_up)
+    assert "self._autonomous_sleep.owns_sleep" in wake_source
+    assert "self._autonomous_sleep.note_external_wake()" in wake_source
+
+
+def test_mochi_lab_autonomous_nap_uses_controller_qa_seam() -> None:
+    source = inspect.getsource(BuddyMenuController._test_autonomous_nap)
+    assert "trigger_now_for_testing()" in source
+    assert "_close_developer_menu_then" in source
