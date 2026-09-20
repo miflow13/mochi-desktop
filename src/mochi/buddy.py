@@ -17,6 +17,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.animation import AnimationPlayer
+from mochi.autonomous_sleep import AutonomousSleepController
 from mochi.behavior import (
     ClickReactionBuffer,
     WalkMotion,
@@ -140,6 +141,7 @@ class Buddy(Gtk.DrawingArea):
         )
         self._menu_ui = BuddyMenuController(self)
         self._ambient_activity = AmbientActivityController(self)
+        self._autonomous_sleep = AutonomousSleepController(self)
         self.atlas = SpriteAtlas()
         self.player = AnimationPlayer(on_finished=self._finish_reaction)
         self.player.play(ANIMATIONS["idle"])
@@ -266,6 +268,7 @@ class Buddy(Gtk.DrawingArea):
             self._schedule_idle_action()
             self._schedule_blink()
             self._schedule_computer_idle_emote()
+            self._autonomous_sleep.start()
 
 
 
@@ -333,6 +336,9 @@ class Buddy(Gtk.DrawingArea):
 
     def _test_computer_emote(self, *args, **kwargs):
         return _menu_ui_for(self)._test_computer_emote(*args, **kwargs)
+
+    def _test_autonomous_nap(self, *args, **kwargs):
+        return _menu_ui_for(self)._test_autonomous_nap(*args, **kwargs)
 
     def _reset_position(self, *args, **kwargs):
         return _menu_ui_for(self)._reset_position(*args, **kwargs)
@@ -869,6 +875,12 @@ class Buddy(Gtk.DrawingArea):
     def _wake_up(self) -> None:
         if not can_begin_wake(self.state.current):
             return
+        try:
+            autonomous_sleep = object.__getattribute__(self, "_autonomous_sleep")
+        except AttributeError:
+            autonomous_sleep = None
+        if autonomous_sleep is not None and autonomous_sleep.owns_sleep:
+            autonomous_sleep.note_external_wake()
         self._transition_to(MochiState.WAKING)
         self._user_idle = False
         self._mark_interaction()

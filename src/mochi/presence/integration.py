@@ -783,6 +783,9 @@ class PresenceBuddyMixin:
         if self._presence_shutting_down:
             return
         self._presence_shutting_down = True
+        autonomous_sleep = getattr(self, "_autonomous_sleep", None)
+        if autonomous_sleep is not None:
+            autonomous_sleep.stop()
         source_id = self._presence_source_id
         self._presence_source_id = None
         if source_id is not None:
