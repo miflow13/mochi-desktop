@@ -28,6 +28,7 @@ where = ["src"]
     "assets/audio/*.wav",
 ]
 "share/mochi/audio/focus" = ["assets/audio/focus/*.ogg", "assets/audio/focus/*.wav"]
+"share/mochi/ui" = ["assets/ui/*.png"]
 "share/mochi" = ["assets/mochi/manifest.json"]
 "share/mochi/master" = ["assets/mochi/master/*.png"]
 "share/mochi/idle" = ["assets/mochi/idle/*.png"]
