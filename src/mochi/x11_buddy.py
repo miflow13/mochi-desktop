@@ -128,6 +128,7 @@ class X11Buddy(Buddy):
             return
         press_x, press_y = self._press
         self._placement.drag_to_pointer(press_x, press_y)
+        self._update_pot_hide_target()
 
         # Bubble positioning uses the buddy window as its anchor. Resync it in
         # the same drag tick instead of waiting for the fallback follow timer so
