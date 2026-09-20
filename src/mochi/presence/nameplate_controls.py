@@ -9,9 +9,13 @@ change:
 - `_change_size()` (already runs when Mochi's size changes)
 - `shutdown_presence()` (already runs on application shutdown)
 
-The always-visible surface stays intentionally quiet:
+The nameplate is intentionally ephemeral:
 
-    speech bubble > temporary feedback > name only
+    speech bubble > temporary feedback > hover/post-speech nameplate > hidden
+
+It appears while Mochi is hovered, briefly after speech ends, or while short
+care/interaction feedback is active. Fade progression piggybacks on the
+existing Buddy tick; no dedicated visibility timer or input surface is added.
 
 Mood is still derived from successful Mochi state transitions through
 `MoodModel`, but persistent state/mood cues are shown only inside the existing
@@ -40,6 +44,8 @@ class NameplateMixin:
     """Own Mochi's stable non-interactive UI surface above the sprite."""
 
     DEFAULT_FEEDBACK_SECONDS = 2.4
+    POST_SPEECH_NAMEPLATE_SECONDS = 2.6
+    NAMEPLATE_FADE_SECONDS = 0.45
 
     def __init__(self, *args, **kwargs) -> None:
         self._nameplate: Nameplate | None = None
@@ -50,6 +56,9 @@ class NameplateMixin:
         self._nameplate_feedback: str | None = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since: float | None = None
+        self._nameplate_bubble_was_visible = False
+        self._nameplate_post_speech_until: float | None = None
+        self._nameplate_fade_started_at: float | None = None
         self._context_state_value: Gtk.Label | None = None
         self._context_mood_value: Gtk.Label | None = None
         super().__init__(*args, **kwargs)
@@ -199,14 +208,17 @@ class NameplateMixin:
         self._nameplate_feedback = text
         self._nameplate_feedback_remaining_seconds = duration
         self._nameplate_feedback_active_since = None
+        self._cancel_nameplate_fade()
         self._refresh_nameplate_content()
 
     def clear_nameplate_feedback(self) -> None:
-        """Clear temporary feedback and return the nameplate to name-only."""
+        """Clear temporary feedback and fade the nameplate when appropriate."""
         self._nameplate_feedback = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since = None
         self._refresh_nameplate_content()
+        if not getattr(self, "_hovered", False) and not self._post_speech_nameplate_active():
+            self._begin_nameplate_fade()
 
     def _refresh_nameplate_content(self) -> None:
         nameplate = self._nameplate
@@ -216,6 +228,64 @@ class NameplateMixin:
         # Persistent state/mood belongs in the right-click menu. The second
         # line is reserved for short-lived care/interaction feedback only.
         nameplate.set_status(self._nameplate_feedback)
+
+    def _cancel_nameplate_fade(self) -> None:
+        self._nameplate_fade_started_at = None
+        if self._nameplate is not None:
+            self._nameplate.set_opacity(1.0)
+
+    def _begin_nameplate_fade(self, *, now: float | None = None) -> None:
+        """Start a visual-only fade without creating a GLib timer."""
+
+        if self._nameplate is None or not self._nameplate.visible:
+            self._nameplate_fade_started_at = None
+            return
+        if self._nameplate_fade_started_at is None:
+            self._nameplate_fade_started_at = (
+                time.monotonic() if now is None else float(now)
+            )
+
+    def _post_speech_nameplate_active(self, *, now: float | None = None) -> bool:
+        deadline = self._nameplate_post_speech_until
+        if deadline is None:
+            return False
+        current = time.monotonic() if now is None else float(now)
+        return current < deadline
+
+    def _show_nameplate_full_opacity(self) -> None:
+        nameplate = self._nameplate
+        if nameplate is None:
+            return
+        self._cancel_nameplate_fade()
+        if not nameplate.visible:
+            nameplate.show()
+        else:
+            nameplate.update_position()
+
+    def _advance_nameplate_fade(self, *, now: float | None = None) -> bool:
+        """Advance an active fade and hide the plate when it reaches zero."""
+
+        nameplate = self._nameplate
+        started = self._nameplate_fade_started_at
+        if nameplate is None or started is None:
+            return False
+
+        current = time.monotonic() if now is None else float(now)
+        elapsed = max(0.0, current - started)
+        duration = max(0.001, float(self.NAMEPLATE_FADE_SECONDS))
+        opacity = max(0.0, 1.0 - (elapsed / duration))
+        nameplate.set_opacity(opacity)
+        if opacity <= 0.0:
+            nameplate.hide()
+            nameplate.set_opacity(1.0)
+            self._nameplate_fade_started_at = None
+            return False
+
+        if not nameplate.visible:
+            nameplate.show()
+        else:
+            nameplate.update_position()
+        return True
 
     def _advance_nameplate_feedback_lifetime(self) -> None:
         """Advance temporary feedback using the existing tick, never a timer."""
@@ -272,16 +342,13 @@ class NameplateMixin:
         return result
 
     def _sync_nameplate_with_speech(self) -> None:
-        """Keep the nameplate and speech bubble mutually exclusive.
+        """Resolve the shared anchor and ephemeral nameplate visibility policy."""
 
-        They occupy the same anchor point above Mochi, so only one is ever
-        shown at a time: the speech bubble takes priority while it has
-        something to say, and the nameplate returns as soon as the bubble
-        hides. Checked every tick instead of via a dedicated timer/callback.
-        """
         nameplate = self._nameplate
         if nameplate is None:
             return
+
+        now = time.monotonic()
         bubble = getattr(self, "_presence_bubble", None)
         bubble_visible = bool(bubble is not None and bubble.visible)
         bond_overlay = getattr(self, "_bond_progress_overlay", None)
@@ -290,8 +357,20 @@ class NameplateMixin:
         if callable(focus_hint):
             focus_hint_active = bool(focus_hint())
 
+        # Detect the speech edge rather than scheduling another callback.
+        if bubble_visible:
+            self._nameplate_bubble_was_visible = True
+            self._nameplate_post_speech_until = None
+            self._cancel_nameplate_fade()
+        elif self._nameplate_bubble_was_visible:
+            self._nameplate_bubble_was_visible = False
+            self._nameplate_post_speech_until = (
+                now + self.POST_SPEECH_NAMEPLATE_SECONDS
+            )
+            self._cancel_nameplate_fade()
+
         # Shared anchor priority:
-        # speech bubble > live bond progress > Focus bond hint > normal nameplate.
+        # speech > bond progress > Focus hint > feedback > hover/post-speech.
         if bubble_visible:
             if bond_overlay is not None and bond_overlay.visible:
                 bond_overlay.suspend()
@@ -311,10 +390,36 @@ class NameplateMixin:
                 nameplate.hide()
             return
 
-        if not nameplate.visible:
-            nameplate.show()
-        else:
-            nameplate.update_position()
+        if self._nameplate_feedback is not None or getattr(self, "_hovered", False):
+            self._show_nameplate_full_opacity()
+            return
+
+        if self._post_speech_nameplate_active(now=now):
+            self._show_nameplate_full_opacity()
+            return
+
+        if self._nameplate_post_speech_until is not None:
+            self._nameplate_post_speech_until = None
+            self._begin_nameplate_fade(now=now)
+
+        if self._advance_nameplate_fade(now=now):
+            return
+
+        if nameplate.visible:
+            nameplate.hide()
+
+    def _on_enter(self, controller, x: float, y: float) -> None:
+        super()._on_enter(controller, x, y)
+        if self._nameplate_shown:
+            self._show_nameplate_full_opacity()
+
+    def _on_leave(self, controller) -> None:
+        super()._on_leave(controller)
+        if (
+            self._nameplate_feedback is None
+            and not self._post_speech_nameplate_active()
+        ):
+            self._begin_nameplate_fade()
 
     def _on_drag_update(self, gesture, offset_x: float, offset_y: float) -> None:
         super()._on_drag_update(gesture, offset_x, offset_y)
@@ -333,4 +438,7 @@ class NameplateMixin:
         self._nameplate_feedback = None
         self._nameplate_feedback_remaining_seconds = 0.0
         self._nameplate_feedback_active_since = None
+        self._nameplate_bubble_was_visible = False
+        self._nameplate_post_speech_until = None
+        self._nameplate_fade_started_at = None
         super().shutdown_presence()
