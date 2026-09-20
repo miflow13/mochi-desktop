@@ -491,6 +491,32 @@ def test_contextual_preview_uses_production_app_categories(
 ):
     buddy = object.__new__(PresenceBuddyMixin)
     buddy._presence_app_category = app_category
+    buddy._presence_context_preview_selector = None
+    buddy._preview_presence_category = Mock()
+
+    PresenceBuddyMixin._test_presence_contextual(buddy, Mock())
+
+    buddy._preview_presence_category.assert_called_once_with(phrase_category)
+
+
+@pytest.mark.parametrize(
+    ("selected", "phrase_category"),
+    (
+        (1, "browser"),
+        (2, "vscode"),
+        (3, "terminal"),
+        (4, "developer"),
+        (5, "creative"),
+    ),
+)
+def test_contextual_preview_can_force_each_coarse_context(
+    selected,
+    phrase_category,
+):
+    buddy = object.__new__(PresenceBuddyMixin)
+    buddy._presence_app_category = "unknown"
+    buddy._presence_context_preview_selector = Mock()
+    buddy._presence_context_preview_selector.get_selected.return_value = selected
     buddy._preview_presence_category = Mock()
 
     PresenceBuddyMixin._test_presence_contextual(buddy, Mock())
