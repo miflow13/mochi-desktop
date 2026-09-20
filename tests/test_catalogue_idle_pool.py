@@ -91,7 +91,9 @@ def test_selecting_coffee_plays_once_then_returns_to_mood_aware_idle() -> None:
 
     assert buddy.state.current is MochiState.IDLE
     assert buddy._current_animation == "idle"
-    assert buddy.player.animation is ANIMATIONS["sad_idle"]
+    assert buddy.player.animation.name == "sad_idle"
+    assert len(buddy.player.animation.frames) == 1
+    assert buddy.player.animation.frames[0] == ANIMATIONS["sad_idle"].frames[0]
     assert buddy._mood_model.override is MochiMood.SAD
 
 
@@ -102,9 +104,9 @@ def test_idle_emote_frequency_is_category_based_not_pool_size() -> None:
     )
     buddy._play_autonomous_catalogue_emote = lambda name: buddy.played.append(name) or True
 
-    # Walk occupies [0.00, 0.25); catalogue emotes [0.25, 0.50).
+    # Walk occupies [0.00, 0.10); catalogue emotes [0.10, 0.30).
     with (
-        patch("mochi.buddy.random.random", return_value=0.30),
+        patch("mochi.buddy.random.random", return_value=0.20),
         patch("mochi.buddy.random.choice", return_value="emote_42"),
     ):
         buddy._choose_idle_action_with_walk(allow_walk=True)
