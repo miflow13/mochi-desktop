@@ -65,7 +65,7 @@ def test_deskling_preserves_authored_animation_timing() -> None:
     data = _load_manifest()
 
     expected = {
-        "idle": [750, 500, 350, 900, 400, 1000],
+        "idle": [900, 600, 450, 1100, 500, 1400],
         "blink": [50, 55, 65, 85, 65, 55, 50],
         "bounce": [50, 75, 85, 95, 135, 145, 110],
         "squish": [45, 70, 105, 120, 145, 125],

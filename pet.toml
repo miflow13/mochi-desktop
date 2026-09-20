@@ -18,12 +18,12 @@ default_animation = "idle"
 [animations.idle]
 mode = "loop"
 frames = [
-  { file = "assets/mochi/idle/idle_01.png", duration_ms = 750 },
-  { file = "assets/mochi/idle/idle_02.png", duration_ms = 500 },
-  { file = "assets/mochi/idle/idle_03.png", duration_ms = 350 },
-  { file = "assets/mochi/idle/idle_04.png", duration_ms = 900 },
-  { file = "assets/mochi/idle/idle_05.png", duration_ms = 400 },
-  { file = "assets/mochi/idle/idle_06.png", duration_ms = 1000 },
+  { file = "assets/mochi/idle/idle_01.png", duration_ms = 900 },
+  { file = "assets/mochi/idle/idle_02.png", duration_ms = 600 },
+  { file = "assets/mochi/idle/idle_03.png", duration_ms = 450 },
+  { file = "assets/mochi/idle/idle_04.png", duration_ms = 1100 },
+  { file = "assets/mochi/idle/idle_05.png", duration_ms = 500 },
+  { file = "assets/mochi/idle/idle_06.png", duration_ms = 1400 },
 ]
 
 [animations.blink]
