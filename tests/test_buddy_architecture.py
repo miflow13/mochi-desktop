@@ -88,8 +88,9 @@ def test_menu_animation_serial_is_owned_by_buddy() -> None:
 def test_autonomous_sleep_remains_composition_owned() -> None:
     assert AutonomousSleepController not in Buddy.__mro__
     wake_source = inspect.getsource(Buddy._wake_up)
-    assert "self._autonomous_sleep.owns_sleep" in wake_source
-    assert "self._autonomous_sleep.note_external_wake()" in wake_source
+    assert 'object.__getattribute__(self, "_autonomous_sleep")' in wake_source
+    assert "autonomous_sleep.owns_sleep" in wake_source
+    assert "autonomous_sleep.note_external_wake()" in wake_source
 
 
 def test_mochi_lab_autonomous_nap_uses_controller_qa_seam() -> None:
