@@ -544,7 +544,9 @@ class Buddy(Gtk.DrawingArea):
         self._drag_move_started = False
         self._drag_release_handled = False
         self._drag_end_handled = False
-        self._hide_pot_hide_target()
+        target = getattr(self, "_pot_hide_target", None)
+        if target is not None:
+            target.hide()
         self._update_pointer_cursor()
 
     def _on_drag_begin(self, _gesture: Gtk.GestureDrag, _x: float, _y: float) -> None:
