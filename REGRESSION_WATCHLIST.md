@@ -34,6 +34,19 @@ Use this checklist for interaction/state changes and before release checkpoints.
 - [ ] New one-shot animations play exactly once unless explicitly authored to loop
 - [ ] Level-up and emote-unlock sequencing does not visibly fight normal behavior
 
+## Nameplate / Speech Surface
+
+- [ ] Nameplate stays hidden during ordinary idle when Mochi is not hovered
+- [ ] Hover shows the nameplate immediately at full opacity
+- [ ] Leaving hover fades the nameplate out rather than leaving it persistent
+- [ ] Speech bubble always takes priority over the nameplate
+- [ ] After speech ends, the nameplate lingers briefly and then fades away
+- [ ] Hover during a fade restores full opacity cleanly
+- [ ] Temporary care/interaction feedback can still surface the nameplate
+- [ ] Bond progress and Focus bond hints still outrank the nameplate
+- [ ] Nameplate remains non-targetable and does not interfere with click/drag/right-click
+- [ ] Repeated hover/speech cycles do not leave the nameplate stuck visible or transparent
+
 ## Timers / Long-running Sources
 
 - [ ] Ambient timers do not accumulate
