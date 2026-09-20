@@ -12,6 +12,7 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ### Changed
 
+- Every unlocked Emote Catalogue animation now automatically participates in Mochi's autonomous idle emote pool. The overall emote chance stays fixed as the catalogue grows, so new emotes add variety without making Mochi increasingly noisy.
 - Nameplate is now ephemeral: it appears while Mochi is hovered, remains briefly after speech, then fades away to reduce persistent desktop clutter. Temporary care/interaction feedback may still surface it when needed.
 
 ## 0.3.0-alpha.1 — Growing Together

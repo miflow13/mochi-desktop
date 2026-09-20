@@ -22,7 +22,7 @@ from mochi.bond_orbs import MAX_ACTIVE_ORBS, XpOrbField
 from mochi.emotes import (
     EmoteDefinition,
     newly_unlocked_emotes,
-    unlocked_idle_animation_names,
+    unlocked_emote_animation_names,
 )
 from mochi.focus import FocusPhase
 from mochi.sprites import ANIMATIONS
@@ -306,8 +306,10 @@ class BondMeterMixin:
             self._dev_unlock_all_emotes,
         )
 
-    def _available_idle_emote_animations(self) -> tuple[str, ...]:
-        return unlocked_idle_animation_names(
+    def _available_catalogue_emote_animations(self) -> tuple[str, ...]:
+        """Expose unlocked catalogue animations to autonomous behavior."""
+
+        return unlocked_emote_animation_names(
             self._bond_state,
             unlock_all=self._dev_unlock_all_emotes,
         )
