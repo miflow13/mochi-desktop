@@ -59,6 +59,11 @@ QUICK_START_SECTIONS = (
         "easy to ignore when you are busy.",
     ),
     QuickStartSection(
+        "Focus With Mochi",
+        "Right-click Mochi to run a gentle focus/break session together. Focused "
+        "minutes grow your bond; breaks stay pressure-free.",
+    ),
+    QuickStartSection(
         "You’re in Control",
         "The right-click menu lets you sleep or wake Mochi, toggle Edge roam, use "
         "Stay put to stop autonomous wandering, and close Mochi. More granular "

@@ -755,9 +755,20 @@ class PresenceBuddyMixin:
         action = self._ambient_presence_engine.evaluate(context, now=now)
         if action is None or self._presence_bubble is None:
             return GLib.SOURCE_CONTINUE
+        if not self._focus_allows_presence_action(action):
+            self._logger.debug(
+                "[presence] action suppressed by active focus: category=%s priority=%d",
+                action.category,
+                action.priority,
+            )
+            return GLib.SOURCE_CONTINUE
         if self._show_presence_action(action):
             self._ambient_presence_engine.record_delivered(action, now=now)
         return GLib.SOURCE_CONTINUE
+
+    def _focus_allows_presence_action(self, _action) -> bool:
+        """Extension seam for Focus With Mochi without changing AmbiSense rules."""
+        return True
 
     def _show_presence_action(self, action) -> bool:
         options = {"markup": INTRO_MARKUP} if action.event == "intro" else {}

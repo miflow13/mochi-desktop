@@ -9,3 +9,9 @@ Audio files in this directory are optional interaction cues loaded by `SoundMana
 - `menu_open.ogg` — context-menu cue
 
 Missing optional sounds are skipped safely.
+
+## Focus soundscapes
+
+Approved local focus loops live in `focus/`. `mochi_rain.wav` is the optional
+rain loop exposed by Focus with Mochi; additional approved `.ogg` or `.wav`
+loops can be added there later.

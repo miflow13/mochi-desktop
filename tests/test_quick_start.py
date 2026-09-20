@@ -56,6 +56,7 @@ def test_quick_start_copy_matches_current_capabilities() -> None:
         "Ambient Reactions",
         "Play With Mochi",
         "Little Thoughts",
+        "Focus With Mochi",
         "You’re in Control",
         "Try This",
     }

@@ -109,6 +109,25 @@ class NameplateSpeechExclusivityTests(unittest.TestCase):
         mixin._sync_nameplate_with_speech()
         self.assertTrue(nameplate.visible)
 
+    def test_focus_bond_hint_hides_nameplate_until_focus_hint_ends(self) -> None:
+        mixin, nameplate = _make_mixin(
+            nameplate_visible=True, bubble=_FakeBubble(visible=False)
+        )
+        focus_active = {"value": True}
+        mixin._focus_bond_hint_active = lambda: focus_active["value"]
+
+        mixin._sync_nameplate_with_speech()
+
+        self.assertFalse(nameplate.visible)
+        self.assertEqual(nameplate.hide_calls, 1)
+
+        focus_active["value"] = False
+        mixin._sync_nameplate_with_speech()
+
+        self.assertTrue(nameplate.visible)
+        self.assertEqual(nameplate.show_calls, 1)
+
+
     def test_no_bubble_attribute_falls_back_to_showing_nameplate(self) -> None:
         mixin = object.__new__(NameplateMixin)
         nameplate = _FakeNameplate()

@@ -465,18 +465,21 @@ class BuddyMenuController:
             return
         if self._buddy._developer_menu.get_visible():
             self._buddy._developer_menu.popdown()
-        # Secondary-click is UI-only. It must never trigger/cancel a Mochi
-        # emote, stop walking, force idle, or feed the primary-click reaction
-        # pipeline. The popover may animate; Mochi himself does not.
+        # Keep secondary-click out of the primary-click reaction pipeline.
+        # Higher-level presence behavior may choose a menu-specific visual
+        # after this presentation path has established menu ownership.
         self._buddy._cancel_hover_heart()
         self._buddy._sleep_label.set_text(
             "Wake up" if self._buddy.state.current is MochiState.SLEEPING else "Sleep"
         )
+        # Anchor the menu to Mochi's full sprite bounds rather than the exact
+        # click point. MenuWindow can then keep the entire menu beside Mochi
+        # and flip it to the opposite side near a monitor edge.
         rectangle = Gdk.Rectangle()
-        rectangle.x = round(x)
-        rectangle.y = round(y)
-        rectangle.width = 1
-        rectangle.height = 1
+        rectangle.x = 0
+        rectangle.y = 0
+        rectangle.width = max(1, self._buddy.get_width())
+        rectangle.height = max(1, self._buddy.get_height())
         self._buddy._context_menu.set_pointing_to(rectangle)
         self._buddy._context_menu_open = True
         self._buddy._context_menu.popup()
@@ -484,7 +487,9 @@ class BuddyMenuController:
         self._buddy._animate_menu_open(
             self._buddy._context_menu_content, self._buddy._context_menu_animated_rows
         )
-        self._buddy._logger.debug("Context menu opened at (%d, %d)", rectangle.x, rectangle.y)
+        self._buddy._logger.debug(
+            "Context menu opened beside Mochi from click=(%.1f, %.1f)", x, y
+        )
 
     def _show_developer_menu(self) -> None:
         if self._buddy._preview_mode:
@@ -502,10 +507,10 @@ class BuddyMenuController:
             self._buddy._play_animation("idle")
 
         rectangle = Gdk.Rectangle()
-        rectangle.x = max(1, self._buddy.get_width() // 2)
-        rectangle.y = max(1, self._buddy.get_height() // 2)
-        rectangle.width = 1
-        rectangle.height = 1
+        rectangle.x = 0
+        rectangle.y = 0
+        rectangle.width = max(1, self._buddy.get_width())
+        rectangle.height = max(1, self._buddy.get_height())
         self._buddy._developer_menu.set_pointing_to(rectangle)
         self._buddy._context_menu_open = True
         self._buddy._developer_menu.popup()
