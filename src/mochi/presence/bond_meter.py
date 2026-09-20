@@ -39,7 +39,7 @@ FOCUS_BOND_BAR_MIN_WIDTH_FRACTION = 0.34
 FOCUS_BOND_BAR_MAX_WIDTH_FRACTION = 0.64
 FOCUS_BOND_BAR_VISIBLE_WIDTH_FRACTION = 0.78
 FOCUS_BOND_BAR_HEIGHT_FRACTION = 0.040
-FOCUS_BOND_BAR_GAP_FRACTION = 0.028
+FOCUS_BOND_BAR_GAP_FRACTION = 0.050
 FOCUS_BOND_LABEL_GAP_FRACTION = 0.012
 FOCUS_BOND_LABEL_SIZE_FRACTION = 0.070
 FOCUS_BOND_LABEL = "Bond XP"
@@ -681,7 +681,7 @@ class BondMeterMixin:
         width: int,
         height: int,
     ) -> tuple[float, float, float, float]:
-        """Place a thin bond bar immediately below Mochi's visible sprite."""
+        """Place the Focus bond bar clearly above Mochi's visible sprite."""
         size = float(max(1, min(width, height)))
         visible_x = 0.0
         visible_y = 0.0
@@ -706,7 +706,7 @@ class BondMeterMixin:
         preferred_width = visible_width * FOCUS_BOND_BAR_VISIBLE_WIDTH_FRACTION
         bar_width = max(minimum_width, min(preferred_width, maximum_width))
         bar_height = max(5.0, size * FOCUS_BOND_BAR_HEIGHT_FRACTION)
-        gap = max(4.0, size * FOCUS_BOND_BAR_GAP_FRACTION)
+        gap = max(7.0, size * FOCUS_BOND_BAR_GAP_FRACTION)
         label_size = max(7.0, min(11.0, size * FOCUS_BOND_LABEL_SIZE_FRACTION))
         label_gap = max(1.0, size * FOCUS_BOND_LABEL_GAP_FRACTION)
 
