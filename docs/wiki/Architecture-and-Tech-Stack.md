@@ -139,9 +139,45 @@ Ambient behavior should stay subordinate to direct interaction. It should not ow
 
 ### `config.py`
 
-Persistent user configuration.
+Persistent user configuration, including saved bond state.
 
 Keep persistence separate from animation and input state so a config failure cannot easily lock the creature state machine.
+
+### `care.py`
+
+Pure bond-progression rules and data structures.
+
+Responsibilities include bond state normalization, XP thresholds, and activity reward constants. Presentation code should consume these rules rather than duplicate them.
+
+### `focus.py`
+
+Focus-session domain model: focus/break phase, elapsed-time accounting, rounds, and reward calculation.
+
+This layer remains usable without GTK so time/reward boundaries can be regression-tested directly.
+
+### `presence/bond_meter.py`
+
+Integration layer connecting runtime activities to persistent bond progress and coordinating level-up/unlock presentation.
+
+It must not create an independent behavior state machine.
+
+### `presence/feeding.py`
+
+User-triggered Feed interaction.
+
+Owns Feed entry/completion hooks and the authored `EATING` lifecycle while leaving future care policy separate from animation playback.
+
+### `presence/emote_catalogue.py`
+
+User-facing bond-aware catalogue UI and preview lifecycle.
+
+The catalogue reflects bond state; it does not own bond progression.
+
+### `presence/focus_session.py`
+
+GTK/runtime integration for Focus with Mochi: setup/timer surfaces, long-running source ownership, presentation coordination, Rain ambience, and bond-reward handoff.
+
+The current mixin is known composition debt: future refactoring should extract long-lived lifecycle ownership without changing user behavior.
 
 ## Rendering model
 
@@ -185,10 +221,12 @@ Feature modules should not call `StateMachine.transition_to()` directly.
 
 Avoid:
 
-- a second animation controller for one new feature
-- separate unmanaged GLib timers for each emote
-- visual state changes that bypass behavioral state
+- a second behavior/state machine for one new feature
+- separate unmanaged GLib timers for each emote/session
+- long-running audio without explicit ownership/teardown
+- visual state changes that bypass behavioral/presentation state
 - input handlers that directly swap sprites without a defined state transition
+- reward/persistence logic duplicated inside GTK callbacks
 
 The desired priority model is generally:
 
