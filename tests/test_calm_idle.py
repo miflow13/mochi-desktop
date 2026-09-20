@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -57,3 +58,10 @@ def test_idle_opportunities_are_spaced_out() -> None:
 def test_idle_movement_is_deliberately_low_probability() -> None:
     assert Buddy.IDLE_WALK_CHANCE == 0.10
     assert Buddy.IDLE_CATALOGUE_EMOTE_CHANCE == 0.20
+
+
+def test_buddy_starts_in_static_idle_without_flashing_breathing_loop() -> None:
+    source = inspect.getsource(Buddy.__init__)
+
+    assert 'initial_idle = self._animation_for("idle")' in source
+    assert 'self.player.play(ANIMATIONS["idle"])' not in source
