@@ -74,21 +74,18 @@ focus-specific writing animation. The focus-session clock is separate from
 behavioral animation state, allowing click, drag, feed, level-up presentation,
 and similar temporary interactions to occur without destroying the timer.
 
-## Audio follow-up
+## Audio
 
-Nature sounds and focus soundscapes are intentionally not bundled in this first
-slice because the repository does not currently contain approved looping focus
-audio assets.
-
-The follow-up should add optional local soundscapes through a separate
-long-running audio channel from Mochi's short interaction sounds. It must remain
-fully local, optional, independently volume-controlled, and safe when an audio
-backend or asset is unavailable.
+Nature sounds and focus soundscapes were intentionally excluded from the first
+Focus slice until an approved looping asset was available. The supplied
+`mochi_rain.wav` adds that follow-up through a separate long-running audio
+channel from Mochi's short interaction sounds. It remains fully local, optional,
+independently volume-controlled, and safe when an audio backend is unavailable.
 
 Approved `.ogg` or `.wav` loops can be added to `assets/audio/focus/` later.
 No soundscape chooser is shown until at least one approved asset is present.
-The supplied `mochi_rain.wav` enables a Rain sounds toggle and independent
-volume control in setup and during a live session.
+The Rain sounds toggle and independent volume control appear in setup and during
+a live session when `mochi_rain.wav` is installed.
 
 ## QA
 

@@ -128,3 +128,14 @@ def test_large_elapsed_step_crosses_breaks_without_losing_phase_order() -> None:
     )
     assert session.focus_minutes_completed == 10
     assert session.phase is FocusPhase.COMPLETE
+
+
+def test_fractional_ticks_do_not_drop_the_last_minute_at_completion() -> None:
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    xp_earned = 0
+
+    while session.active:
+        xp_earned += session.advance(0.3).xp_earned
+
+    assert session.focus_minutes_completed == 5
+    assert xp_earned == 5 * FOCUS_XP_PER_MINUTE + FOCUS_COMPLETION_BONUS_XP
