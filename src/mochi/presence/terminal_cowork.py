@@ -236,7 +236,7 @@ class TerminalCoworkMixin:
             or self._user_idle
             or self.state.current is not MochiState.IDLE
             or self._context_menu_open
-            or self.player.animation is not ANIMATIONS["idle"]
+            or not self._is_idle_visual_active()
             or (
                 self._media_monitor is not None
                 and self._media_monitor.youtube_playing

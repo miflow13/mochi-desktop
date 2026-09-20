@@ -696,7 +696,7 @@ class PresenceBuddyMixin:
             or self._user_idle
             or self.state.current is not MochiState.IDLE
             or self._context_menu_open
-            or self.player.animation is not ANIMATIONS["idle"]
+            or not self._is_idle_visual_active()
         ):
             return False
         if not self._start_typing_emote():
