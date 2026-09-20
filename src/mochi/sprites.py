@@ -38,7 +38,7 @@ ANIMATIONS["computer_outro"] = replace(
     ANIMATIONS["computer"], name="computer_outro", frames=computer_frames[12:]
 )
 idle_frames = ANIMATIONS["idle"].frames
-idle_durations = (750, 500, 350, 900, 400, 1_000)
+idle_durations = (900, 600, 450, 1_100, 500, 1_400)
 idle_cycle = tuple(
     replace(frame, duration_ms=duration)
     for frame, duration in zip(idle_frames, idle_durations, strict=True)
