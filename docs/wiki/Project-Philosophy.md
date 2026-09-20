@@ -212,22 +212,32 @@ A passing test suite cannot tell whether:
 
 Runtime behavior needs both automated tests and visual interaction testing.
 
-## 17. Public alpha should stay focused
+## 17. Care and progression must stay non-punitive
 
-The alpha is about proving the companion core.
+v0.3 intentionally adds feeding, bond XP, levels, unlocks, and Focus rewards. Those systems are acceptable because they reinforce companionship without creating obligations.
 
-Do not prematurely add:
+Protect that design.
 
-- hunger
-- feeding
-- health
-- XP
-- shops
-- inventory
-- AI/chat
-- large progression systems
+Prefer:
 
-unless the project scope is intentionally changed.
+- persistent, non-decaying progress
+- positive rewards for shared activity
+- optional interactions
+- character expression over numeric optimization
+- pauses/stops without penalties
+- easy recovery after time away
+
+Avoid:
+
+- hunger/fullness decay that punishes absence
+- daily streak pressure
+- missed-day penalties
+- failure/death states
+- manipulative notification loops
+- grind-heavy currencies or shops
+- productivity scoring disguised as companionship
+
+Future progression should make Mochi more expressive, not make the user responsible for keeping a meter alive.
 
 ## 18. Preserve recoverability during development
 
