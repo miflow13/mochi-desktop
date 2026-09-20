@@ -31,6 +31,7 @@ class MochiApplication(Gtk.Application):
         self.config = config
         self.preview_animations = preview_animations
         self._logger = logging.getLogger(__name__)
+        self._window: Gtk.ApplicationWindow | None = None
         self._buddy: PresenceBuddy | PresenceX11Buddy | None = None
         self.sound = SoundManager(
             volume=config.load_volume(),
@@ -38,12 +39,15 @@ class MochiApplication(Gtk.Application):
         )
 
     def do_activate(self) -> None:
-        existing = self.get_active_window()
+        existing = self._window or self.get_active_window()
         if existing is not None:
+            # A pot-hidden Mochi still owns the same application window. Present
+            # that window again instead of creating a second buddy instance.
             existing.present()
             return
 
         window = Gtk.ApplicationWindow(application=self)
+        self._window = window
         window.add_css_class("mochi-buddy-window")
         window.set_title("Mochi Animation Preview" if self.preview_animations else "Mochi")
         window.set_decorated(False)
@@ -232,6 +236,7 @@ class MochiApplication(Gtk.Application):
         if self._buddy is not None:
             self._buddy.shutdown_presence()
             self._buddy = None
+        self._window = None
         if not self.preview_animations:
             self.sound.play(SoundEvent.EXIT)
         Gtk.Application.do_shutdown(self)
