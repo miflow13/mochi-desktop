@@ -15,7 +15,6 @@ class EmoteDefinition:
     required_bond_level: int | None
     available: bool = True
     rarity: str = "common"
-    idle_eligible: bool = False
     reveal_on_unlock: bool = False
 
     def is_unlocked(self, state: BondState, *, unlock_all: bool = False) -> bool:
@@ -37,7 +36,6 @@ EMOTE_CATALOGUE = (
         "side_eye",
         2,
         rarity="uncommon",
-        idle_eligible=True,
         reveal_on_unlock=True,
     ),
     EmoteDefinition("look", "Look Around", "look", 3, rarity="rare"),
@@ -47,7 +45,6 @@ EMOTE_CATALOGUE = (
         "table_flip",
         3,
         rarity="rare",
-        idle_eligible=True,
         reveal_on_unlock=True,
     ),
     EmoteDefinition(
@@ -100,16 +97,23 @@ def newly_unlocked_emotes(
     )
 
 
-def unlocked_idle_animation_names(
+def unlocked_emote_animation_names(
     state: BondState | None,
     *,
     unlock_all: bool = False,
 ) -> tuple[str, ...]:
+    """Return every unlocked catalogue animation in catalogue order.
+
+    Catalogue membership is the behavior contract: once a real emote is added
+    to EMOTE_CATALOGUE and unlocked, it automatically becomes available to
+    Mochi\'s autonomous emote pool. Scheduling/frequency stays outside this
+    module so adding emotes increases variety without making Mochi noisier.
+    """
+
     current = state or BondState()
     return tuple(
         emote.animation
         for emote in EMOTE_CATALOGUE
-        if emote.idle_eligible
-        and emote.animation is not None
+        if emote.animation is not None
         and emote.is_unlocked(current, unlock_all=unlock_all)
     )
