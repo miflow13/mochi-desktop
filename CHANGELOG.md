@@ -6,6 +6,10 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ## Unreleased
 
+### Added
+
+- Added **Wave**, **VS Code**, and **Mochi.exe** to the Bond-aware Emote Catalogue, replacing the three placeholder mystery cards with authored animated previews and new bond unlocks.
+
 ### Changed
 
 - Nameplate is now ephemeral: it appears while Mochi is hovered, remains briefly after speech, then fades away to reduce persistent desktop clutter. Temporary care/interaction feedback may still surface it when needed.
