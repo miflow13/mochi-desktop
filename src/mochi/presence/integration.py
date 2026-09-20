@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 import time
 
 from gi.repository import GLib, Gtk
@@ -166,25 +165,9 @@ class PresenceBuddyMixin:
         self._logger.info("Stay put %s", "enabled" if self._stay_put else "disabled")
 
     def _choose_idle_action(self) -> bool:
-        """Suppress only autonomous walking while Stay put is enabled."""
-        if not self._stay_put or self._user_idle:
-            return super()._choose_idle_action()
+        """Keep catalogue emotes active while Stay put suppresses only walking."""
 
-        self._idle_action_source_id = None
-        try:
-            if self.state.current is not MochiState.IDLE or self._context_menu_open:
-                return GLib.SOURCE_REMOVE
-
-            # Keep the same 25% squish chance as the normal idle pool; only the
-            # autonomous walk slot is removed. Reading/other quiet emotes can be
-            # added to this ambient pool later without changing movement logic.
-            action = random.choice(("squish", None, None, None))
-            if action == "squish":
-                self._transition_to(MochiState.SQUISHING)
-                self._play_animation("squish")
-            return GLib.SOURCE_REMOVE
-        finally:
-            self._schedule_idle_action()
+        return self._choose_idle_action_with_walk(allow_walk=not self._stay_put)
 
     def _build_developer_menu(self):
         """Extend Mochi Lab with isolated AmbiSense controls.
