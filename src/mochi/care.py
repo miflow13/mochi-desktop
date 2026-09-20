@@ -9,7 +9,9 @@ import math
 BOND_BASE_XP = 480
 BOND_LEVEL_GROWTH_XP = 90
 BOND_TYPING_XP_PER_SECOND = 1
-BOND_FEED_XP = 60
+BOND_FEED_FIRST_XP = 30
+BOND_FEED_SECOND_XP = 10
+BOND_FEED_REWARD_WINDOW_SECONDS = 10 * 60
 DEFAULT_BOND_LEVEL = 1
 DEFAULT_BOND_XP = 0
 
@@ -19,6 +21,21 @@ def _coerce_int(value: object, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def bond_feed_reward_xp(completed_feeds_in_window: int) -> int:
+    """Return bond XP for the next feed in the current reward window.
+
+    Feeding stays available for character interaction, but only the first two
+    completed feeds after ten minutes of feed inactivity award bond XP.
+    """
+
+    completed = max(0, _coerce_int(completed_feeds_in_window, 0))
+    if completed == 0:
+        return BOND_FEED_FIRST_XP
+    if completed == 1:
+        return BOND_FEED_SECOND_XP
+    return 0
 
 
 def bond_xp_required(level: int) -> int:

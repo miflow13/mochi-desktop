@@ -2,9 +2,11 @@
 
 from mochi.care import (
     BOND_BASE_XP,
-    BOND_FEED_XP,
+    BOND_FEED_FIRST_XP,
+    BOND_FEED_SECOND_XP,
     BOND_TYPING_XP_PER_SECOND,
     BondState,
+    bond_feed_reward_xp,
     bond_xp_required,
 )
 
@@ -58,7 +60,20 @@ def test_invalid_or_negative_values_never_reduce_progress() -> None:
     assert state.award("bad").state == state
 
 
-def test_activity_awards_are_small_continuous_vs_feed_boost() -> None:
+def test_activity_awards_keep_first_feed_meaningful_without_full_level_grind() -> None:
     assert BOND_TYPING_XP_PER_SECOND == 1
-    assert BOND_FEED_XP == 60
-    assert BOND_FEED_XP > BOND_TYPING_XP_PER_SECOND
+    assert BOND_FEED_FIRST_XP == 30
+    assert BOND_FEED_SECOND_XP == 10
+    assert BOND_FEED_FIRST_XP > BOND_TYPING_XP_PER_SECOND
+
+
+def test_feed_rewards_diminish_after_two_completed_feeds() -> None:
+    assert bond_feed_reward_xp(0) == 30
+    assert bond_feed_reward_xp(1) == 10
+    assert bond_feed_reward_xp(2) == 0
+    assert bond_feed_reward_xp(20) == 0
+
+
+def test_feed_reward_position_is_normalized_safely() -> None:
+    assert bond_feed_reward_xp(-4) == 30
+    assert bond_feed_reward_xp("bad") == 30

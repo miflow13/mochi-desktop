@@ -6,11 +6,17 @@ from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from mochi.animation import AnimationPlayer
-from mochi.care import BOND_FEED_XP, BondState
+from mochi.care import (
+    BOND_FEED_FIRST_XP,
+    BOND_FEED_REWARD_WINDOW_SECONDS,
+    BOND_FEED_SECOND_XP,
+    BondState,
+)
 from mochi.emotes import EMOTES_BY_ID
 from mochi.focus import FocusPhase, FocusPlan, FocusSession
 from mochi.sprites import ANIMATIONS
 from mochi.presence.bond_meter import (
+    BOND_DEV_SWARM_XP,
     BOND_FEED_VISUAL_ORB_LIMIT,
     BOND_PERSIST_INTERVAL_XP,
     BondMeterMixin,
@@ -110,6 +116,8 @@ def _runtime_harness(state: BondState | None = None):
     harness._bond_progress_overlay.presentation_active = False
     harness._bond_typing_source_id = None
     harness._bond_unsaved_xp = 0
+    harness._bond_feed_last_completed_at = None
+    harness._bond_feed_count_in_window = 0
     harness._focus_session = None
     harness._config = Mock()
     harness._logger = Mock()
@@ -144,21 +152,22 @@ def test_restore_loads_persisted_relationship_state() -> None:
     )
 
 
-def test_completed_feed_awards_large_boost_persists_and_shows_bar() -> None:
+def test_first_completed_feed_awards_30_xp_persists_and_shows_bar() -> None:
     harness = object.__new__(_BondCompletionHarness)
     runtime = _runtime_harness(BondState(level=1, xp=10))
     harness.__dict__.update(runtime.__dict__)
     harness.completion_chain_calls = 0
     harness.state.current = MochiState.EATING
 
-    harness._on_feed_animation_completed()
+    with patch("mochi.presence.bond_meter.time.monotonic", return_value=100.0):
+        harness._on_feed_animation_completed()
 
-    assert harness._bond_state == BondState(level=1, xp=10 + BOND_FEED_XP)
+    assert harness._bond_state == BondState(level=1, xp=10 + BOND_FEED_FIRST_XP)
     harness._bond_orbs.queue_xp_bounded.assert_called_once_with(
-        BOND_FEED_XP,
+        BOND_FEED_FIRST_XP,
         max_outstanding=BOND_FEED_VISUAL_ORB_LIMIT,
     )
-    harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_FEED_XP)
+    harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_FEED_FIRST_XP)
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
     harness._bond_progress_overlay.show_activity.assert_called_once_with(
         BondState(level=1, xp=10),
@@ -166,9 +175,41 @@ def test_completed_feed_awards_large_boost_persists_and_shows_bar() -> None:
     )
     harness._bond_progress_overlay.notify_xp_gain.assert_called_once_with(
         harness._bond_state,
-        BOND_FEED_XP,
+        BOND_FEED_FIRST_XP,
     )
     harness._bond_progress_overlay.finish_activity.assert_called_once()
+    assert harness.completion_chain_calls == 1
+
+
+def test_feed_reward_window_is_30_then_10_then_zero_until_inactive_reset() -> None:
+    harness = _runtime_harness()
+
+    assert BondMeterMixin._next_feed_bond_reward(harness, now=100.0) == 30
+    assert BondMeterMixin._next_feed_bond_reward(harness, now=200.0) == 10
+    assert BondMeterMixin._next_feed_bond_reward(harness, now=300.0) == 0
+
+    reset_at = 300.0 + BOND_FEED_REWARD_WINDOW_SECONDS
+    assert BondMeterMixin._next_feed_bond_reward(harness, now=reset_at) == 30
+
+
+def test_zero_xp_feed_keeps_completion_chain_without_showing_xp_feedback() -> None:
+    harness = object.__new__(_BondCompletionHarness)
+    runtime = _runtime_harness(BondState(level=1, xp=75))
+    harness.__dict__.update(runtime.__dict__)
+    harness.completion_chain_calls = 0
+    harness.state.current = MochiState.EATING
+    harness._bond_feed_last_completed_at = 100.0
+    harness._bond_feed_count_in_window = 2
+
+    with patch("mochi.presence.bond_meter.time.monotonic", return_value=200.0):
+        harness._on_feed_animation_completed()
+
+    assert harness._bond_state == BondState(level=1, xp=75)
+    harness._bond_orbs.queue_xp_bounded.assert_not_called()
+    harness._bond_progress_overlay.show_activity.assert_not_called()
+    harness._bond_progress_overlay.notify_xp_gain.assert_not_called()
+    harness._bond_progress_overlay.finish_activity.assert_not_called()
+    harness._config.save_bond_state.assert_not_called()
     assert harness.completion_chain_calls == 1
 
 
@@ -403,10 +444,10 @@ def test_dev_swarm_is_visual_only() -> None:
 
     assert harness._bond_state == original
     harness._bond_orbs.queue_xp_bounded.assert_called_once_with(
-        BOND_FEED_XP,
-        max_outstanding=BOND_FEED_XP,
+        BOND_DEV_SWARM_XP,
+        max_outstanding=BOND_DEV_SWARM_XP,
     )
-    harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_FEED_XP)
+    harness._bond_orbs.show_gain_marker.assert_called_once_with(BOND_DEV_SWARM_XP)
     harness._config.save_bond_state.assert_not_called()
     harness.queue_draw.assert_called_once_with()
 
@@ -697,15 +738,15 @@ def test_feed_uses_visual_backlog_cap_without_reducing_real_xp() -> None:
 
     advance = BondMeterMixin._award_bond(
         harness,
-        BOND_FEED_XP,
+        BOND_FEED_FIRST_XP,
         persist=True,
         visual_orb_limit=BOND_FEED_VISUAL_ORB_LIMIT,
     )
 
-    assert advance.xp_awarded == BOND_FEED_XP
-    assert harness._bond_state == BondState(level=1, xp=100 + BOND_FEED_XP)
+    assert advance.xp_awarded == BOND_FEED_FIRST_XP
+    assert harness._bond_state == BondState(level=1, xp=100 + BOND_FEED_FIRST_XP)
     harness._bond_orbs.queue_xp_bounded.assert_called_once_with(
-        BOND_FEED_XP,
+        BOND_FEED_FIRST_XP,
         max_outstanding=BOND_FEED_VISUAL_ORB_LIMIT,
     )
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)

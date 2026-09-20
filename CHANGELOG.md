@@ -32,6 +32,7 @@ v0.3 expands Mochi from a reactive desktop buddy into a more persistent companio
 - Strengthened lifecycle handling around Focus pause/stop/sleep/shutdown and final-minute XP settlement.
 - Direct interaction continues to take priority over ambient and long-running presentation states.
 - Bond and Focus systems are explicitly designed without streaks, decay, missed-session penalties, or punishment for closing Mochi.
+- Rebalanced repeat feeding so completed feeds award **30 XP**, then **10 XP**, then **0 XP** until Mochi has gone 10 minutes without another completed feed; feeding itself always remains available.
 - Documentation, release guidance, and regression coverage now reflect the shipped v0.3 interaction surface.
 - Package/runtime version metadata is `0.3.0a1` (Python packaging form of `0.3.0-alpha.1`).
 
