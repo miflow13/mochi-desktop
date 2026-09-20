@@ -96,6 +96,9 @@ Briefly describe the issue.
 - [ ] Context menu
 - [ ] Sleep / wake
 - [ ] Walking
+- [ ] Feed / bond progression
+- [ ] Emote Catalogue / unlocks
+- [ ] Focus with Mochi
 - [ ] Emotes
 - [ ] Rendering / transparency
 - [ ] Audio
@@ -197,14 +200,18 @@ Do not describe a change as fully verified if compositor-level interaction was n
 
 For interaction-related changes, verify that the fix does not break:
 
-- single-click squish
-- double-click heart
-- pickup → drag → put-down
+- single-click / double-click / triple-click arbitration
+- pickup → drag → release recovery
 - context menu
 - Walk
 - Sleep/Wake
-- Emote
-- Computer/typing
+- Feed → heart → bond completion
+- Bond persistence and level-up recovery
+- Emote Catalogue open/close/hover and lock state
+- Focus start/pause/resume/stop/start
+- Focus interactions with drag/menu/feed/sleep
+- Rain audio ownership/teardown
+- Computer/typing/AmbiSense reactions
 - idle recovery
 
 For art changes, verify:
