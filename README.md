@@ -36,6 +36,7 @@ through the time you naturally spend together.
 > **Early public alpha.** Fedora + GNOME + Wayland is the primary tested
 > environment. On GNOME Wayland, Mochi uses XWayland for the buddy window where
 > native positioning restrictions require it.
+
 ---
 
 ## v0.3 — Growing Together 🌱
