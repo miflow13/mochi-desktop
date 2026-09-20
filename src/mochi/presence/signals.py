@@ -316,10 +316,12 @@ class AppCategorySignalAdapter:
         self,
         *,
         on_category_changed: Callable[[str], None],
+        on_category_snapshot: Callable[[str], None] | None = None,
         logger: logging.Logger | None = None,
         gio_loader: Callable[[], tuple[object, object]] | None = None,
     ) -> None:
         self._on_category_changed = on_category_changed
+        self._on_category_snapshot = on_category_snapshot
         self._logger = logger or logging.getLogger(__name__)
         self._gio_loader = gio_loader or self._load_gio
         self._helper = None
@@ -360,8 +362,16 @@ class AppCategorySignalAdapter:
 
     def _on_state(self, state) -> None:
         """Apply the first helper state as a baseline, later ones as changes."""
-        self._set_category(state[3], emit=self._received_initial_state)
-        self._received_initial_state = True
+        category = state[3]
+        if not self._received_initial_state:
+            self._received_initial_state = True
+            if category in self.ALLOWED:
+                self.category = category
+            self._logger.debug("[presence] app category baseline=%s", self.category)
+            if self._on_category_snapshot is not None:
+                self._on_category_snapshot(self.category)
+            return
+        self._set_category(category)
 
     def _on_category_signal(
         self,

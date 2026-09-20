@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import random
+from unittest.mock import Mock
+
+import gi
+import pytest
+
+gi.require_version("Gtk", "4.0")
 
 from mochi.presence.context import AmbientContext, TypingIntensity
 from mochi.presence.cooldowns import CooldownTracker
 from mochi.presence.engine import PresenceEngine, PresenceTuning, speech_display_seconds
+from mochi.presence.integration import PresenceBuddyMixin
 from mochi.presence.phrases import PhraseBank
 from mochi.presence.signals import NetworkSignalAdapter, TypingIntensityTracker, UPowerSignalAdapter
 
@@ -112,6 +119,85 @@ def test_vscode_specific_phrases_only_participate_in_vscode_context():
         for _ in range(500)
     )
     assert vscode_engine.phrases.choose("vscode")
+
+
+def test_context_profiles_preserve_personality_and_add_relevant_categories():
+    expected_context_categories = {
+        "vscode": {"vscode", "developer"},
+        "editor": {"developer"},
+        "terminal": {"terminal", "developer"},
+        "browser": {"browser"},
+        "pixel_art": {"creative"},
+    }
+    generic = {"ambient", "encouragement", "companionship"}
+
+    for index, (app_category, relevant) in enumerate(
+        expected_context_categories.items()
+    ):
+        engine = PresenceEngine(
+            tuning=generous_tuning(),
+            rng=random.Random(100 + index),
+            clock=Clock(),
+        )
+        context = AmbientContext(
+            current_app_category=app_category,
+            session_duration=10,
+        )
+        selected = {
+            engine._select_unsolicited_category(context)
+            for _ in range(2_000)
+        }
+
+        assert relevant <= selected
+        assert selected & generic
+
+
+def test_unknown_context_stays_generic_and_editor_never_uses_vscode_lines():
+    generic = {"ambient", "encouragement", "companionship"}
+    unknown_engine = PresenceEngine(
+        tuning=generous_tuning(), rng=random.Random(31), clock=Clock()
+    )
+    editor_engine = PresenceEngine(
+        tuning=generous_tuning(), rng=random.Random(32), clock=Clock()
+    )
+    unknown = AmbientContext(current_app_category="unknown", session_duration=10)
+    editor = AmbientContext(current_app_category="editor", session_duration=10)
+
+    assert {
+        unknown_engine._select_unsolicited_category(unknown)
+        for _ in range(1_000)
+    } <= generic
+    assert all(
+        editor_engine._select_unsolicited_category(editor) != "vscode"
+        for _ in range(1_000)
+    )
+
+
+def test_contextual_weighting_materially_increases_relevant_dialogue():
+    relevant_by_context = {
+        "vscode": {"vscode", "developer"},
+        "editor": {"developer"},
+        "terminal": {"terminal", "developer"},
+        "browser": {"browser"},
+        "pixel_art": {"creative"},
+    }
+
+    for index, (app_category, relevant) in enumerate(relevant_by_context.items()):
+        engine = PresenceEngine(
+            tuning=generous_tuning(),
+            rng=random.Random(200 + index),
+            clock=Clock(),
+        )
+        context = AmbientContext(
+            current_app_category=app_category,
+            session_duration=10,
+        )
+        relevant_count = sum(
+            engine._select_unsolicited_category(context) in relevant
+            for _ in range(1_000)
+        )
+
+        assert relevant_count >= 150, app_category
 
 
 def test_event_priority_prefers_system_reaction():
@@ -237,6 +323,45 @@ def test_quiet_mode_suppression():
     assert engine.evaluate(AmbientContext(), now=0) is None
 
 
+@pytest.mark.parametrize(
+    ("tuning_overrides", "context_overrides"),
+    (
+        ({"speech_enabled": False}, {}),
+        ({"ambient_reactions_enabled": False}, {}),
+        ({}, {"context_menu_open": True}),
+        ({}, {"interaction_active": True}),
+        ({}, {"transition_active": True}),
+        ({}, {"overlay_visible": True}),
+        ({}, {"mochi_state": "sleeping"}),
+    ),
+)
+def test_context_routing_preserves_existing_suppression(
+    tuning_overrides,
+    context_overrides,
+):
+    engine = PresenceEngine(
+        tuning=generous_tuning(**tuning_overrides),
+        rng=random.Random(1),
+        clock=Clock(),
+    )
+
+    assert engine.evaluate(
+        AmbientContext(current_app_category="browser", **context_overrides),
+        now=0,
+    ) is None
+
+
+def test_playing_media_keeps_priority_over_browser_chatter():
+    engine = PresenceEngine(
+        tuning=generous_tuning(), rng=random.Random(1), clock=Clock()
+    )
+
+    assert engine.evaluate(
+        AmbientContext(current_app_category="browser", media_playing=True),
+        now=0,
+    ) is None
+
+
 def test_dragging_and_pickup_suppression():
     clock = Clock()
     for state in ("dragged", "pickup"):
@@ -288,6 +413,106 @@ def test_app_category_adapter_accepts_only_coarse_allow_list():
 
     assert seen == ["editor", "vscode", "pixel_art"]
     assert adapter.category == "pixel_art"
+
+
+def test_app_category_initial_snapshot_syncs_without_change_event():
+    from mochi.presence.signals import AppCategorySignalAdapter
+
+    snapshots = []
+    changes = []
+    adapter = AppCategorySignalAdapter(
+        on_category_snapshot=snapshots.append,
+        on_category_changed=changes.append,
+    )
+
+    adapter._on_state((False, False, False, "vscode"))
+
+    assert adapter.category == "vscode"
+    assert snapshots == ["vscode"]
+    assert changes == []
+
+    class Params:
+        def unpack(self):
+            return ("terminal",)
+
+    adapter._on_category_signal(None, None, None, None, None, Params())
+
+    assert snapshots == ["vscode"]
+    assert changes == ["terminal"]
+
+
+def test_presence_snapshot_updates_context_without_transition_side_effects():
+    buddy = object.__new__(PresenceBuddyMixin)
+    buddy._presence_app_category = "unknown"
+    buddy._logger = Mock()
+    buddy._on_user_active = Mock()
+    buddy._schedule_vscode_coworking = Mock()
+    buddy._stop_vscode_coworking = Mock()
+
+    PresenceBuddyMixin._on_presence_app_category_snapshot(buddy, "vscode")
+
+    assert buddy._presence_app_category == "vscode"
+    buddy._on_user_active.assert_not_called()
+    buddy._schedule_vscode_coworking.assert_not_called()
+    buddy._stop_vscode_coworking.assert_not_called()
+
+
+def test_real_category_change_runs_normal_transition_path():
+    buddy = object.__new__(PresenceBuddyMixin)
+    buddy._presence_app_category = "editor"
+    buddy._logger = Mock()
+    buddy._on_user_active = Mock()
+    buddy._schedule_vscode_coworking = Mock()
+    buddy._stop_vscode_coworking = Mock()
+    buddy._vscode_coworking_active = False
+
+    PresenceBuddyMixin._on_presence_app_category_changed(buddy, "vscode")
+
+    assert buddy._presence_app_category == "vscode"
+    buddy._on_user_active.assert_called_once_with()
+    buddy._schedule_vscode_coworking.assert_called_once_with()
+    buddy._stop_vscode_coworking.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("app_category", "phrase_category"),
+    (
+        ("browser", "browser"),
+        ("vscode", "vscode"),
+        ("terminal", "terminal"),
+        ("editor", "developer"),
+        ("pixel_art", "creative"),
+        ("unknown", "ambient"),
+    ),
+)
+def test_contextual_preview_uses_production_app_categories(
+    app_category,
+    phrase_category,
+):
+    buddy = object.__new__(PresenceBuddyMixin)
+    buddy._presence_app_category = app_category
+    buddy._preview_presence_category = Mock()
+
+    PresenceBuddyMixin._test_presence_contextual(buddy, Mock())
+
+    buddy._preview_presence_category.assert_called_once_with(phrase_category)
+
+
+def test_developer_preview_does_not_spend_production_cooldowns():
+    engine = PresenceEngine(
+        tuning=generous_tuning(), rng=random.Random(1), clock=Clock()
+    )
+    buddy = object.__new__(PresenceBuddyMixin)
+    buddy._ambient_presence_engine = engine
+    buddy._presence_bubble = Mock()
+    buddy._presence_bubble.show.return_value = True
+    buddy._dismiss_presence_bubble = Mock()
+    buddy._logger = Mock()
+    history_before = tuple(engine.cooldowns._history)
+
+    PresenceBuddyMixin._preview_presence_category(buddy, "browser")
+
+    assert tuple(engine.cooldowns._history) == history_before
 
 
 def test_upower_reacts_only_to_meaningful_transitions():

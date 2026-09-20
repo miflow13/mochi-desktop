@@ -83,6 +83,7 @@ class PresenceBuddyMixin:
         )
         self._system_signal_monitor.start()
         self._app_category_monitor = AppCategorySignalAdapter(
+            on_category_snapshot=self._on_presence_app_category_snapshot,
             on_category_changed=self._on_presence_app_category_changed,
             logger=self._logger,
         )
@@ -420,10 +421,10 @@ class PresenceBuddyMixin:
         category = {
             "vscode": "vscode",
             "editor": "developer",
-            "terminal": "developer",
+            "terminal": "terminal",
             "pixel_art": "creative",
             "media": "media",
-            "browser": "focus",
+            "browser": "browser",
         }.get(self._presence_app_category, "ambient")
         self._preview_presence_category(category)
 
@@ -604,9 +605,15 @@ class PresenceBuddyMixin:
         self._ambient_presence_engine.note_session_returned()
         self._on_user_active()
 
+    def _on_presence_app_category_snapshot(self, category: str) -> None:
+        """Synchronize startup context without inventing a focus transition."""
+        self._presence_app_category = category
+        self._logger.debug("[presence] context app=%s (baseline)", category)
+
     def _on_presence_app_category_changed(self, category: str) -> None:
         previous = self._presence_app_category
         self._presence_app_category = category
+        self._logger.debug("[presence] context app=%s -> %s", previous, category)
         if category != previous and category in ("terminal", "vscode"):
             self._on_user_active()
         if category == "vscode":
