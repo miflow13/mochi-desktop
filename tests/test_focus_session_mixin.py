@@ -7,7 +7,11 @@ from unittest.mock import Mock, patch
 
 from mochi.buddy import Buddy
 from mochi.focus import FocusPhase, FocusPlan, FocusSession
-from mochi.presence.focus_session import FocusSessionMixin, FocusWindow
+from mochi.presence.focus_session import (
+    FocusSessionMixin,
+    FocusWindow,
+    _focus_window_position_for_anchor,
+)
 from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState, StateMachine
 
@@ -125,7 +129,7 @@ def test_focus_window_positions_beside_full_mochi_bounds() -> None:
         "mochi.presence.focus_session._window_coordinate_scale",
         return_value=1.0,
     ), patch(
-        "mochi.presence.focus_session.menu_position_for_anchor",
+        "mochi.presence.focus_session._focus_window_position_for_anchor",
         return_value=(940, 350),
     ) as position, patch(
         "mochi.presence.focus_session.move_window",
@@ -135,8 +139,72 @@ def test_focus_window_positions_beside_full_mochi_bounds() -> None:
 
     assert result == 0
     position.assert_called_once()
+    assert position.call_args.args[2] == 400
+    assert position.call_args.args[3] == 128
     assert position.call_args.kwargs["anchor_width"] == 128
     move.assert_called_once_with(focus_window.window, 940, 350)
+
+
+def test_focus_window_prefers_above_mochi_near_bottom_edge() -> None:
+    monitors = [
+        SimpleNamespace(x=0, y=0, width=1920, height=1080),
+    ]
+
+    x, y = _focus_window_position_for_anchor(
+        864,
+        984,
+        920,
+        128,
+        420,
+        455,
+        monitors,
+        anchor_width=128,
+    )
+
+    assert x >= 0
+    assert y == 449
+    assert y + 455 + 16 == 920
+    assert y + 455 < 1080 - 12
+
+
+def test_focus_window_stays_vertically_beside_mochi_when_it_fits() -> None:
+    monitors = [
+        SimpleNamespace(x=0, y=0, width=1920, height=1080),
+    ]
+
+    _x, y = _focus_window_position_for_anchor(
+        864,
+        464,
+        400,
+        128,
+        420,
+        455,
+        monitors,
+        anchor_width=128,
+    )
+
+    assert y == round(464 - 455 / 2)
+
+
+def test_focus_window_uses_below_mochi_near_top_edge() -> None:
+    monitors = [
+        SimpleNamespace(x=0, y=0, width=1920, height=1080),
+    ]
+
+    _x, y = _focus_window_position_for_anchor(
+        864,
+        84,
+        20,
+        128,
+        420,
+        455,
+        monitors,
+        anchor_width=128,
+    )
+
+    assert y == 164
+    assert y == 20 + 128 + 16
+
 
 
 def test_focus_window_hide_notifies_the_thinking_lifecycle() -> None:
