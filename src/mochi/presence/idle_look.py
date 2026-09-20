@@ -63,9 +63,7 @@ class IdleLookMixin:
         return bool(
             not getattr(self, "_presence_shutting_down", False)
             and not self._user_idle
-            and self.state.current is MochiState.IDLE
-            and self._current_animation == "idle"
-            and self.player.animation is ANIMATIONS["idle"]
+            and self._is_idle_visual_active()
         )
 
     def _play_idle_look(self) -> bool:
@@ -88,15 +86,21 @@ class IdleLookMixin:
         frame_index, elapsed_ms = self._idle_look_resume_position or (0, 0)
         self._idle_look_resume_position = None
         self._idle_look_active = False
+        idle_animation = self._animation_for("idle")
+        frame_index = min(frame_index, len(idle_animation.frames) - 1)
         self._current_animation = "idle"
-        self._active_animation = ANIMATIONS["idle"]
+        self._active_animation = idle_animation
         self._pending_animation = None
         self.player.play(
-            ANIMATIONS["idle"],
+            idle_animation,
             frame_index=frame_index,
             elapsed_ms=elapsed_ms,
         )
-        self._logger.debug("Animation: %s -> idle (resumed)", self.IDLE_LOOK_ANIMATION)
+        self._logger.debug(
+            "Animation: %s -> idle (resumed%s)",
+            self.IDLE_LOOK_ANIMATION,
+            "" if idle_animation.name == "idle" else f": {idle_animation.name}",
+        )
         self.queue_draw()
         self._schedule_idle_look()
         if resume_ambient:

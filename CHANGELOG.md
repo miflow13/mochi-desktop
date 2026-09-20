@@ -9,6 +9,11 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 ### Added
 
 - Added **Wave**, **VS Code**, and **Mochi.exe** to the Bond-aware Emote Catalogue, replacing the three placeholder mystery cards with authored animated previews and new bond unlocks.
+- Added **Coffee** as a completed Bond-aware catalogue emote with an animated hover preview.
+- Added **Focus with Mochi** sessions with configurable focus/break rounds,
+  optional rain ambience, bond XP, and dedicated menu/setup-thinking and
+  writing animations.
+- Added a dedicated breathing idle animation for Mochi's persistent sad mood.
 
 ### Changed
 

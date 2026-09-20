@@ -12,6 +12,7 @@ from mochi.emotes import (
 
 def test_bond_emotes_unlock_at_requested_levels() -> None:
     assert EMOTES_BY_ID["wave"].is_unlocked(BondState(level=1))
+    assert EMOTES_BY_ID["coffee"].is_unlocked(BondState(level=1))
     assert not EMOTES_BY_ID["side-eye"].is_unlocked(BondState(level=1))
     assert EMOTES_BY_ID["side-eye"].is_unlocked(BondState(level=2))
     assert not EMOTES_BY_ID["table-flip"].is_unlocked(BondState(level=2))
@@ -43,12 +44,14 @@ def test_autonomous_pool_tracks_every_unlocked_catalogue_animation() -> None:
         "bounce",
         "squish",
         "wave",
+        "coffee",
     )
     assert unlocked_emote_animation_names(BondState(level=3)) == (
         "heart",
         "bounce",
         "squish",
         "wave",
+        "coffee",
         "side_eye",
         "look",
         "table_flip",
@@ -58,6 +61,7 @@ def test_autonomous_pool_tracks_every_unlocked_catalogue_animation() -> None:
         "bounce",
         "squish",
         "wave",
+        "coffee",
         "side_eye",
         "look",
         "table_flip",

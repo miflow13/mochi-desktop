@@ -462,7 +462,7 @@ class Buddy(Gtk.DrawingArea):
         if (
             self.state.current is not MochiState.IDLE
             or self._context_menu_open
-            or self.player.animation is not ANIMATIONS["idle"]
+            or not self._is_idle_visual_active()
         ):
             return False
         if (
@@ -481,7 +481,7 @@ class Buddy(Gtk.DrawingArea):
         if (
             self.state.current is not MochiState.IDLE
             or self._context_menu_open
-            or self.player.animation is not ANIMATIONS["idle"]
+            or not self._is_idle_visual_active()
         ):
             return False
         if not self._transition_to(MochiState.COMPUTER):
@@ -764,17 +764,49 @@ class Buddy(Gtk.DrawingArea):
             ):
                 self._schedule_computer_idle_emote()
 
+    def _animation_name_for_mood(self, name: str) -> str:
+        """Resolve a semantic animation name to an installed mood variant."""
+        resolver = getattr(self, "_resolve_mood_animation_name", None)
+        if callable(resolver):
+            resolved = resolver(name, ANIMATIONS)
+            if resolved in ANIMATIONS:
+                return resolved
+        return name
+
+    def _animation_for(self, name: str):
+        return ANIMATIONS[self._animation_name_for_mood(name)]
+
+    def _is_idle_visual_active(self) -> bool:
+        """True when Mochi is semantically in the standing-idle presentation."""
+        return (
+            self.state.current is MochiState.IDLE
+            and self._current_animation == "idle"
+            and self.player.animation is not None
+        )
+
+    def _walk_speed_multiplier(self) -> float:
+        provider = getattr(self, "_mood_walk_speed_multiplier", None)
+        if not callable(provider):
+            return 1.0
+        try:
+            return max(0.1, float(provider()))
+        except (TypeError, ValueError):
+            return 1.0
+
     def _play_animation(self, name: str, after: str | None = None) -> None:
         previous = self._current_animation
-        if name == "blink" and self.player.animation is ANIMATIONS["idle"]:
+        if name == "blink" and self._is_idle_visual_active():
             self._idle_resume_position = (
                 self.player.frame_index,
                 self.player.elapsed_ms,
             )
         elif name != "blink":
             self._idle_resume_position = None
+
+        # Keep _current_animation semantic ("idle", "walk", "walk_left") even
+        # when the player renders a mood-specific asset such as "sad_idle".
         self._current_animation = name
-        animation = ANIMATIONS[name]
+        animation = self._animation_for(name)
         if name == "pickup":
             animation = replace(
                 animation,
@@ -783,7 +815,15 @@ class Buddy(Gtk.DrawingArea):
         self._active_animation = animation
         self._pending_animation = after if after is not None else animation.next_state
         self.player.play(animation)
-        self._logger.debug("Animation: %s -> %s", previous, name)
+        if animation.name == name:
+            self._logger.debug("Animation: %s -> %s", previous, name)
+        else:
+            self._logger.debug(
+                "Animation: %s -> %s (mood variant: %s)",
+                previous,
+                name,
+                animation.name,
+            )
         self.queue_draw()
 
     def _begin_pickup(self) -> bool:
@@ -798,14 +838,20 @@ class Buddy(Gtk.DrawingArea):
         frame_index, elapsed_ms = self._idle_resume_position or (0, 0)
         self._idle_resume_position = None
         previous = self._current_animation
+        idle_animation = self._animation_for("idle")
+        frame_index = min(frame_index, len(idle_animation.frames) - 1)
         self._current_animation = "idle"
-        self._active_animation = ANIMATIONS["idle"]
+        self._active_animation = idle_animation
         self.player.play(
-            ANIMATIONS["idle"],
+            idle_animation,
             frame_index=frame_index,
             elapsed_ms=elapsed_ms,
         )
-        self._logger.debug("Animation: %s -> idle (resumed)", previous)
+        self._logger.debug(
+            "Animation: %s -> idle (resumed%s)",
+            previous,
+            "" if idle_animation.name == "idle" else f": {idle_animation.name}",
+        )
         self.queue_draw()
         self._maybe_resume_ambient_activity()
 
@@ -878,7 +924,7 @@ class Buddy(Gtk.DrawingArea):
             if (
                 self.state.current is MochiState.IDLE
                 and not self._context_menu_open
-                and self.player.animation is ANIMATIONS["idle"]
+                and self._is_idle_visual_active()
             ):
                 self._play_blink()
             return GLib.SOURCE_REMOVE
@@ -982,21 +1028,27 @@ class Buddy(Gtk.DrawingArea):
         actual_distance = math.hypot(target.x - origin.x, target.y - origin.y)
         if actual_distance < WalkMotion.MIN_DISTANCE:
             return
-        cycle_duration_ms = (
-            len(ANIMATIONS["walk"].frames)
-            * ANIMATIONS["walk"].frame_duration_ms
+
+        walk_name = choose_walk_animation(
+            (origin.x, origin.y),
+            (target.x, target.y),
+        )
+        walk_animation = self._animation_for(walk_name)
+        cycle_duration_ms = sum(
+            frame.duration_ms or walk_animation.frame_duration_ms
+            for frame in walk_animation.frames
         )
         self._walk_motion = WalkMotion(
             origin=(origin.x, origin.y),
             target=(target.x, target.y),
             cycle_duration_ms=cycle_duration_ms,
-            speed_px_per_second=self.WALK_SPEED_PX_PER_SECOND,
+            speed_px_per_second=(
+                self.WALK_SPEED_PX_PER_SECOND * self._walk_speed_multiplier()
+            ),
         )
         self._walk_elapsed_ms = 0
         self._transition_to(MochiState.WALKING)
-        self._play_animation(
-            choose_walk_animation((origin.x, origin.y), (target.x, target.y))
-        )
+        self._play_animation(walk_name)
 
     def _advance_walk(self, elapsed_ms: int | None = None) -> None:
         if self._walk_motion is None:

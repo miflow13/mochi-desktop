@@ -27,6 +27,8 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 
 - `default` — canonical single-frame fallback.
 - `idle` — breathing/base idle loop.
+- `sad_idle` — optional sad-mood breathing loop selected through the mood
+  resolver while Mochi remains semantically idle.
 - `blink` — one-shot blink layered into idle behavior.
 - `walk`, `walk_left` — autonomous/manual walking loops.
 - `pickup` — transition into being held.
@@ -40,6 +42,7 @@ Do not keep export ZIPs, spritesheets, Pixelorama source files, temporary render
 - `squish` — tactile click reaction.
 - `heart` — affectionate one-shot emote.
 - `wave` — friendly catalogue emote available from the starting bond level.
+- `coffee` — one-shot catalogue caffeine-break emote.
 - `vs_code` — bond-gated coding-themed catalogue emote.
 - `mochi_exe` — high-bond legendary catalogue emote.
 - `fedora_intro`, `fedora_loop`, `fedora_outro` — hidden six-click Fedora-mode hat transition, held loop, and exit transition.

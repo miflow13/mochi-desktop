@@ -30,6 +30,7 @@ EMOTE_CATALOGUE = (
     EmoteDefinition("bounce", "Bounce", "bounce", 1, rarity="common"),
     EmoteDefinition("squish", "Squish", "squish", 1, rarity="uncommon"),
     EmoteDefinition("wave", "Wave", "wave", 1, rarity="common"),
+    EmoteDefinition("coffee", "Coffee", "coffee", 1, rarity="common"),
     EmoteDefinition(
         "side-eye",
         "Side Eye",

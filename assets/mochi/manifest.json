@@ -43,6 +43,23 @@
       "fps": 1.5,
       "loop": true
     },
+    "sad_idle": {
+      "frames": [
+        "sad_idle/sad_idle_01.png",
+        "sad_idle/sad_idle_02.png",
+        "sad_idle/sad_idle_03.png",
+        "sad_idle/sad_idle_04.png",
+        "sad_idle/sad_idle_05.png",
+        "sad_idle/sad_idle_06.png"
+      ],
+      "frame_count": 6,
+      "fps": 2,
+      "loop": true,
+      "source_cell_size": [
+        128,
+        128
+      ]
+    },
     "look": {
       "frames": [
         "look/look_01.png",
@@ -626,6 +643,34 @@
         64,
         64
       ]
+    },
+    "coffee": {
+      "frames": [
+        "coffee/mochi_coffee_0001.png",
+        "coffee/mochi_coffee_0002.png",
+        "coffee/mochi_coffee_0003.png",
+        "coffee/mochi_coffee_0004.png",
+        "coffee/mochi_coffee_0005.png",
+        "coffee/mochi_coffee_0006.png",
+        "coffee/mochi_coffee_0007.png",
+        "coffee/mochi_coffee_0008.png",
+        "coffee/mochi_coffee_0009.png",
+        "coffee/mochi_coffee_0010.png",
+        "coffee/mochi_coffee_0011.png",
+        "coffee/mochi_coffee_0012.png",
+        "coffee/mochi_coffee_0013.png",
+        "coffee/mochi_coffee_0014.png",
+        "coffee/mochi_coffee_0015.png",
+        "coffee/mochi_coffee_0016.png",
+        "coffee/mochi_coffee_0017.png",
+        "coffee/mochi_coffee_0018.png",
+        "coffee/mochi_coffee_0019.png",
+        "coffee/mochi_coffee_0020.png",
+        "coffee/mochi_coffee_0021.png"
+      ],
+      "frame_count": 21,
+      "fps": 8.333333333333334,
+      "loop": false
     }
   }
 }

@@ -1,4 +1,6 @@
 import hashlib
+from pathlib import Path
+import tomllib
 import unittest
 
 import cairo
@@ -37,13 +39,14 @@ class SpriteDefinitionsTests(unittest.TestCase):
     def test_required_visible_states_use_manifest_art(self) -> None:
         required = {
             "default", "idle", "blink", "walk", "walk_left", "bounce",
+            "sad_idle",
             "squish", "sleep", "sleeping", "wake", "dragged", "excited",
             "heart", "computer", "computer_intro", "computer_typing",
             "computer_outro", "typing_intro", "typing_loop", "typing_outro",
             "focus_start", "focus_loop", "focus_stop",
             "focus_thinking_start", "focus_thinking_loop", "focus_thinking_end",
             "watch", "dance", "searching", "drop", "side_eye", "table_flip",
-            "wave", "vs_code", "mochi_exe", "level_up_default",
+            "wave", "coffee", "vs_code", "mochi_exe", "level_up_default",
         }
         self.assertTrue(required.issubset(ANIMATIONS))
 
@@ -88,6 +91,34 @@ class SpriteDefinitionsTests(unittest.TestCase):
         )
         self.assertEqual(sum(frame.duration_ms or 0 for frame in idle.frames), 4950)
         self.assertTrue(idle.looping)
+
+    def test_sad_idle_uses_six_128px_frames_at_a_slow_breathing_cadence(
+        self,
+    ) -> None:
+        sad_idle = ANIMATIONS["sad_idle"]
+        metadata = ASSET_SET.animations["sad_idle"]
+
+        self.assertEqual(
+            tuple(frame.sprite for frame in sad_idle.frames),
+            tuple(f"sad_idle/sad_idle_{index:02}.png" for index in range(1, 7)),
+        )
+        self.assertEqual(sad_idle.frame_duration_ms, 500)
+        self.assertTrue(sad_idle.looping)
+        self.assertEqual(metadata.source_cell_size, (128, 128))
+
+        loaded = ASSET_SET.load_frames("sad_idle")
+        self.assertTrue(
+            all(
+                (surface.get_width(), surface.get_height()) == (256, 256)
+                for surface in loaded.values()
+            )
+        )
+
+        atlas = SpriteAtlas()
+        self.assertEqual(
+            atlas._source_visible_bounds(sad_idle.frames[0].sprite),
+            atlas._source_visible_bounds(ANIMATIONS["idle"].frames[0].sprite),
+        )
 
     def test_blink_uses_fast_per_frame_timing(self) -> None:
         blink = ANIMATIONS["blink"]
@@ -180,6 +211,34 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(len(heart.frames), 16)
         self.assertEqual(heart.frame_duration_ms, 120)
         self.assertFalse(heart.looping)
+
+    def test_coffee_preserves_the_authored_one_shot_timing(self) -> None:
+        coffee = ANIMATIONS["coffee"]
+        metadata = ASSET_SET.animations["coffee"]
+
+        self.assertEqual(len(coffee.frames), 21)
+        self.assertEqual(coffee.frame_duration_ms, 120)
+        self.assertFalse(coffee.looping)
+        self.assertEqual(coffee.next_state, "idle")
+        self.assertEqual(metadata.source_cell_size, (256, 256))
+        self.assertEqual(
+            tuple(frame.sprite for frame in coffee.frames),
+            tuple(
+                f"coffee/mochi_coffee_{index:04}.png"
+                for index in range(1, 22)
+            ),
+        )
+
+    def test_coffee_assets_are_included_in_installed_builds(self) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        with (project_root / "pyproject.toml").open("rb") as stream:
+            pyproject = tomllib.load(stream)
+
+        data_files = pyproject["tool"]["setuptools"]["data-files"]
+        self.assertEqual(
+            data_files["share/mochi/coffee"],
+            ["assets/mochi/coffee/*.png"],
+        )
 
     def test_level_up_default_preserves_authored_64px_spritesheet(self) -> None:
         level_up = ANIMATIONS["level_up_default"]
@@ -291,4 +350,3 @@ def test_new_catalogue_emotes_preserve_authored_64px_spritesheets() -> None:
         assert metadata.spritesheet_path == sheet_path
         assert metadata.source_cell_size == (64, 64)
         assert len(metadata.frame_paths) == frame_count
-

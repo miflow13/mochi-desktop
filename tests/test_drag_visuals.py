@@ -42,6 +42,7 @@ class DragVisualTests(unittest.TestCase):
             atlas=SpriteAtlas(),
         )
         for name in (
+            "_animation_name_for_mood", "_animation_for", "_is_idle_visual_active",
             "_play_drag_pose", "_sample_x11_drag", "_transition_to",
             "_play_animation", "_finish_reaction", "_play_drag_settle",
         ):

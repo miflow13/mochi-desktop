@@ -8,6 +8,9 @@ from unittest.mock import patch
 
 from mochi.behavior import ClickReactionBuffer
 from mochi.buddy import Buddy
+from mochi.mood import MochiMood, MoodModel
+from mochi.mood_behavior import resolve_mood_animation
+from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState, StateMachine
 
 
@@ -22,11 +25,19 @@ class IdleEmoteHarness:
         self._idle_action_source_id = None
         self._idle_resume_position = None
         self._click_reactions = ClickReactionBuffer()
+        self._mood_model = MoodModel()
         self.player = SimpleNamespace(animation=None, play=self._play)
         self.played = []
         self.walks = 0
         self._available_catalogue_emote_animations = lambda: ("dance",)
         self._play_animation("idle")
+
+    def _resolve_mood_animation_name(self, base_name, available_animations):
+        return resolve_mood_animation(
+            self._mood_model.current,
+            base_name,
+            available_animations,
+        )
 
     def __getattr__(self, name):
         attribute = getattr(Buddy, name)
@@ -63,6 +74,25 @@ def test_autonomous_catalogue_playback_forces_looping_emote_to_finish() -> None:
 
     assert buddy.state.current is MochiState.IDLE
     assert buddy._current_animation == "idle"
+
+
+def test_selecting_coffee_plays_once_then_returns_to_mood_aware_idle() -> None:
+    buddy = IdleEmoteHarness()
+    buddy._mood_model.set_override(MochiMood.SAD)
+
+    assert buddy._play_autonomous_catalogue_emote("coffee") is True
+    coffee = buddy._active_animation
+    assert coffee is not None
+    assert coffee.name == "coffee"
+    assert coffee.looping is False
+    assert buddy.state.current is MochiState.IDLE_EMOTE
+
+    buddy._finish_reaction(coffee)
+
+    assert buddy.state.current is MochiState.IDLE
+    assert buddy._current_animation == "idle"
+    assert buddy.player.animation is ANIMATIONS["sad_idle"]
+    assert buddy._mood_model.override is MochiMood.SAD
 
 
 def test_idle_emote_frequency_is_category_based_not_pool_size() -> None:

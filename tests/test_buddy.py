@@ -343,6 +343,7 @@ class BuddyEmoteTests(unittest.TestCase):
             _tuning=SimpleNamespace(hover_heart_cooldown_seconds=2.0),
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),
+            _is_idle_visual_active=Mock(return_value=True),
         )
 
         with patch("mochi.ambient_activity.time.monotonic", return_value=10.0):
@@ -361,6 +362,7 @@ class BuddyEmoteTests(unittest.TestCase):
             _transition_to=Mock(return_value=True),
             _computer_idle_source_id=None,
             _play_animation=Mock(),
+            _is_idle_visual_active=Mock(return_value=True),
         )
 
         self.assertTrue(Buddy._start_computer_emote(buddy))
@@ -462,6 +464,7 @@ class BuddyTypingTests(unittest.TestCase):
             _computer_idle_source_id=None,
             _play_animation=Mock(),
             _logger=Mock(),
+            _is_idle_visual_active=Mock(return_value=True),
         )
 
         self.assertTrue(Buddy._start_typing_emote(buddy))
@@ -549,6 +552,7 @@ class BuddyWatchingTests(unittest.TestCase):
             _computer_idle_source_id=None,
             _play_animation=Mock(),
             _logger=Mock(),
+            _is_idle_visual_active=Mock(return_value=True),
         )
 
         self.assertTrue(Buddy._start_watching_emote(buddy))
@@ -633,6 +637,7 @@ class BuddySearchingTests(unittest.TestCase):
             _computer_idle_source_id=None,
             _play_animation=Mock(),
             _logger=Mock(),
+            _is_idle_visual_active=Mock(return_value=True),
         )
 
         self.assertTrue(Buddy._start_searching_emote(buddy))
