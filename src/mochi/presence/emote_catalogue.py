@@ -40,6 +40,30 @@ RARITY_STYLES = {
 }
 
 
+EMOTES_PER_PAGE = 6
+
+
+def catalogue_page_count(total: int, *, page_size: int = EMOTES_PER_PAGE) -> int:
+    """Return at least one page so the catalogue shell always has stable UI."""
+    normalized_size = max(1, int(page_size))
+    normalized_total = max(0, int(total))
+    return max(1, (normalized_total + normalized_size - 1) // normalized_size)
+
+
+def catalogue_page_slice(
+    emotes: tuple[EmoteDefinition, ...],
+    page: int,
+    *,
+    page_size: int = EMOTES_PER_PAGE,
+) -> tuple[EmoteDefinition, ...]:
+    """Return a clamped page from the canonical catalogue ordering."""
+    normalized_size = max(1, int(page_size))
+    count = catalogue_page_count(len(emotes), page_size=normalized_size)
+    normalized_page = max(0, min(int(page), count - 1))
+    start = normalized_page * normalized_size
+    return tuple(emotes[start : start + normalized_size])
+
+
 @lru_cache(maxsize=64)
 def _bond_xp_to_level_start(level: int) -> int:
     """Cumulative XP needed to reach the beginning of a bond level."""
@@ -104,6 +128,16 @@ window.mochi-emote-catalogue {
 .mochi-emote-progress {
     min-height: 7px;
 }
+.mochi-emote-page-label {
+    color: alpha(@theme_fg_color, 0.72);
+    font-size: 12px;
+    font-weight: 700;
+}
+button.mochi-emote-page-button {
+    min-width: 40px;
+    min-height: 34px;
+    border-radius: 10px;
+}
 .mochi-emote-footer {
     color: alpha(@theme_fg_color, 0.48);
     font-size: 11px;
@@ -135,23 +169,29 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         + (COLUMNS - 1) * GAP
         + GLOW_PAD * 2
     )
-    ROWS = (len(EMOTE_CATALOGUE) + COLUMNS - 1) // COLUMNS
+    ROWS = EMOTES_PER_PAGE // COLUMNS
     HEIGHT = (
         ROWS * CARD_HEIGHT
         + (ROWS - 1) * GAP
         + GLOW_PAD * 2
     )
 
-    def __init__(self, *, atlas: SpriteAtlas) -> None:
+    def __init__(
+        self,
+        *,
+        atlas: SpriteAtlas,
+        emotes: tuple[EmoteDefinition, ...] | None = None,
+    ) -> None:
         super().__init__()
         self._atlas = atlas
+        self._emotes = tuple(emotes or EMOTE_CATALOGUE[:EMOTES_PER_PAGE])
         self._state: BondState | None = None
         self._card_surfaces: list[cairo.ImageSurface] = []
         self._preview_surfaces: list[cairo.ImageSurface] = []
         self._render_scale = 0
         self._unlock_all = False
         self._hovered_index: int | None = None
-        self._hover_progress = [0.0 for _ in EMOTE_CATALOGUE]
+        self._hover_progress = [0.0 for _ in self._emotes]
         self._hover_source_id: int | None = None
         self._hover_preview_source_id: int | None = None
         self._hover_preview_emote_id: str | None = None
@@ -177,16 +217,31 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             cls.GLOW_PAD + row * (cls.CARD_HEIGHT + cls.GAP),
         )
 
-    @classmethod
-    def card_index_at(cls, x: float, y: float) -> int | None:
-        for index in range(len(EMOTE_CATALOGUE)):
-            card_x, card_y = cls._card_origin(index)
+    def card_index_at(self, x: float, y: float) -> int | None:
+        for index in range(len(self._emotes)):
+            card_x, card_y = self._card_origin(index)
             if (
-                card_x <= x < card_x + cls.CARD_WIDTH
-                and card_y <= y < card_y + cls.CARD_HEIGHT
+                card_x <= x < card_x + self.CARD_WIDTH
+                and card_y <= y < card_y + self.CARD_HEIGHT
             ):
                 return index
         return None
+
+    @property
+    def emotes(self) -> tuple[EmoteDefinition, ...]:
+        return self._emotes
+
+    def set_emotes(self, emotes: tuple[EmoteDefinition, ...]) -> bool:
+        next_emotes = tuple(emotes)
+        if next_emotes == self._emotes:
+            return False
+        self.reset_hover()
+        self._emotes = next_emotes
+        self._hover_progress = [0.0 for _ in self._emotes]
+        self._card_surfaces = []
+        self._preview_surfaces = []
+        self.queue_draw()
+        return True
 
     def refresh(self, state: BondState, *, unlock_all: bool = False) -> None:
         state = BondState(level=state.level, xp=state.xp)
@@ -198,8 +253,8 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
             previous is not None
             and state.level == previous.level
             and self._unlock_all == previous_unlock_all
-            and len(self._card_surfaces) == len(EMOTE_CATALOGUE)
-            and len(self._preview_surfaces) == len(EMOTE_CATALOGUE)
+            and len(self._card_surfaces) == len(self._emotes)
+            and len(self._preview_surfaces) == len(self._emotes)
         ):
             return
         self._render_card_surfaces()
@@ -216,7 +271,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         scale = max(1, self.get_scale_factor())
         surfaces: list[cairo.ImageSurface] = []
         preview_surfaces: list[cairo.ImageSurface] = []
-        for emote in EMOTE_CATALOGUE:
+        for emote in self._emotes:
             surface = cairo.ImageSurface(
                 cairo.FORMAT_ARGB32,
                 self.CARD_WIDTH * scale,
@@ -299,7 +354,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         if index is None:
             return
 
-        emote = EMOTE_CATALOGUE[index]
+        emote = self._emotes[index]
         if not self._preview_animation_enabled(emote):
             return
 
@@ -342,7 +397,7 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         if emote_id is None or hovered_index is None:
             return GLib.SOURCE_REMOVE
 
-        emote = EMOTE_CATALOGUE[hovered_index]
+        emote = self._emotes[hovered_index]
         if emote.id != emote_id or not self._preview_animation_enabled(emote):
             self._stop_hover_preview()
             return GLib.SOURCE_REMOVE
@@ -676,14 +731,14 @@ class EmoteCatalogueCanvas(Gtk.DrawingArea):
         _height: int,
     ) -> None:
         if (
-            len(self._card_surfaces) != len(EMOTE_CATALOGUE)
-            or len(self._preview_surfaces) != len(EMOTE_CATALOGUE)
+            len(self._card_surfaces) != len(self._emotes)
+            or len(self._preview_surfaces) != len(self._emotes)
         ):
             return
 
         for index, (emote, surface, preview_surface) in enumerate(
             zip(
-                EMOTE_CATALOGUE,
+                self._emotes,
                 self._card_surfaces,
                 self._preview_surfaces,
             )
@@ -736,6 +791,7 @@ class EmoteCatalogueWindow:
         self._logger = logger or logging.getLogger(__name__)
         self._state: BondState | None = None
         self._unlock_all = False
+        self._current_page = 0
 
         application = owner.get_application()
         if application is not None:
@@ -811,18 +867,91 @@ class EmoteCatalogueWindow:
         hero.append(self._progress)
         root.append(hero)
 
-        self._canvas = EmoteCatalogueCanvas(atlas=atlas)
+        self._canvas = EmoteCatalogueCanvas(
+            atlas=atlas,
+            emotes=self._page_emotes(),
+        )
         self._canvas.set_margin_top(18)
         root.append(self._canvas)
+
+        pagination = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+        )
+        pagination.set_halign(Gtk.Align.CENTER)
+        pagination.set_margin_top(10)
+
+        self._previous_page_button = Gtk.Button(label="‹")
+        self._previous_page_button.add_css_class("mochi-emote-page-button")
+        self._previous_page_button.set_tooltip_text("Previous emote page")
+        self._previous_page_button.connect("clicked", self._on_previous_page)
+        pagination.append(self._previous_page_button)
+
+        self._page_label = Gtk.Label()
+        self._page_label.set_width_chars(7)
+        self._page_label.set_xalign(0.5)
+        self._page_label.add_css_class("mochi-emote-page-label")
+        pagination.append(self._page_label)
+
+        self._next_page_button = Gtk.Button(label="›")
+        self._next_page_button.add_css_class("mochi-emote-page-button")
+        self._next_page_button.set_tooltip_text("Next emote page")
+        self._next_page_button.connect("clicked", self._on_next_page)
+        pagination.append(self._next_page_button)
+
+        root.append(pagination)
+        self._update_page_controls()
         self.window.connect("notify::visible", self._on_visibility_changed)
 
-        footer = Gtk.Label(label="Ctrl + Alt + E · Esc to close")
+        footer = Gtk.Label(label="Ctrl + Alt + E · ←/→ pages · Esc to close")
         footer.set_xalign(1)
         footer.set_margin_top(10)
         footer.add_css_class("mochi-emote-footer")
         root.append(footer)
 
         self.window.set_child(root)
+
+    @property
+    def page_count(self) -> int:
+        return catalogue_page_count(len(EMOTE_CATALOGUE))
+
+    def _page_emotes(self) -> tuple[EmoteDefinition, ...]:
+        return catalogue_page_slice(EMOTE_CATALOGUE, self._current_page)
+
+    def _update_page_controls(self) -> None:
+        count = self.page_count
+        self._current_page = max(0, min(self._current_page, count - 1))
+        self._page_label.set_text(f"{self._current_page + 1} / {count}")
+        self._previous_page_button.set_sensitive(self._current_page > 0)
+        self._next_page_button.set_sensitive(self._current_page < count - 1)
+
+    def _set_page(self, page: int) -> bool:
+        count = self.page_count
+        next_page = max(0, min(int(page), count - 1))
+        if next_page == self._current_page:
+            self._update_page_controls()
+            return False
+
+        self._current_page = next_page
+        self._canvas.set_emotes(self._page_emotes())
+        if self._state is not None:
+            self._canvas.refresh(
+                self._state,
+                unlock_all=self._unlock_all,
+            )
+        self._update_page_controls()
+        self._logger.debug(
+            "Emote catalogue page %d/%d",
+            self._current_page + 1,
+            count,
+        )
+        return True
+
+    def _on_previous_page(self, _button: Gtk.Button) -> None:
+        self._set_page(self._current_page - 1)
+
+    def _on_next_page(self, _button: Gtk.Button) -> None:
+        self._set_page(self._current_page + 1)
 
     @property
     def visible(self) -> bool:
@@ -846,6 +975,9 @@ class EmoteCatalogueWindow:
 
         self._state = next_state
         self._unlock_all = next_unlock_all
+        self._current_page = max(0, min(self._current_page, self.page_count - 1))
+        self._canvas.set_emotes(self._page_emotes())
+        self._update_page_controls()
         next_unlock = None if self._unlock_all else next_emote_unlock(self._state)
 
         if self._unlock_all:
@@ -908,6 +1040,12 @@ class EmoteCatalogueWindow:
     ) -> bool:
         if keyval == Gdk.KEY_Escape:
             self.hide()
+            return True
+        if keyval in (Gdk.KEY_Left, Gdk.KEY_KP_Left):
+            self._set_page(self._current_page - 1)
+            return True
+        if keyval in (Gdk.KEY_Right, Gdk.KEY_KP_Right):
+            self._set_page(self._current_page + 1)
             return True
         return False
 
