@@ -83,18 +83,21 @@ When animation assets or packaging rules change, inspect the wheel contents befo
 
 ## Current user interactions
 
-The project is evolving quickly, but the intended public-alpha interaction model centers on:
+The v0.3 public-alpha interaction surface includes:
 
-- idle/breathing
-- click reactions
-- double-click heart reaction
+- idle/breathing, blinking, looking, and autonomous walking
+- click reactions, double-click heart, and triple-click dialogue
 - right-click context menu
-- walking
 - sleep/wake
 - pickup/drag/drop
-- ambient and explicit emotes such as computer/typing
+- typing, terminal/coding, music, video, and other AmbiSense reactions
+- persistent Bond Level and bond progress
+- Feed Mochi
+- bond-aware Emote Catalogue (`Ctrl + Alt + E` with the GNOME helper)
+- level-up and emote-unlock feedback
+- Focus with Mochi sessions with optional local Rain ambience
 
-See [Interaction Core](Interaction-Core.md) for the detailed state model.
+See [Interaction Core](Interaction-Core.md) for lifecycle/state behavior, [FR-10](../FR-10_LEVEL_UP_FEEDBACK.md) for level-up presentation, and [FR-12](../FR-12_FOCUS_WITH_MOCHI.md) for Focus behavior.
 
 ## Context menu terminology
 
@@ -149,9 +152,6 @@ Then consult [Troubleshooting and Regressions](Troubleshooting-and-Regressions.m
 
 ## Current release status
 
-Mochi is not yet presented as a stable public release. The project is currently focused on interaction-core stability and public-alpha readiness.
+Mochi is an early public alpha. v0.3 feature development has been promoted to `main`, and the current work is release stabilization, compatibility testing, and regression cleanup.
 
-Package/runtime metadata is `0.2.0a0`. Published GitHub release labels have
-[documented discrepancies](../../CHANGELOG.md#release-metadata-note), so include
-the tested branch/commit in bug reports. Pulling source alone does not refresh
-the app-grid copy: quit Mochi, rerun `./install.sh`, and relaunch it.
+Package/runtime metadata for the v0.3 release-prep line is `0.3.0a1`. Include the tested release tag or commit in bug reports. Pulling source alone does not refresh the app-grid copy: quit Mochi, rerun `./install.sh`, and relaunch it.
