@@ -36,6 +36,12 @@ class _Base:
     def _begin_sleep(self) -> None:
         self.base_sleep_calls += 1
 
+    def _on_user_idle(self) -> None:
+        self.base_idle_calls += 1
+
+    def _on_user_active(self) -> None:
+        self.base_active_calls += 1
+
     def _toggle_sleep(self, *args, **kwargs) -> None:
         self.base_toggle_sleep_calls += 1
 
@@ -60,6 +66,7 @@ def _harness() -> _Harness:
     harness._focus_setup_visible = False
     harness._focus_context_menu_visible = False
     harness._focus_setup_pending = False
+    harness._focus_idle_paused = False
     harness._context_menu_open = False
     harness._context_menu = Mock()
     harness._context_menu.get_visible.return_value = False
@@ -89,11 +96,40 @@ def _harness() -> _Harness:
     harness.base_typing_calls = 0
     harness.base_resume_calls = 0
     harness.base_sleep_calls = 0
+    harness.base_idle_calls = 0
+    harness.base_active_calls = 0
     harness.base_toggle_sleep_calls = 0
     harness.base_shutdown_calls = 0
     harness.base_show_context_calls = 0
     harness.base_close_context_calls = 0
     return harness
+
+
+def test_focus_window_is_an_independent_application_toplevel() -> None:
+    gtk = Mock()
+    window = gtk.ApplicationWindow.return_value
+    owner = Mock()
+    application = object()
+    owner.get_application.return_value = application
+
+    with patch("mochi.presence.focus_session.Gtk", gtk):
+        FocusWindow(
+            owner=owner,
+            on_start=Mock(),
+            on_pause=Mock(),
+            on_cancel=Mock(),
+            on_hidden=Mock(),
+            on_rain_enabled=Mock(),
+            on_rain_volume_changed=Mock(),
+            rain_available=False,
+            rain_enabled=False,
+            rain_volume=0.5,
+        )
+
+    gtk.ApplicationWindow.assert_called_once_with(application=application)
+    gtk.Window.assert_not_called()
+    window.set_transient_for.assert_not_called()
+    window.set_destroy_with_parent.assert_not_called()
 
 
 def test_focus_window_positions_beside_full_mochi_bounds() -> None:
@@ -308,6 +344,167 @@ def test_pause_settles_elapsed_time_since_the_last_timer_tick() -> None:
     harness._award_bond.assert_called_once_with(1, persist=False)
     assert session.focus_minutes_completed == 1
     assert session.paused is True
+
+
+def test_user_idle_settles_and_auto_pauses_focus_once() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    harness._focus_session = session
+    harness._focus_last_tick = 10.0
+    harness._focus_window = Mock()
+
+    with patch(
+        "mochi.presence.focus_session.time.monotonic",
+        side_effect=(70.0, 70.0),
+    ):
+        harness._on_user_idle()
+        harness._on_user_idle()
+
+    harness._award_bond.assert_called_once_with(1, persist=False)
+    assert session.focus_minutes_completed == 1
+    assert session.remaining_seconds == 4 * 60
+    assert session.paused is True
+    assert harness._focus_idle_paused is True
+    assert harness.base_idle_calls == 2
+    harness._focus_ambience.pause.assert_called_once_with()
+    harness._focus_window.update_session.assert_called_once_with(session)
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=600.0):
+        harness._focus_tick()
+
+    assert session.remaining_seconds == 4 * 60
+    assert session.focus_minutes_completed == 1
+
+
+def test_user_active_resumes_only_an_idle_paused_focus_session_once() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan())
+    session.set_paused(True)
+    harness._focus_session = session
+    harness._focus_idle_paused = True
+    harness._focus_ambience.active_name = "mochi_rain"
+    harness._focus_window = Mock()
+
+    with patch(
+        "mochi.presence.focus_session.time.monotonic",
+        side_effect=(100.0,),
+    ):
+        harness._on_user_active()
+        harness._on_user_active()
+
+    assert session.paused is False
+    assert harness._focus_idle_paused is False
+    assert harness._focus_last_tick == 100.0
+    assert harness.base_active_calls == 2
+    harness._focus_ambience.resume.assert_called_once_with()
+    harness._ensure_focus_visual.assert_called_once_with()
+    harness._focus_window.update_session.assert_called_once_with(session)
+
+
+def test_manual_pause_is_not_auto_resumed_after_idle_cycle() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan())
+    session.set_paused(True)
+    harness._focus_session = session
+
+    harness._on_user_idle()
+    harness._on_user_active()
+
+    assert session.paused is True
+    assert harness._focus_idle_paused is False
+    harness._focus_ambience.resume.assert_not_called()
+    harness._ensure_focus_visual.assert_not_called()
+
+
+def test_idle_pausing_a_break_awards_no_focus_xp() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=2))
+    session.phase = FocusPhase.BREAK
+    session.remaining_seconds = 30.0
+    harness._focus_session = session
+    harness._focus_last_tick = 10.0
+
+    with patch(
+        "mochi.presence.focus_session.time.monotonic",
+        side_effect=(20.0, 20.0),
+    ):
+        harness._on_user_idle()
+
+    assert session.phase is FocusPhase.BREAK
+    assert session.remaining_seconds == 20.0
+    assert session.paused is True
+    assert harness._focus_idle_paused is True
+    harness._award_bond.assert_not_called()
+
+
+def test_idle_at_completion_awards_completion_once_without_pausing() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    session.remaining_seconds = 1.0
+    session._focus_xp_seconds = 59.0
+    session.focus_minutes_completed = 4
+    harness._focus_session = session
+    harness._focus_last_tick = 10.0
+    harness._focus_window = Mock()
+    harness._complete_focus_session = Mock()
+    harness._stop_focus_timer = Mock()
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=11.0):
+        harness._on_user_idle()
+
+    assert session.phase is FocusPhase.COMPLETE
+    assert session.paused is False
+    assert harness._focus_idle_paused is False
+    harness._award_bond.assert_called_once_with(11, persist=True)
+    harness._complete_focus_session.assert_called_once_with()
+    harness._stop_focus_timer.assert_called_once_with()
+
+
+def test_focus_lifecycle_boundaries_clear_idle_pause_ownership() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan())
+    session.set_paused(True)
+    harness._focus_session = session
+    harness._focus_idle_paused = True
+
+    harness._cancel_focus_session()
+    assert harness._focus_idle_paused is False
+
+    with patch("mochi.presence.focus_session.GLib.timeout_add", return_value=41):
+        harness._start_focus_session(FocusPlan())
+    assert harness._focus_idle_paused is False
+
+    harness._focus_session.set_paused(True)
+    harness._focus_idle_paused = True
+    harness.shutdown_presence()
+    assert harness._focus_idle_paused is False
+
+
+def test_manual_pause_or_resume_clears_idle_pause_ownership() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan())
+    session.set_paused(True)
+    harness._focus_session = session
+    harness._focus_idle_paused = True
+
+    harness._toggle_focus_pause()
+
+    assert session.paused is False
+    assert harness._focus_idle_paused is False
+
+
+def test_focus_tick_updates_without_representing_minimized_window() -> None:
+    harness = _harness()
+    session = FocusSession(FocusPlan())
+    harness._focus_session = session
+    harness._focus_last_tick = 10.0
+    harness._focus_window = Mock()
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=11.0):
+        harness._focus_tick()
+
+    harness._focus_window.update_session.assert_called_once_with(session)
+    harness._focus_window.present_session.assert_not_called()
 
 
 def test_stop_keeps_earned_xp_without_completion_bonus() -> None:
