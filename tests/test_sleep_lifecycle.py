@@ -26,7 +26,9 @@ class Lifecycle:
         self._play_animation("idle")
 
     def __getattr__(self, name):
-        return getattr(Buddy, name).__get__(self)
+        attribute = getattr(Buddy, name)
+        descriptor = getattr(attribute, "__get__", None)
+        return attribute if descriptor is None else descriptor(self)
 
     def play(self, animation, **kwargs):
         self.player.animation = animation
