@@ -4,6 +4,7 @@ Mochi's root README is intentionally kept as the project front door. Deeper impl
 
 ## Start here
 
+- [Codebase Manual](CODEBASE_MANUAL.md) — deep contributor onboarding, runtime ownership, state/animation lifecycles, debugging, and common change recipes
 - [Getting Started](wiki/Getting-Started.md) — installation, first launch, and basic setup
 - [Architecture and Tech Stack](wiki/Architecture-and-Tech-Stack.md) — major components and runtime structure
 - [Interaction Core](wiki/Interaction-Core.md) — state and interaction behavior
