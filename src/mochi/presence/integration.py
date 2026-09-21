@@ -43,6 +43,8 @@ class PresenceBuddyMixin:
         self._session_signal_monitor: SessionSignalMonitor | None = None
         self._presence_app_category = "unknown"
         self._presence_source_id: int | None = None
+        self._presence_startup_wave_source_id: int | None = None
+        self._presence_startup_wave_played = False
         self._presence_startup_source_id: int | None = None
         self._presence_shutting_down = False
         self._presence_is_returning_session = False
@@ -96,6 +98,7 @@ class PresenceBuddyMixin:
                 self._app_category_monitor.last_error,
             )
         self._logger.debug("[session] startup baselines initialized")
+        self._schedule_startup_wave()
         self._presence_source_id = GLib.timeout_add_seconds(
             self.PRESENCE_EVALUATION_SECONDS,
             self._evaluate_ambient_presence,
@@ -532,6 +535,36 @@ class PresenceBuddyMixin:
             self._logger.debug("[session] %s greeting text=%r", category, text)
         return GLib.SOURCE_REMOVE
 
+    def _schedule_startup_wave(self) -> None:
+        """Play the welcome wave once GTK has presented Mochi's window."""
+        if (
+            self._preview_mode
+            or self._presence_shutting_down
+            or self._presence_startup_wave_played
+            or self._presence_startup_wave_source_id is not None
+        ):
+            return
+        self._presence_startup_wave_source_id = GLib.idle_add(
+            self._play_startup_wave,
+        )
+
+    def _play_startup_wave(self) -> bool:
+        self._presence_startup_wave_source_id = None
+        if (
+            self._presence_shutting_down
+            or self._preview_mode
+            or self._presence_startup_wave_played
+        ):
+            return GLib.SOURCE_REMOVE
+
+        self._presence_startup_wave_played = True
+        if (
+            self.state.current is MochiState.IDLE
+            and self._is_idle_visual_active()
+        ):
+            self._play_autonomous_catalogue_emote("wave")
+        return GLib.SOURCE_REMOVE
+
     def set_presence_quiet_mode(self, enabled: bool) -> None:
         self._ambient_presence_engine.set_quiet_mode(enabled)
         if enabled:
@@ -830,6 +863,13 @@ class PresenceBuddyMixin:
                 pass
         self._cancel_vscode_cowork_source()
         self._vscode_coworking_active = False
+        startup_wave_source_id = self._presence_startup_wave_source_id
+        self._presence_startup_wave_source_id = None
+        if startup_wave_source_id is not None:
+            try:
+                GLib.source_remove(startup_wave_source_id)
+            except Exception:
+                pass
         startup_source_id = self._presence_startup_source_id
         self._presence_startup_source_id = None
         if startup_source_id is not None:
