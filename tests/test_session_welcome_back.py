@@ -2,6 +2,7 @@
 
 import random
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -9,6 +10,7 @@ from mochi.presence.context import AmbientContext
 from mochi.presence.engine import PresenceEngine, PresenceTuning
 from mochi.presence.phrases import PHRASES
 from mochi.presence.session import SessionSignalMonitor
+from mochi.state import MochiState, StateMachine
 
 
 class Variant:
@@ -233,6 +235,75 @@ def test_production_buddy_uses_the_centralized_startup_flow():
     from mochi.presence.integration import PresenceBuddyMixin
 
     assert PresenceBuddy._show_startup_greeting is PresenceBuddyMixin._show_startup_greeting
+
+
+def test_startup_wave_is_scheduled_only_once(monkeypatch):
+    from mochi.presence import integration
+    from mochi.presence.integration import PresenceBuddyMixin
+
+    scheduled = []
+    monkeypatch.setattr(
+        integration.GLib,
+        "idle_add",
+        lambda callback: scheduled.append(callback) or 23,
+    )
+    buddy = SimpleNamespace(
+        _preview_mode=False,
+        _presence_shutting_down=False,
+        _presence_startup_wave_played=False,
+        _presence_startup_wave_source_id=None,
+        _play_startup_wave=Mock(),
+    )
+
+    PresenceBuddyMixin._schedule_startup_wave(buddy)
+    PresenceBuddyMixin._schedule_startup_wave(buddy)
+
+    assert scheduled == [buddy._play_startup_wave]
+    assert buddy._presence_startup_wave_source_id == 23
+
+
+def test_startup_wave_plays_once_and_returns_source_remove():
+    from mochi.presence.integration import PresenceBuddyMixin
+
+    buddy = SimpleNamespace(
+        _preview_mode=False,
+        _presence_shutting_down=False,
+        _presence_startup_wave_played=False,
+        _presence_startup_wave_source_id=23,
+        state=StateMachine(),
+        _is_idle_visual_active=Mock(return_value=True),
+        _play_autonomous_catalogue_emote=Mock(return_value=True),
+    )
+
+    first = PresenceBuddyMixin._play_startup_wave(buddy)
+    second = PresenceBuddyMixin._play_startup_wave(buddy)
+
+    assert first is False
+    assert second is False
+    assert buddy._presence_startup_wave_source_id is None
+    assert buddy._presence_startup_wave_played is True
+    buddy._play_autonomous_catalogue_emote.assert_called_once_with("wave")
+
+
+def test_startup_wave_does_not_interrupt_a_state_that_claimed_mochi_first():
+    from mochi.presence.integration import PresenceBuddyMixin
+
+    state = StateMachine()
+    state.transition_to(MochiState.TYPING)
+    buddy = SimpleNamespace(
+        _preview_mode=False,
+        _presence_shutting_down=False,
+        _presence_startup_wave_played=False,
+        _presence_startup_wave_source_id=23,
+        state=state,
+        _is_idle_visual_active=Mock(return_value=False),
+        _play_autonomous_catalogue_emote=Mock(),
+    )
+
+    PresenceBuddyMixin._play_startup_wave(buddy)
+
+    buddy._play_autonomous_catalogue_emote.assert_not_called()
+    assert buddy._presence_startup_wave_played is True
 
 
 @pytest.mark.parametrize("flag", ["_preview_mode", "_presence_shutting_down"])
