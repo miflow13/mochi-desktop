@@ -3,7 +3,7 @@
 # mochi 🌱
 
 **v0.3 · Growing Together**
-
+> thank you so much for 60 stars <3
 ### A tiny Linux desktop buddy that grows with you.
 
 <img src="docs/media/v0.3/mochi-terminal.gif" width="800" alt="Mochi living on a Linux desktop beside a terminal">
