@@ -852,6 +852,7 @@ class Buddy(Gtk.DrawingArea):
         return True
 
     def _resume_idle(self) -> None:
+        self._transition_to(MochiState.IDLE)
         frame_index, elapsed_ms = self._idle_resume_position or (0, 0)
         self._idle_resume_position = None
         previous = self._current_animation
@@ -956,6 +957,8 @@ class Buddy(Gtk.DrawingArea):
             self._schedule_blink()
 
     def _play_blink(self) -> None:
+        if not self._transition_to(MochiState.BLINKING):
+            return
         self._idle_resume_position = (
             self.player.frame_index,
             self.player.elapsed_ms,
