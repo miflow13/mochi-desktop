@@ -202,6 +202,35 @@ When introducing new art:
 
 A previous whole-folder overwrite replaced canonical PixelLab idle/squish art and changed manifest frame counts. This is exactly the class of migration the project should avoid.
 
+## Developer Emote Workshop
+
+Mochi Lab includes a source-checkout-only **Emote Workshop** for rapid emote
+iteration. It is intentionally separate from the user-facing Emote Catalogue.
+
+Workflow:
+
+1. open Mochi Lab with the private developer shortcut;
+2. choose **Emote Workshop**;
+3. select either a horizontal PNG spritesheet or a folder of PNG frames;
+4. confirm the source cell size and adjust FPS;
+5. use **Preview once on Mochi** to inspect the animation in the real desktop
+   renderer without registering it;
+6. set the intended bond level, rarity, loop metadata, and unlock-reveal flag;
+7. choose **Promote to Mochi**.
+
+Promotion copies the original PNG artwork without resizing, recoloring, or
+rewriting it. The tool adds the animation metadata to
+`assets/mochi/manifest.json` and adds the new asset directory to
+`pyproject.toml` packaging. It then generates the exact
+`EmoteDefinition(...)` snippet for `src/mochi/emotes.py`.
+
+Catalogue registration remains an explicit source-code step in v1. This keeps
+the running application from rewriting Python source while still removing the
+repetitive asset/manifest/package wiring from normal emote iteration.
+
+A promoted animation requires a Mochi restart before the manifest-backed runtime
+can load it.
+
 ## Art acceptance checklist
 
 Before integrating an animation:
