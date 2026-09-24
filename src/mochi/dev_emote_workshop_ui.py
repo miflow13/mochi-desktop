@@ -146,7 +146,8 @@ class EmoteWorkshopWindow(Gtk.Window):
         self._checkout_label.set_wrap(True)
         if checkout_root is None:
             self._checkout_label.set_text(
-                "Promotion disabled: run Mochi from a Git source checkout."
+                "Promotion disabled: source checkout not found. Launch with "
+                "MOCHI_SOURCE_ROOT=/path/to/mochi-desktop if auto-detection fails."
             )
         else:
             self._checkout_label.set_text(f"Source checkout: {checkout_root}")
