@@ -8,7 +8,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 try:
     gi.require_version("GdkWayland", "4.0")
@@ -47,6 +47,11 @@ class WindowPlacement:
         self.layer_shell_enabled = False
         self.layer_shell_enabled = self._enable_layer_shell()
 
+        # Make the X11/XWayland fallback behave as a sticky, non-focus-stealing
+        # desktop overlay instead of a regular application window. Deferred to
+        # the next idle tick because the GdkSurface is not realized yet.
+        GLib.idle_add(self._apply_x11_sticky_properties)
+
     def _enable_layer_shell(self) -> bool:
         display = self.window.get_display()
         if GdkWayland is None or not isinstance(display, GdkWayland.WaylandDisplay):
@@ -76,6 +81,91 @@ class WindowPlacement:
         self.move_to(self.position.x, self.position.y)
         self._logger.info("Using gtk4-layer-shell Wayland overlay")
         return True
+
+    def _apply_x11_sticky_properties(self) -> bool:
+        """Make the XWayland window sticky and non-focus-stealing.
+
+        On GNOME Wayland, Mochi runs as a regular X11 window managed by Mutter.
+        By default that binds the window to a single workspace and lets Mutter
+        focus it (and its workspace) on interaction. Setting the EWMH properties
+        below turns Mochi into a desktop-wide overlay:
+
+        - ``_NET_WM_DESKTOP = 0xFFFFFFFF`` marks the window as sticky, so it is
+          visible on every virtual desktop.
+        - ``_NET_WM_WINDOW_TYPE_DOCK`` makes Mutter treat it as a panel/dock
+          rather than an application window, which prevents workspace switches
+          when the window is interacted with.
+        - ``_NET_WM_STATE_SKIP_TASKBAR`` / ``_NET_WM_STATE_SKIP_PAGER`` keep it
+          out of the taskbar and workspace switcher.
+
+        Returns ``False`` once scheduled so GLib does not repeat the callback.
+        """
+        if self.layer_shell_enabled:
+            return GLib.SOURCE_REMOVE
+
+        surface = self.window.get_surface()
+        if surface is None:
+            # Not realized yet - keep retrying on the next idle tick.
+            return GLib.SOURCE_CONTINUE
+
+        try:
+            gi.require_version("GdkX11", "4.0")
+            from gi.repository import GdkX11  # noqa: WPS433
+        except (ImportError, ValueError):
+            self._logger.info("GdkX11 unavailable; skipping sticky window setup")
+            return GLib.SOURCE_REMOVE
+
+        try:
+            xid = GdkX11.X11Surface.get_xid(surface)
+        except Exception:  # noqa: BLE001
+            self._logger.info("Could not obtain X11 window id; skipping sticky setup")
+            return GLib.SOURCE_REMOVE
+
+        try:
+            from Xlib import Xatom, display  # noqa: WPS433
+        except ImportError:
+            self._logger.info("python-xlib unavailable; skipping sticky window setup")
+            return GLib.SOURCE_REMOVE
+
+        try:
+            d = display.Display()
+            xwin = d.create_resource_object("window", xid)
+
+            # 1. Show on every workspace (sticky).
+            xwin.change_property(
+                d.intern_atom("_NET_WM_DESKTOP"),
+                Xatom.CARDINAL,
+                32,
+                [0xFFFFFFFF],
+            )
+
+            # 2. Treat as a dock/panel, not a regular application window.
+            xwin.change_property(
+                d.intern_atom("_NET_WM_WINDOW_TYPE"),
+                Xatom.ATOM,
+                32,
+                [d.intern_atom("_NET_WM_WINDOW_TYPE_DOCK")],
+            )
+
+            # 3. Skip taskbar/pager, stay above, and remain sticky.
+            xwin.change_property(
+                d.intern_atom("_NET_WM_STATE"),
+                Xatom.ATOM,
+                32,
+                [
+                    d.intern_atom("_NET_WM_STATE_SKIP_TASKBAR"),
+                    d.intern_atom("_NET_WM_STATE_SKIP_PAGER"),
+                    d.intern_atom("_NET_WM_STATE_STICKY"),
+                    d.intern_atom("_NET_WM_STATE_ABOVE"),
+                ],
+            )
+
+            d.sync()
+            self._logger.info("Applied X11 sticky/dock properties to Mochi window")
+        except Exception:  # noqa: BLE001
+            self._logger.exception("Failed to apply X11 sticky properties")
+
+        return GLib.SOURCE_REMOVE
 
     def move_to(self, x: int, y: int) -> Position:
         self.position = self.clamp_position(x, y)
