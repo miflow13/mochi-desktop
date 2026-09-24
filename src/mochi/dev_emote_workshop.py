@@ -60,6 +60,7 @@ class EmoteImportSpec:
 class PromotionResult:
     asset_directory: Path
     manifest_path: Path
+    pyproject_path: Path
     catalogue_snippet: str
     frame_count: int
 
@@ -187,7 +188,13 @@ def promote_emote(
         raise RuntimeError("Promotion is only available from a Mochi source checkout")
 
     manifest_path = root / "assets" / "mochi" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    pyproject_path = root / "pyproject.toml"
+    if not pyproject_path.is_file():
+        raise RuntimeError("Mochi pyproject.toml was not found in the source checkout")
+
+    original_manifest = manifest_path.read_text(encoding="utf-8")
+    original_pyproject = pyproject_path.read_text(encoding="utf-8")
+    manifest = json.loads(original_manifest)
     animations = manifest.get("animations")
     if not isinstance(animations, dict):
         raise ValueError("Mochi manifest is missing its animations object")
@@ -197,7 +204,21 @@ def promote_emote(
     asset_directory = root / "assets" / "mochi" / spec.animation_id
     if asset_directory.exists():
         raise ValueError(f"Asset directory already exists: {asset_directory}")
-    asset_directory.mkdir(parents=False)
+    packaging_entry = (
+        f'"share/mochi/{spec.animation_id}" = '
+        f'["assets/mochi/{spec.animation_id}/*.png"]'
+    )
+    updated_pyproject = original_pyproject
+    if packaging_entry not in updated_pyproject:
+        marker = "\n[tool.pytest.ini_options]"
+        if marker not in updated_pyproject:
+            shutil.rmtree(asset_directory, ignore_errors=True)
+            raise RuntimeError("Could not locate the setuptools data-files section boundary")
+        updated_pyproject = updated_pyproject.replace(
+            marker,
+            f"\n{packaging_entry}\n{marker}",
+            1,
+        )
 
     try:
         if inspection.source_kind == "spritesheet":
@@ -233,13 +254,20 @@ def promote_emote(
             encoding="utf-8",
         )
         temporary.replace(manifest_path)
+
+        pyproject_temporary = pyproject_path.with_suffix(".toml.tmp")
+        pyproject_temporary.write_text(updated_pyproject, encoding="utf-8")
+        pyproject_temporary.replace(pyproject_path)
     except Exception:
         shutil.rmtree(asset_directory, ignore_errors=True)
+        manifest_path.write_text(original_manifest, encoding="utf-8")
+        pyproject_path.write_text(original_pyproject, encoding="utf-8")
         raise
 
     return PromotionResult(
         asset_directory=asset_directory,
         manifest_path=manifest_path,
+        pyproject_path=pyproject_path,
         catalogue_snippet=build_catalogue_snippet(spec),
         frame_count=inspection.frame_count,
     )
