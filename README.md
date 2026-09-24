@@ -3,10 +3,20 @@
 # mochi 🌱
 
 **v0.3 · Growing Together**
-> thank you so much for 60 stars <3
+
 ### A tiny Linux desktop buddy that grows with you.
 
-<img src="docs/media/v0.3/mochi-terminal.gif" width="800" alt="Mochi living on a Linux desktop beside a terminal">
+## 🎥 Mochi in the Wild
+
+Seeing Mochi pop up in the Linux community has been surreal. 💚
+
+[![Watch Mochi on YouTube](https://img.youtube.com/vi/fCe5UqQBj9I/maxresdefault.jpg)](https://www.youtube.com/watch?v=fCe5UqQBj9I)
+
+> A community-made look at Mochi.  
+> **Watch on YouTube →**
+
+
+<!-- <img src="docs/media/v0.3/mochi-terminal.gif" width="800" alt="Mochi living on a Linux desktop beside a terminal"> -->
 
 Mochi lives quietly on your Linux desktop — wandering, reacting, working beside
 you, taking naps, sharing snacks, learning new emotes, and building a bond
@@ -42,6 +52,7 @@ through the time you naturally spend together.
 ## v0.3 — Growing Together 🌱
 
 v0.3 is centered on one idea:
+
 
 > **Make spending time with Mochi feel meaningful without making care feel like work.**
 
