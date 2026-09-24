@@ -343,6 +343,9 @@ class Buddy(Gtk.DrawingArea):
     def _test_autonomous_nap(self, *args, **kwargs):
         return _menu_ui_for(self)._test_autonomous_nap(*args, **kwargs)
 
+    def _open_emote_workshop(self, *args, **kwargs):
+        return _menu_ui_for(self)._open_emote_workshop(*args, **kwargs)
+
     def _reset_position(self, *args, **kwargs):
         return _menu_ui_for(self)._reset_position(*args, **kwargs)
 
