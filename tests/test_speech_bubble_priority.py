@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock
 
-from mochi.presence.bubble import SpeechBubble
+from mochi.presence.bubble import SpeechBubble, _disable_focus_tree
 
 
 def test_speech_bubble_rejects_quip_when_presentation_priority_blocks_it() -> None:
@@ -12,3 +12,12 @@ def test_speech_bubble_rejects_quip_when_presentation_priority_blocks_it() -> No
 
     assert bubble.show("not now", duration_seconds=2.0) is False
     bubble._can_show.assert_called_once_with()
+
+
+def test_speech_bubble_focus_tree_is_disabled_for_passive_surfaces() -> None:
+    widget = Mock()
+
+    _disable_focus_tree(widget)
+
+    widget.set_focusable.assert_called_once_with(False)
+    widget.set_can_focus.assert_called_once_with(False)

@@ -16,6 +16,12 @@ from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 from mochi.x11 import get_window_position, move_window, request_keep_above
 
 
+def _disable_focus_tree(widget: Gtk.Widget) -> None:
+    """Keep passive presentation surfaces out of GTK keyboard focus."""
+    widget.set_focusable(False)
+    widget.set_can_focus(False)
+
+
 class SpeechBubble:
     """Show one subtle bubble anchored to Mochi without stealing keyboard focus.
 
@@ -63,7 +69,7 @@ class SpeechBubble:
         self._window.set_decorated(False)
         self._window.set_resizable(False)
         self._window.set_modal(False)
-        self._window.set_focusable(False)
+        _disable_focus_tree(self._window)
         self._window.set_hide_on_close(True)
         self._window.set_transient_for(owner)
         self._window.add_css_class("mochi-speech-window")
@@ -80,7 +86,7 @@ class SpeechBubble:
         self._popover.set_has_arrow(True)
         self._popover.set_position(Gtk.PositionType.TOP)
         self._popover.set_offset(0, -self.GAP_PX)
-        self._popover.set_focusable(False)
+        _disable_focus_tree(self._popover)
         self._popover.set_can_target(False)
         self._popover.add_css_class("mochi-speech-popover")
         self._popover.set_child(self._popover_box)
