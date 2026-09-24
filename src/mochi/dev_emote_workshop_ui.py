@@ -349,8 +349,9 @@ class EmoteWorkshopWindow(Gtk.Window):
         self._copy_button.set_sensitive(True)
         self._promote_button.set_sensitive(False)
         self._set_status(
-            "Promoted art and manifest entry. Copy the catalogue snippet into "
-            "src/mochi/emotes.py, then restart Mochi before testing the registered emote."
+            "Promoted art, manifest metadata, and packaging entry. Copy the catalogue "
+            "snippet into src/mochi/emotes.py, then restart Mochi before testing the "
+            "registered emote."
         )
 
     def _copy_snippet(self, _button: Gtk.Button) -> None:
