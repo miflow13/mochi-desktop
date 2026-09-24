@@ -204,6 +204,8 @@ def promote_emote(
     asset_directory = root / "assets" / "mochi" / spec.animation_id
     if asset_directory.exists():
         raise ValueError(f"Asset directory already exists: {asset_directory}")
+    asset_directory.mkdir(parents=False)
+
     packaging_entry = (
         f'"share/mochi/{spec.animation_id}" = '
         f'["assets/mochi/{spec.animation_id}/*.png"]'
