@@ -671,6 +671,26 @@
       "frame_count": 21,
       "fps": 8.333333333333334,
       "loop": false
+    },
+    "mochi_grin": {
+      "spritesheet": "mochi_grin/mochi_grin.png",
+      "frame_count": 20,
+      "fps": 8.33,
+      "loop": true,
+      "source_cell_size": [
+        256,
+        256
+      ]
+    },
+    "mochi_type_tired": {
+      "spritesheet": "mochi_type_tired/mochi_type_tired.png",
+      "frame_count": 22,
+      "fps": 8.33,
+      "loop": true,
+      "source_cell_size": [
+        256,
+        256
+      ]
     }
   }
 }
