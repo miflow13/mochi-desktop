@@ -103,6 +103,96 @@ def request_keep_above(window: Gtk.Window) -> bool:
     finally:
         x11.XCloseDisplay(display)
 
+def apply_sticky_dock_properties(window: Gtk.Window) -> bool:
+    """Mark the XWayland window as a sticky dock on the X11 window manager.
+
+    On GNOME Wayland, Mochi runs as a regular X11 window managed by Mutter.
+    That binds the window to a single workspace and lets Mutter focus it (and
+    its workspace) on interaction. Setting the EWMH properties below turns
+    Mochi into a desktop-wide overlay:
+
+    - ``_NET_WM_DESKTOP = 0xFFFFFFFF`` marks the window as sticky, so it is
+      visible on every virtual desktop.
+    - ``_NET_WM_WINDOW_TYPE_DOCK`` makes Mutter treat it as a panel/dock
+      rather than an application window, preventing workspace switches when
+      the window is interacted with.
+    - ``_NET_WM_STATE_SKIP_TASKBAR`` / ``_NET_WM_STATE_SKIP_PAGER`` keep it
+      out of the taskbar and workspace switcher.
+    """
+    surface = window.get_surface()
+    if GdkX11 is None or not isinstance(surface, GdkX11.X11Surface):
+        return False
+
+    library_name = ctypes.util.find_library("X11")
+    if library_name is None:
+        logging.getLogger(__name__).warning(
+            "libX11 not found; cannot apply sticky/dock window properties"
+        )
+        return False
+
+    x11 = ctypes.CDLL(library_name)
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+    x11.XInternAtom.restype = ctypes.c_ulong
+    x11.XChangeProperty.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_int,
+    ]
+    x11.XChangeProperty.restype = ctypes.c_int
+    x11.XFlush.argtypes = [ctypes.c_void_p]
+    x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+
+    display = x11.XOpenDisplay(None)
+    if not display:
+        return False
+
+    _XA_ATOM = 4
+    _XA_CARDINAL = 6
+
+    def _set_property(name: bytes, type_atom: int, values: list[int]) -> None:
+        prop = x11.XInternAtom(display, name, False)
+        count = len(values)
+        array = (ctypes.c_ulong * count)(*values)
+        x11.XChangeProperty(
+            display,
+            surface.get_xid(),
+            prop,
+            type_atom,
+            32,
+            0,
+            ctypes.cast(array, ctypes.c_void_p),
+            count,
+        )
+
+    try:
+        _set_property(b"_NET_WM_DESKTOP", _XA_CARDINAL, [0xFFFFFFFF])
+        _set_property(
+            b"_NET_WM_WINDOW_TYPE",
+            _XA_ATOM,
+            [x11.XInternAtom(display, b"_NET_WM_WINDOW_TYPE_DOCK", False)],
+        )
+        _set_property(
+            b"_NET_WM_STATE",
+            _XA_ATOM,
+            [
+                x11.XInternAtom(display, b"_NET_WM_STATE_SKIP_TASKBAR", False),
+                x11.XInternAtom(display, b"_NET_WM_STATE_SKIP_PAGER", False),
+                x11.XInternAtom(display, b"_NET_WM_STATE_STICKY", False),
+                x11.XInternAtom(display, b"_NET_WM_STATE_ABOVE", False),
+            ],
+        )
+        x11.XFlush(display)
+    finally:
+        x11.XCloseDisplay(display)
+
+    return True
 
 def move_window(window: Gtk.Window, x: int, y: int) -> bool:
     surface = window.get_surface()
