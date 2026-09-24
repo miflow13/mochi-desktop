@@ -16,6 +16,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.config import ConfigStore
+from mochi.dev_emote_workshop_ui import EmoteWorkshopWindow
 from mochi.menu_window import MenuWindow
 from mochi.sound import SoundEvent
 from mochi.state import MochiState
@@ -241,6 +242,14 @@ class BuddyMenuController:
         )
         card.append(nap_button)
         animated_rows.append(nap_button)
+
+        workshop_button, _ = self._buddy._make_menu_button(
+            "Emote Workshop",
+            "applications-graphics-symbolic",
+            self._buddy._open_emote_workshop,
+        )
+        card.append(workshop_button)
+        animated_rows.append(workshop_button)
 
         card.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
@@ -598,6 +607,18 @@ class BuddyMenuController:
             self._buddy.queue_draw()
 
         self._buddy._close_developer_menu_then(start_nap)
+
+    def _open_emote_workshop(self, _button: Gtk.Button) -> None:
+        """Open the source-checkout-only emote import/preview surface."""
+
+        def open_workshop() -> None:
+            window = getattr(self._buddy, "_emote_workshop_window", None)
+            if window is None:
+                window = EmoteWorkshopWindow(self._buddy)
+                self._buddy._emote_workshop_window = window
+            window.present()
+
+        self._buddy._close_developer_menu_then(open_workshop)
 
     def _reset_position(self, _button: Gtk.Button) -> None:
         def reset_position() -> None:
