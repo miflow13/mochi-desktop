@@ -2,7 +2,7 @@
 
 > Deep onboarding guide for contributors who are new to Mochi's runtime.
 >
-> Verified against main at commit 942223f5d2f46cef56df0ac92e6b979bfe02748b on 2026-09-21.
+> Verified against main at commit 2753736a0b6fa7d482da174c341c452e641f723b on 2026-09-23.
 > Mochi is still an early public alpha, so GitHub main remains the source of truth when this guide and the implementation disagree.
 
 ## 1. What Mochi is
@@ -1969,3 +1969,262 @@ Mochi feels coherent when every system agrees about one question:
 > Who owns the little guy right now, and what is the safe next state?
 
 Keep that answer explicit, and most of the codebase becomes much easier to reason about. 🌱
+
+
+---
+
+# 39. State-machine audit companion guide
+
+Mochi's state system is small on purpose. The complexity comes from several domains asking for presentation at the same time. When auditing a bug, trace ownership rather than only the visible animation.
+
+For every behavior, write down five facts:
+
+1. **Trigger** — what event requested the behavior?
+2. **Domain owner** — which subsystem still considers itself active?
+3. **Behavior owner** — what is `StateMachine.current`?
+4. **Visual owner** — which animation object is active now?
+5. **Recovery decision** — when the interruption ends, which *live* context should win next?
+
+A useful debugging record looks like:
+
+    trigger: user begins typing
+    domain: typing monitor active
+    behavior: TYPING
+    visual: typing_loop
+    interruption: PICKUP → DRAGGED → DROPPING
+    recovery: reevaluate typing context; resume typing only if still active
+
+The final line is important. Avoid blindly restoring a saved "previous animation." Desktop context can change while Mochi is interrupted.
+
+## Transition review questions
+
+When reviewing a state transition, ask:
+
+- Is the request routed through `Buddy._transition_to()`?
+- Does `behavior.can_transition()` express the priority rule centrally?
+- Is repeated entry idempotent when the context has not changed?
+- Does the state have an explicit normal exit?
+- Does interruption cancel or invalidate callbacks owned by the old action?
+- Does completion verify that it still owns the active animation/action?
+- Does recovery reevaluate current context rather than stale context?
+- Can sleep, drag, menus, Focus, or shutdown occur safely from here?
+
+## High-value transition scenarios
+
+The following sequences catch more lifecycle bugs than testing states in isolation:
+
+    typing → pickup → drag → drop → contextual reevaluation
+    watching → music → pause → contextual reevaluation
+    walking → context menu → close → recovery
+    sleeping → context menu → close → still sleeping
+    Focus → drag → drop → Focus presentation recovery
+    Focus → feed → heart → Focus presentation recovery
+    context A → context B without an idle gap
+    old animation completion → newer owned animation
+    detector/helper disappears while contextual behavior is active
+    shutdown while Focus/audio/timers are active
+
+The regression watchlist should be used alongside these sequences rather than replaced by them.
+
+---
+
+# 40. Timer, callback, and monitor ownership
+
+A timer is state.
+
+Every long-lived callback source should have an answer to:
+
+> Who owns this source, and what exact event removes it?
+
+Common owners include:
+
+- Buddy idle/blink scheduling;
+- AutonomousSleepController;
+- ambient activity monitors;
+- typing/presence/media/file monitors;
+- Focus session ticks;
+- catalogue hover previews;
+- speech/nameplate presentation;
+- long-running audio;
+- delayed click/double-click resolution;
+- deferred menu actions.
+
+## Safe source pattern
+
+A long-lived subsystem should generally follow:
+
+    start()
+      ↓
+    if source already exists: do not duplicate it
+      ↓
+    store source ID / handle
+      ↓
+    callback checks current ownership
+      ↓
+    stop()
+      ↓
+    remove source / stop handle
+      ↓
+    clear stored ownership
+
+`stop()` should be safe to call more than once.
+
+## Generation/token pattern
+
+For delayed work that cannot simply be cancelled, use an ownership token or compare against the object that originally started the work.
+
+The animation system already demonstrates this idea by ignoring completion for an animation that is no longer `_active_animation`.
+
+The same principle applies to delayed feature callbacks:
+
+> A callback being scheduled does not guarantee it still has permission to act when it finally runs.
+
+---
+
+# 41. How to read a contextual detector
+
+Do not begin with the animation when a contextual reaction is wrong.
+
+Read the feature from outside inward:
+
+    desktop/application activity
+      ↓
+    GNOME helper or fallback detector
+      ↓
+    semantic monitor event
+      ↓
+    ambient/context controller
+      ↓
+    feature/domain state
+      ↓
+    behavior transition request
+      ↓
+    animation/presentation
+
+For every detector, identify:
+
+- what counts as "started";
+- what counts as "stopped";
+- whether the detector sends edges or repeated snapshots;
+- how duplicate snapshots are suppressed;
+- how stale state is cleared if the helper disappears;
+- what fallback exists when helper integration is unavailable;
+- whether shutdown disconnects the source;
+- whether current context can be reconstructed after helper restart.
+
+A detector should ideally communicate semantic changes such as:
+
+    TerminalFocusedStarted
+    TerminalFocusedStopped
+
+rather than continuously requesting the terminal animation while the terminal remains focused.
+
+Presentation should react to context changes; it should not be used as the context database.
+
+---
+
+# 42. Adding tests that protect architecture
+
+Mochi tests should protect invariants, not only screenshots of today's implementation.
+
+Strong regression tests answer questions such as:
+
+- Does a rejected transition leave the previous state unchanged?
+- Does repeated contextual activation avoid restarting the same behavior?
+- Does an interrupted animation's stale completion do nothing?
+- Does drag always reach a recoverable post-drop state?
+- Does stopping a subsystem remove its timer exactly once?
+- Does start → stop → start still create one live source?
+- Does a helper outage clear only helper-owned context?
+- Does Focus retain domain time while presentation is interrupted?
+- Does shutdown settle/persist domain state before tearing down sources?
+
+Prefer small deterministic tests for policy and lifecycle. Reserve live GTK/Fedora QA for compositor behavior that cannot be represented honestly in unit tests.
+
+## Test naming
+
+Names should describe the invariant or regression:
+
+    test_repeated_typing_start_does_not_restart_active_typing
+    test_stale_animation_completion_cannot_force_idle
+    test_drop_reevaluates_active_context
+    test_focus_drag_interruption_keeps_session_running
+    test_monitor_stop_is_idempotent
+
+A future contributor should be able to understand *why the test exists* without reading the original bug report.
+
+---
+
+# 43. Documentation maintenance contract
+
+This manual is useful only if it tracks the runtime.
+
+Update it when a change alters:
+
+- startup architecture;
+- production Buddy composition/MRO;
+- behavior states or transition policy;
+- animation ownership/recovery;
+- detector/helper architecture;
+- asset manifest rules;
+- persistent configuration;
+- user-facing long-running subsystems;
+- test/release commands;
+- known high-risk lifecycle areas.
+
+Do not update this manual for every frame-timing tweak or phrase change.
+
+When documentation and implementation disagree:
+
+1. treat current GitHub code as authoritative;
+2. verify the behavior with tests where practical;
+3. update the manual on the feature/fix branch;
+4. mention environment-dependent behavior that still needs Fedora/Wayland QA.
+
+For major architecture changes, update both this manual and the narrower wiki page that owns the topic rather than allowing two contradictory explanations to survive.
+
+---
+
+# 44. Contributor handoff checklist
+
+Before handing a branch to another developer or to Mika for local QA, record:
+
+- branch name;
+- one-sentence purpose;
+- files/systems intentionally changed;
+- tests run and their result;
+- tests not run and why;
+- known limitations;
+- Fedora/Wayland behaviors that require real-machine verification;
+- exact manual QA steps;
+- whether docs changed;
+- whether packaging/assets changed.
+
+For stateful changes, also include:
+
+- entry state;
+- trigger;
+- expected active state;
+- interruption behavior;
+- expected recovery state.
+
+A good handoff makes a failure reproducible. "Seems fixed" is not enough information to debug a regression later.
+
+---
+
+# 45. What not to learn from Mochi accidentally
+
+Mochi contains pragmatic decisions made for a small Linux desktop companion. Some are deliberate tradeoffs, not universal Python/GTK patterns.
+
+Do not generalize these without context:
+
+- cooperative multiple inheritance is useful here but should not be the default architecture for every feature;
+- XWayland is an intentional compatibility path for free positioning on GNOME, not a claim that X11 is generally preferable to Wayland;
+- a global behavior FSM works because Mochi is one character with one visible body;
+- GTK timers are appropriate for UI lifecycle work but should not become an unmanaged job system;
+- runtime-derived animations are useful when they represent authored subranges, but should not replace a clear asset pipeline;
+- compatibility seams are valuable during architectural migration, but they should not become permanent excuses for duplicate ownership.
+
+The transferable lesson is not "copy Mochi's classes." It is:
+
+> make ownership explicit, keep transitions centralized, keep long-lived resources cancellable, and test recovery as seriously as entry.
