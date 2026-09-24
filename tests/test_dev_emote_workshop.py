@@ -33,6 +33,11 @@ def _checkout_root(tmp_path: Path) -> Path:
     (root / "assets" / "mochi").mkdir(parents=True)
     (root / "src" / "mochi").mkdir(parents=True)
     (root / "src" / "mochi" / "emotes.py").write_text("# test\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        '[tool.setuptools.data-files]\n"share/mochi" = ["assets/mochi/manifest.json"]\n\n'
+        "[tool.pytest.ini_options]\n",
+        encoding="utf-8",
+    )
     (root / "assets" / "mochi" / "manifest.json").write_text(
         json.dumps(
             {
@@ -143,6 +148,11 @@ def test_promote_spritesheet_copies_art_and_updates_manifest(tmp_path: Path) -> 
     assert '"party-popper"' in result.catalogue_snippet
     assert 'rarity="rare"' in result.catalogue_snippet
     assert "reveal_on_unlock=True" in result.catalogue_snippet
+    pyproject = result.pyproject_path.read_text(encoding="utf-8")
+    assert (
+        '"share/mochi/party_popper" = ["assets/mochi/party_popper/*.png"]'
+        in pyproject
+    )
 
 
 def test_promote_refuses_existing_animation_without_overwrite(tmp_path: Path) -> None:
