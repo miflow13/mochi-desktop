@@ -6,10 +6,12 @@ from pathlib import Path
 import cairo
 import pytest
 
+import mochi.dev_emote_workshop as workshop
 from mochi.dev_emote_workshop import (
     EmoteImportSpec,
     build_catalogue_snippet,
     build_preview_animation,
+    development_checkout_root,
     inspect_source,
     promote_emote,
     slugify_animation_id,
@@ -32,6 +34,7 @@ def _checkout_root(tmp_path: Path) -> Path:
     root = tmp_path / "mochi"
     (root / "assets" / "mochi").mkdir(parents=True)
     (root / "src" / "mochi").mkdir(parents=True)
+    (root / ".git").mkdir()
     (root / "src" / "mochi" / "emotes.py").write_text("# test\n", encoding="utf-8")
     (root / "pyproject.toml").write_text(
         '[tool.setuptools.data-files]\n"share/mochi" = ["assets/mochi/manifest.json"]\n\n'
@@ -54,6 +57,40 @@ def _checkout_root(tmp_path: Path) -> Path:
     )
     return root
 
+
+def test_development_checkout_root_accepts_explicit_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _checkout_root(tmp_path)
+    monkeypatch.setenv("MOCHI_SOURCE_ROOT", str(root))
+
+    assert development_checkout_root() == root.resolve()
+
+
+def test_development_checkout_root_recovers_pip_local_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _checkout_root(tmp_path)
+    monkeypatch.delenv("MOCHI_SOURCE_ROOT", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    class FakeDistribution:
+        def read_text(self, name: str) -> str | None:
+            assert name == "direct_url.json"
+            return json.dumps({"url": root.resolve().as_uri(), "dir_info": {}})
+
+    monkeypatch.setattr(
+        workshop.importlib_metadata,
+        "distribution",
+        lambda _name: FakeDistribution(),
+    )
+    monkeypatch.setattr(
+        workshop,
+        "__file__",
+        str(tmp_path / "installed" / "site-packages" / "mochi" / "dev_emote_workshop.py"),
+    )
+
+    assert development_checkout_root() == root.resolve()
 
 def test_slugify_animation_id_is_manifest_safe() -> None:
     assert slugify_animation_id("Party Popper!!") == "party_popper"
