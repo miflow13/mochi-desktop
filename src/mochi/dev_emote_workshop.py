@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import metadata as importlib_metadata
 import json
+import os
 from pathlib import Path
 import re
 import shutil
 import sys
+from urllib.parse import unquote, urlparse
 
 import cairo
 
@@ -71,14 +74,76 @@ def slugify_animation_id(value: str) -> str:
 
 
 def development_checkout_root() -> Path | None:
-    root = Path(__file__).resolve().parents[2]
+    """Locate the writable Mochi Git checkout that produced this runtime.
+
+    The normal installer copies Mochi into its private venv, so __file__ may
+    live under site-packages even when that installed build came directly from a
+    local Git checkout. Prefer an explicit override, then the live module/cwd,
+    then pip\'s PEP 610 direct_url.json source record.
+    """
+
+    override = os.environ.get("MOCHI_SOURCE_ROOT")
+    if override:
+        candidate = _validated_checkout_root(Path(override))
+        if candidate is not None:
+            return candidate
+
+    module_root = Path(__file__).resolve().parents[2]
+    for candidate in (module_root, *_candidate_parents(Path.cwd())):
+        validated = _validated_checkout_root(candidate)
+        if validated is not None:
+            return validated
+
+    direct_url_root = _installed_source_checkout_root()
+    if direct_url_root is not None:
+        return direct_url_root
+    return None
+
+
+def _candidate_parents(path: Path) -> tuple[Path, ...]:
+    resolved = path.expanduser().resolve()
+    return (resolved, *resolved.parents)
+
+
+def _validated_checkout_root(path: Path) -> Path | None:
+    try:
+        root = path.expanduser().resolve()
+    except OSError:
+        return None
     if (
         (root / "assets" / "mochi" / "manifest.json").is_file()
         and (root / "src" / "mochi" / "emotes.py").is_file()
+        and (root / "pyproject.toml").is_file()
         and (root / ".git").exists()
     ):
         return root
     return None
+
+
+def _installed_source_checkout_root() -> Path | None:
+    """Recover the local source directory recorded by pip during install."""
+
+    try:
+        distribution = importlib_metadata.distribution("mochi-desktop")
+        direct_url_text = distribution.read_text("direct_url.json")
+    except (importlib_metadata.PackageNotFoundError, OSError):
+        return None
+    if not direct_url_text:
+        return None
+
+    try:
+        payload = json.loads(direct_url_text)
+        url = payload.get("url")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    if not isinstance(url, str):
+        return None
+
+    parsed = urlparse(url)
+    if parsed.scheme != "file":
+        return None
+    source_path = Path(unquote(parsed.path))
+    return _validated_checkout_root(source_path)
 
 
 def inspect_source(source: Path, source_cell_size: tuple[int, int]) -> EmoteInspection:
