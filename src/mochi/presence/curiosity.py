@@ -21,7 +21,8 @@ class ActiveWindowCuriosityMixin:
 
     CURIOSITY_DEBOUNCE_MS = 180
     CURIOSITY_DURATION_SECONDS = 1.8
-    CURIOSITY_MIN_GAP_SECONDS = 1.2
+    CURIOSITY_MIN_GAP_SECONDS = 2.5
+    CURIOSITY_SAME_CATEGORY_GAP_SECONDS = 30.0
     CURIOSITY_LEAN_PX = 4.0
 
     _CURIOSITY_LABELS = {
@@ -48,17 +49,16 @@ class ActiveWindowCuriosityMixin:
         self._curiosity_category: str | None = None
         self._curiosity_started_at = 0.0
         self._curiosity_last_started_at = float("-inf")
+        self._curiosity_last_category: str | None = None
         self._curiosity_pending_category: str | None = None
         self._curiosity_source_id: int | None = None
         super().__init__(*args, **kwargs)
 
     def _on_presence_app_category_changed(self, category: str) -> None:
-        previous = self._presence_app_category
+        # App-category changes also happen for contextual reasons while focus
+        # remains on the same window (for example browser/media reclassification).
+        # Curiosity is intentionally driven only by the dedicated focus pulse.
         super()._on_presence_app_category_changed(category)
-        # Backward-compatible fallback for older helpers that do not emit the
-        # dedicated focus pulse yet.
-        if category != previous:
-            self._schedule_curiosity_cue(category)
 
     def _on_presence_app_focus_changed(self, category: str) -> None:
         super()._on_presence_app_focus_changed(category)
@@ -134,12 +134,19 @@ class ActiveWindowCuriosityMixin:
             return False
 
         now = time.monotonic()
-        if now - self._curiosity_last_started_at < self.CURIOSITY_MIN_GAP_SECONDS:
+        elapsed = now - self._curiosity_last_started_at
+        if elapsed < self.CURIOSITY_MIN_GAP_SECONDS:
+            return False
+        if (
+            category == self._curiosity_last_category
+            and elapsed < self.CURIOSITY_SAME_CATEGORY_GAP_SECONDS
+        ):
             return False
 
         self._curiosity_category = category
         self._curiosity_started_at = now
         self._curiosity_last_started_at = now
+        self._curiosity_last_category = category
         self.queue_draw()
         logger = getattr(self, "_logger", None)
         if logger is not None:
