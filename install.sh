@@ -133,7 +133,9 @@ EOF
 }
 
 ensure_python_build_tools() {
-    if "$VENV/bin/python" - <<'PY'
+    local python="$1"
+
+    if "$python" - <<'PY'
 from importlib import metadata
 import re
 
@@ -158,7 +160,7 @@ PY
     fi
 
     step "Installing Python build tooling"
-    "$VENV/bin/python" -m pip install "setuptools>=69" wheel
+    "$python" -m pip install "setuptools>=69" wheel
 }
 
 banner
@@ -254,14 +256,57 @@ PY
 step "Installing Mochi"
 printf '%sTarget:%s %s\n' "$DIM" "$RESET" "$APP_HOME"
 mkdir -p "$APP_HOME" "$BIN_DIR" "$APPLICATIONS_DIR" "$ICON_DIR"
-rm -rf "$VENV"
-"$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"
+if ! TMP_VENV="$(mktemp -d "$APP_HOME/venv.new.XXXXXX")"; then
+    warn "Failed to create temporary Mochi environment."
+    exit 1
+fi
+trap '[[ -d "$TMP_VENV" ]] && rm -rf "$TMP_VENV"' EXIT
+if ! "$SYSTEM_PYTHON" -m venv --system-site-packages "$TMP_VENV"; then
+    warn "Failed to create temporary Mochi virtual environment."
+    exit 1
+fi
 
 # Mochi uses setuptools.build_meta from pyproject.toml. Reuse compatible build
 # tooling already visible through --system-site-packages when possible, and only
 # ask pip to fetch replacements when setuptools is too old or wheel is missing.
-ensure_python_build_tools
-"$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"
+if ! ensure_python_build_tools "$TMP_VENV/bin/python"; then
+    warn "Failed to install Mochi build tooling into temporary environment."
+    exit 1
+fi
+if ! "$TMP_VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then
+    warn "Failed to install Mochi into temporary environment."
+    exit 1
+fi
+BACKUP_VENV=""
+if [[ -d "$VENV" ]]; then
+    BACKUP_VENV="$APP_HOME/venv.backup.$$"
+    rm -rf "$BACKUP_VENV"
+    if ! mv "$VENV" "$BACKUP_VENV"; then
+        warn "Failed to back up existing Mochi environment."
+        exit 1
+    fi
+fi
+
+if ! mv "$TMP_VENV" "$VENV"; then
+    rm -rf "$VENV"
+    rm -rf "$TMP_VENV"
+    if [[ -n "$BACKUP_VENV" && -d "$BACKUP_VENV" ]]; then
+        if ! mv "$BACKUP_VENV" "$VENV"; then
+            warn "Failed to replace or restore Mochi's virtual environment."
+            exit 1
+        fi
+        warn "Failed to activate new Mochi environment; restored previous environment."
+    else
+        warn "Failed to activate new Mochi environment."
+    fi
+    exit 1
+fi
+
+if [[ -n "$BACKUP_VENV" && -d "$BACKUP_VENV" ]]; then
+    rm -rf "$BACKUP_VENV"
+fi
+
+trap - EXIT
 
 install_launcher "$LAUNCHER" "$VENV/bin/mochi"
 

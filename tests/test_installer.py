@@ -283,3 +283,37 @@ def test_installer_bootstraps_missing_private_venv_build_tools(tmp_path: Path) -
     assert "-m venv --system-site-packages" in python_log
     assert "-m pip install setuptools>=69 wheel" in python_log
     assert "Installing Python build tooling" in result.stdout
+
+
+def test_installer_preserves_transactional_private_venv_replacement() -> None:
+    text = INSTALLER.read_text(encoding="utf-8")
+
+    assert 'if ! TMP_VENV="$(mktemp -d "$APP_HOME/venv.new.XXXXXX")"; then' in text
+    assert '"$SYSTEM_PYTHON" -m venv --system-site-packages "$TMP_VENV"' in text
+    assert 'if ! ensure_python_build_tools "$TMP_VENV/bin/python"; then' in text
+    assert 'if ! "$TMP_VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then' in text
+
+    backup_move = 'mv "$VENV" "$BACKUP_VENV"'
+    replacement_move = 'mv "$TMP_VENV" "$VENV"'
+    restore_move = 'if ! mv "$BACKUP_VENV" "$VENV"; then'
+    cleanup_failed_replacement = 'rm -rf "$VENV"'
+    cleanup_failed_tmp = 'rm -rf "$TMP_VENV"'
+
+    assert backup_move in text
+    assert replacement_move in text
+    assert restore_move in text
+    assert cleanup_failed_replacement in text
+    assert cleanup_failed_tmp in text
+
+    replacement_index = text.index(replacement_move)
+    cleanup_failed_replacement_index = text.index(
+        cleanup_failed_replacement,
+        replacement_index,
+    )
+    cleanup_failed_tmp_index = text.index(cleanup_failed_tmp, replacement_index)
+    restore_index = text.index(restore_move, replacement_index)
+
+    assert text.index(backup_move) < replacement_index
+    assert replacement_index < cleanup_failed_replacement_index
+    assert cleanup_failed_replacement_index < cleanup_failed_tmp_index
+    assert replacement_index < restore_index
