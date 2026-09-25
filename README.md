@@ -55,17 +55,17 @@ through the time you naturally spend together.
 > Python build packages. **CachyOS + Umbriel + Wayland** has also been
 > community-verified.
 
-## ✨ What's new lately
+## What's new lately
 
-- 🌍 **Broader Linux portability** — safer installs across GNOME and non-GNOME
+-  **Broader Linux portability** — safer installs across GNOME and non-GNOME
   desktops, with behavioral installer regression coverage for the new paths.
-- 🎨 **Mochi Artist Kit** — the master reference, animation guide, workspace
+-  **Mochi Artist Kit** — the master reference, animation guide, workspace
   template, and contribution path are now available for community-made emotes.
-- 🧰 **Deskling SDK work is underway** — Mochi's reusable animation, state,
+-  **Deskling SDK work is underway** — Mochi's reusable animation, state,
   interaction, and desktop-companion pieces are being extracted into a separate SDK.
-- 🔥 **More personality** — new catalogue and ambient behaviors continue to land,
+-  **More personality** — new catalogue and ambient behaviors continue to land,
   including the rare **This Is Fine** emote.
-- 🪟 **Desktop behavior has been hardened** — recent fixes improve workspace
+-  **Desktop behavior has been hardened** — recent fixes improve workspace
   stickiness, focus handling, and installer rollback safety during updates.
 
 ---
