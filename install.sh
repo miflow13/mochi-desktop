@@ -272,10 +272,11 @@ if ! ensure_python_build_tools "$TMP_VENV/bin/python"; then
     warn "Failed to install Mochi build tooling into temporary environment."
     exit 1
 fi
-if ! "$TMP_VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then
-    warn "Failed to install Mochi into temporary environment."
-    exit 1
-fi
+
+# Do not install Mochi itself until the environment is at its final path.
+# Python console-script entry points use an absolute interpreter shebang. If we
+# install while the venv is named venv.new.* and then rename it to venv, the
+# generated bin/mochi script keeps pointing at the now-missing temporary path.
 BACKUP_VENV=""
 if [[ -d "$VENV" ]]; then
     BACKUP_VENV="$APP_HOME/venv.backup.$$"
@@ -297,6 +298,20 @@ if ! mv "$TMP_VENV" "$VENV"; then
         warn "Failed to activate new Mochi environment; restored previous environment."
     else
         warn "Failed to activate new Mochi environment."
+    fi
+    exit 1
+fi
+
+if ! "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then
+    rm -rf "$VENV"
+    if [[ -n "$BACKUP_VENV" && -d "$BACKUP_VENV" ]]; then
+        if ! mv "$BACKUP_VENV" "$VENV"; then
+            warn "Failed to install the new Mochi build and failed to restore the previous environment."
+            exit 1
+        fi
+        warn "Failed to install the new Mochi build; restored previous environment."
+    else
+        warn "Failed to install Mochi into the new environment."
     fi
     exit 1
 fi
