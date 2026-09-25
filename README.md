@@ -16,8 +16,6 @@ Seeing Mochi pop up in the Linux community has been surreal. 💚
 > **Watch on YouTube →**
 
 
-<!-- <img src="docs/media/v0.3/mochi-terminal.gif" width="800" alt="Mochi living on a Linux desktop beside a terminal"> -->
-
 Mochi lives quietly on your Linux desktop — wandering, reacting, working beside
 you, taking naps, sharing snacks, learning new emotes, and building a bond
 through the time you naturally spend together.
@@ -27,6 +25,7 @@ through the time you naturally spend together.
 [Website](https://miflow13.github.io/mochi-desktop/) ·
 [Install](#install) ·
 [Documentation](docs/README.md) ·
+[Contributing](CONTRIBUTING.md) ·
 [Changelog](CHANGELOG.md) ·
 [Report a bug](#reporting-bugs)
 
@@ -124,7 +123,7 @@ authored level-up animation, sound, visual feedback, and unlock presentation.
   <img src="docs/media/v0.3/emote-catalogue.gif" width="800" alt="Mochi Emote Catalogue showing bond-gated emotes">
 </p>
 
-The new **Emote Catalogue** gives Mochi's expressions a home.
+The **Emote Catalogue** gives Mochi's expressions a home.
 
 It includes:
 
@@ -134,7 +133,7 @@ It includes:
 - animated hover previews,
 - and newly learned behaviors that can join Mochi's ambient animation pool.
 
-Current catalogue entries include **Heart, Bounce, Squish, Wave, Side Eye,
+Current catalogue entries include **Heart, Bounce, Squish, Wave, Coffee, Side Eye,
 Look Around, Table Flip, VS Code, Dance, and Mochi.exe**.
 
 With the GNOME helper enabled, press:
@@ -173,12 +172,12 @@ early is not punished, and already-earned whole-minute XP is kept.
 
 v0.3 builds on the existing desktop-companion foundation:
 
-- idle breathing, blinking, looking around, and autonomous walking,
-- unlocked catalogue emotes joining Mochi's ambient behavior,
-- persistent **Stay put** control,
+- a calm static idle with natural blinking, looking around, and occasional autonomous walking,
+- a small startup hello plus unlocked catalogue emotes joining Mochi's ambient behavior,
+- persistent **Stay put** and optional edge-roaming controls,
 - click chirps, bounce, squish, heart, and triple-click dialogue,
 - pickup, velocity-aware dragging, and drop behavior,
-- sleep / wake behavior,
+- manual sleep / wake plus occasional autonomous naps,
 - typing companionship,
 - terminal and coding coworking reactions,
 - music and media reactions,
@@ -223,7 +222,7 @@ The installer has a supported dependency path for Fedora. It creates a private
 Python environment, installs the GNOME helper, adds Mochi to the application
 grid, and installs `mochi` and `mochi-uninstall` under `~/.local/bin`.
 
-### Current alpha checkout
+### Install from source
 
 ```bash
 git clone https://github.com/miflow13/mochi-desktop.git
@@ -231,8 +230,8 @@ cd mochi-desktop
 ./install.sh
 ```
 
-The v0.3 development line has been promoted to `main`. The installer installs
-the source currently checked out in Git.
+`main` currently tracks the v0.3 alpha line. The installer installs the source
+from the commit or branch you currently have checked out.
 
 After the first GNOME Wayland installation, log out and back in once so GNOME
 can load Mochi's optional awareness helper. Mochi still runs without the helper,
@@ -240,15 +239,18 @@ but some contextual reactions and global shortcuts will be unavailable.
 
 ### Update an installed copy
 
-Quit Mochi first, then:
+Quit Mochi first, then update a clean source checkout:
 
 ```bash
-git pull --ff-only
+git switch main
+git pull --ff-only origin main
 ./install.sh
 ```
 
 Relaunch afterward. `git pull` alone does not update the app-grid installation,
-and an already-running process keeps its loaded code.
+and an already-running process keeps its loaded code. If you have local commits
+or uncommitted changes, preserve them on a branch or stash them before syncing
+`main`.
 
 ### Fedora with Niri
 
@@ -299,9 +301,10 @@ Global shortcuts require the GNOME helper.
 
 ### Known issues
 
-- **Workspace / Overview freeze — [#45](https://github.com/miflow13/mochi-desktop/issues/45):**
-  entering GNOME Overview or switching workspaces during an emote can leave
-  Mochi visually frozen on XWayland.
+- **XWayland lifecycle freeze — [#45](https://github.com/miflow13/mochi-desktop/issues/45):**
+  a separate freeze can still occur when entering GNOME Overview or switching
+  workspaces during some animations. The ordinary sticky-workspace/focus issue
+  reported in #118 has been fixed.
 - Alpha behavior and compatibility can still change.
 
 Passing automated tests does not establish reliability across every compositor,
@@ -334,23 +337,24 @@ More detailed recovery steps are in
 ## Development
 
 Complete the Fedora runtime/helper installation first, then use a separate
-editable environment:
+editable environment for development:
 
 ```bash
 git clone https://github.com/miflow13/mochi-desktop.git
 cd mochi-desktop
 python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
-python -m pip install -e .
-python -m pip install pytest
-python -m pytest
+python3 -m pip install -e .
+python3 -m pip install pytest
+python3 -m pytest -q
 mochi --debug
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md),
+New contributors should start with the
+[Codebase Manual](docs/CODEBASE_MANUAL.md), then review
+[CONTRIBUTING.md](CONTRIBUTING.md),
 [REGRESSION_WATCHLIST.md](REGRESSION_WATCHLIST.md), and the
-[documentation index](docs/README.md) for contribution and verification
-guidance.
+[documentation index](docs/README.md) before changing runtime behavior.
 
 ## Reporting bugs
 
