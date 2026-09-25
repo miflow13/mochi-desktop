@@ -219,8 +219,9 @@ model.
 ### Give Mochi a corner of your desktop
 
 The installer has a supported dependency path for Fedora. It creates a private
-Python environment, installs the GNOME helper, adds Mochi to the application
-grid, and installs `mochi` and `mochi-uninstall` under `~/.local/bin`.
+Python environment, adds Mochi to the application grid, and installs `mochi`
+and `mochi-uninstall` under `~/.local/bin`. On GNOME, it also installs the
+optional awareness helper when GNOME extension tooling is available.
 
 ### Install from source
 
@@ -294,8 +295,10 @@ Global shortcuts require the GNOME helper.
 - Mochi uses an XWayland GTK window on GNOME Wayland for reliable desktop
   positioning.
 - Other distributions may work, but automatic dependency installation currently
-  supports Fedora.
-- GNOME provides the fullest AmbiSense integration.
+  supports Fedora. Mochi's installer no longer requires Fedora's Python build
+  packages to provide the local setuptools build backend.
+- GNOME provides the fullest AmbiSense integration. On non-GNOME desktops, the
+  optional GNOME helper is skipped instead of blocking installation.
 - Niri, fractional scaling, multi-monitor setups, and non-GNOME environments
   receive less regression coverage.
 
