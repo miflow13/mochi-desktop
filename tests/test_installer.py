@@ -113,8 +113,15 @@ if [[ "$1" == "-m" && "$2" == "venv" ]]; then
     mkdir -p "$4/bin"
     cp "$0" "$4/bin/python"
     chmod +x "$4/bin/python"
-    printf '#!/bin/bash\nexit 0\n' > "$4/bin/mochi"
+    printf '#!%s/bin/python\nexit 0\n' "$4" > "$4/bin/mochi"
     chmod +x "$4/bin/mochi"
+    exit 0
+fi
+
+if [[ "$1" == "-m" && "$2" == "pip" && "$3" == "install" && "$*" == *"--no-deps --no-build-isolation"* ]]; then
+    venv_bin="$(dirname "$0")"
+    printf '#!%s\nexit 0\n' "$0" > "$venv_bin/mochi"
+    chmod +x "$venv_bin/mochi"
     exit 0
 fi
 
@@ -297,7 +304,7 @@ def test_installer_preserves_transactional_private_venv_replacement() -> None:
     assert 'if ! TMP_VENV="$(mktemp -d "$APP_HOME/venv.new.XXXXXX")"; then' in text
     assert '"$SYSTEM_PYTHON" -m venv --system-site-packages "$TMP_VENV"' in text
     assert 'if ! ensure_python_build_tools "$TMP_VENV/bin/python"; then' in text
-    assert 'if ! "$TMP_VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then' in text
+    assert 'if ! "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then' in text
 
     backup_move = 'mv "$VENV" "$BACKUP_VENV"'
     replacement_move = 'mv "$TMP_VENV" "$VENV"'
@@ -323,3 +330,18 @@ def test_installer_preserves_transactional_private_venv_replacement() -> None:
     assert replacement_index < cleanup_failed_replacement_index
     assert cleanup_failed_replacement_index < cleanup_failed_tmp_index
     assert replacement_index < restore_index
+
+
+def test_installer_console_script_uses_final_venv_path(tmp_path: Path) -> None:
+    result, _log_dir = _run_installer(
+        tmp_path,
+        current_desktop="niri",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    venv = tmp_path / "home" / ".local" / "share" / "mochi-desktop" / "venv"
+    console_script = venv / "bin" / "mochi"
+    first_line = console_script.read_text(encoding="utf-8").splitlines()[0]
+
+    assert "venv.new." not in first_line
+    assert first_line == f"#!{venv / 'bin' / 'python'}"
