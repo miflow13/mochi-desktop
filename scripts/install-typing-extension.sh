@@ -72,6 +72,13 @@ with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.write(path, path.relative_to(source))
 PY
 
+# Replacing the files of an already-active extension does not guarantee that
+# GNOME Shell reloads its JavaScript in the current session. Disable an active
+# copy first so the following enable starts the freshly installed helper.
+if extension_is_active; then
+    gnome-extensions disable "$UUID" >/dev/null 2>&1 || true
+fi
+
 gnome-extensions install --force "$TMP_DIR/$UUID.shell-extension.zip"
 
 echo "Installed $UUID."
