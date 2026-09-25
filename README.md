@@ -49,6 +49,36 @@ through the time you naturally spend together.
 
 ---
 
+<div align="center">
+
+## 🧰 Build your own Deskling
+
+**A reusable Deskling SDK is in development.**
+
+Mochi is the first Deskling, but the goal is not for Mochi to be the only one.
+
+The planned **Deskling SDK** is being designed to let developers bring their own
+character, artwork, animations, and behavior into a reusable Linux
+desktop-companion runtime — without having to fork Mochi and untangle
+Mochi-specific code first.
+
+[![Deskling SDK — in development](https://img.shields.io/badge/Deskling%20SDK-in%20development-7FE719?style=for-the-badge)](https://github.com/miflow13/Deskling-SDK)
+
+**Bring the art. Define the behavior. Make a Deskling of your own.**
+
+</div>
+
+The SDK work is focused on extracting the reusable pieces behind Mochi:
+animation playback, coherent state/lifecycle handling, desktop interactions,
+window placement, configuration, and hooks for contextual behavior.
+
+This is still early work. APIs, packaging, and the extension surface may change
+before the first public SDK release.
+
+**[Follow Deskling SDK development →](https://github.com/miflow13/Deskling-SDK)**
+
+---
+
 ## v0.3 — Growing Together 🌱
 
 v0.3 is centered on one idea:
