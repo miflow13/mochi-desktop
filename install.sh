@@ -224,7 +224,7 @@ rm -rf "$VENV"
 # setuptools and wheel through system packages, but non-Fedora distributions may
 # create a venv where that backend is unavailable. Bootstrap Mochi's private
 # build tooling explicitly so installation does not depend on distro packaging.
-"$VENV/bin/python" -m pip install --upgrade "setuptools>=69" wheel
+"$VENV/bin/python" -m pip install "setuptools>=69" wheel
 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"
 
 install_launcher "$LAUNCHER" "$VENV/bin/mochi"
