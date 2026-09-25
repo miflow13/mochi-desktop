@@ -43,11 +43,33 @@ through the time you naturally spend together.
 
 </div>
 
-> **Early public alpha.** Fedora + GNOME + Wayland is the primary tested
-> environment. On GNOME Wayland, Mochi uses XWayland for the buddy window where
-> native positioning restrictions require it.
+> **Early public alpha.** Fedora + GNOME + Wayland remains Mochi's primary
+> tested environment. On GNOME Wayland, Mochi uses XWayland for the buddy window
+> where native positioning restrictions require it.
+>
+> **Portability update:** installation should now behave much better across
+> different Linux setups. GNOME-only integration is optional, non-GNOME desktops
+> can skip the awareness helper cleanly, missing GNOME extension tooling no
+> longer blocks installation, and Mochi's private Python environment can
+> bootstrap the build backend it needs instead of relying on Fedora-specific
+> Python build packages. **CachyOS + Umbriel + Wayland** has also been
+> community-verified.
+
+## ✨ What's new lately
+
+- 🌍 **Broader Linux portability** — safer installs across GNOME and non-GNOME
+  desktops, with behavioral installer regression coverage for the new paths.
+- 🎨 **Mochi Artist Kit** — the master reference, animation guide, workspace
+  template, and contribution path are now available for community-made emotes.
+- 🧰 **Deskling SDK work is underway** — Mochi's reusable animation, state,
+  interaction, and desktop-companion pieces are being extracted into a separate SDK.
+- 🔥 **More personality** — new catalogue and ambient behaviors continue to land,
+  including the rare **This Is Fine** emote.
+- 🪟 **Desktop behavior has been hardened** — recent fixes improve workspace
+  stickiness, focus handling, and installer rollback safety during updates.
 
 ---
+
 
 <div align="center">
 
