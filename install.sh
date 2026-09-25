@@ -134,6 +134,11 @@ EOF
 
 banner
 
+IS_GNOME=false
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* || "${DESKTOP_SESSION:-}" == *gnome* ]]; then
+    IS_GNOME=true
+fi
+
 if [[ ! -f "$ROOT/pyproject.toml" || ! -f "$DESKTOP_TEMPLATE" ]]; then
     echo "Run install.sh from a complete Mochi repository checkout." >&2
     exit 1
@@ -219,6 +224,12 @@ printf '%sTarget:%s %s\n' "$DIM" "$RESET" "$APP_HOME"
 mkdir -p "$APP_HOME" "$BIN_DIR" "$APPLICATIONS_DIR" "$ICON_DIR"
 rm -rf "$VENV"
 "$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"
+
+# Mochi uses setuptools.build_meta from pyproject.toml. Fedora normally provides
+# setuptools and wheel through system packages, but non-Fedora distributions may
+# create a venv where that backend is unavailable. Bootstrap Mochi's private
+# build tooling explicitly so installation does not depend on distro packaging.
+"$VENV/bin/python" -m pip install --upgrade "setuptools>=69" wheel
 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"
 
 install_launcher "$LAUNCHER" "$VENV/bin/mochi"
@@ -238,15 +249,25 @@ if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
     gtk4-update-icon-cache -f -t "$DATA_HOME/icons/hicolor" >/dev/null 2>&1 || true
 fi
 
-step "Installing Mochi's GNOME helper"
-if [[ -x "$ROOT/scripts/install-typing-extension.sh" ]]; then
-    "$ROOT/scripts/install-typing-extension.sh"
-else
-    bash "$ROOT/scripts/install-typing-extension.sh"
-fi
+if $IS_GNOME; then
+    step "Installing Mochi's GNOME helper"
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        if [[ -x "$ROOT/scripts/install-typing-extension.sh" ]]; then
+            "$ROOT/scripts/install-typing-extension.sh"
+        else
+            bash "$ROOT/scripts/install-typing-extension.sh"
+        fi
 
-# Give an extension that enabled immediately a moment to claim its D-Bus name.
-sleep 0.25
+        # Give an extension that enabled immediately a moment to claim its D-Bus name.
+        sleep 0.25
+    else
+        warn "GNOME extension tools were not found; skipping Mochi's optional awareness helper."
+        warn "Mochi can still run, but GNOME-specific contextual reactions and global shortcuts will be limited."
+    fi
+else
+    step "Skipping GNOME helper"
+    warn "Non-GNOME desktop detected; installing Mochi without the optional GNOME awareness helper."
+fi
 
 step "Installation complete"
 printf '%sLaunch:%s      %s\n' "$CYAN" "$RESET" "$LAUNCHER"
