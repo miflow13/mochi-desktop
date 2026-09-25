@@ -103,21 +103,78 @@ def request_keep_above(window: Gtk.Window) -> bool:
     finally:
         x11.XCloseDisplay(display)
 
+def _send_wm_state_client_message(
+    x11,
+    display,
+    window_id: int,
+    action: int,
+    first_atom: int,
+    second_atom: int = 0,
+) -> None:
+    """Send a single _NET_WM_STATE ClientMessage to the root window.
+
+    ``action`` follows the EWMH convention: 0 = remove, 1 = add, 2 = toggle.
+    ``first_atom`` and ``second_atom`` are the state atoms to apply; the
+    second may be 0 when only one property is being changed.
+    """
+    root = x11.XRootWindow(display, x11.XDefaultScreen(display))
+    wm_state = x11.XInternAtom(display, b"_NET_WM_STATE", False)
+    event = _XEvent()
+    event.client.type = 33  # ClientMessage
+    event.client.display = display
+    event.client.window = window_id
+    event.client.message_type = wm_state
+    event.client.format = 32
+    event.client.data.longs[:] = (action, first_atom, second_atom, 1, 0)
+    x11.XSendEvent(
+        display,
+        root,
+        False,
+        (1 << 19) | (1 << 20),  # SubstructureNotifyMask | RedirectMask
+        ctypes.byref(event),
+    )
+
+
+def _send_wm_desktop_client_message(
+    x11,
+    display,
+    window_id: int,
+    desktop: int,
+) -> None:
+    """Send a single _NET_WM_DESKTOP ClientMessage to the root window.
+
+    ``desktop`` uses 0xFFFFFFFF for "sticky / all desktops", or a concrete
+    index (0-based) for a specific virtual desktop.
+    """
+    root = x11.XRootWindow(display, x11.XDefaultScreen(display))
+    wm_desktop = x11.XInternAtom(display, b"_NET_WM_DESKTOP", False)
+    event = _XEvent()
+    event.client.type = 33  # ClientMessage
+    event.client.display = display
+    event.client.window = window_id
+    event.client.message_type = wm_desktop
+    event.client.format = 32
+    event.client.data.longs[:] = (desktop, 1, 0, 0, 0)
+    x11.XSendEvent(
+        display,
+        root,
+        False,
+        (1 << 19) | (1 << 20),  # SubstructureNotifyMask | RedirectMask
+        ctypes.byref(event),
+    )
+
 def apply_sticky_dock_properties(window: Gtk.Window) -> bool:
-    """Mark the XWayland window as a sticky dock on the X11 window manager.
+    """Make an XWayland window a sticky, non-focus-stealing desktop overlay.
 
-    On GNOME Wayland, Mochi runs as a regular X11 window managed by Mutter.
-    That binds the window to a single workspace and lets Mutter focus it (and
-    its workspace) on interaction. Setting the EWMH properties below turns
-    Mochi into a desktop-wide overlay:
+    On GNOME Wayland, Mochi runs as a regular X11 window managed by Mutter,
+    which binds the window to a single workspace and lets Mutter focus it on
+    interaction. This helper marks the window as a dock and then asks the WM
+    to make it sticky, skip the taskbar/pager, and stay above.
 
-    - ``_NET_WM_DESKTOP = 0xFFFFFFFF`` marks the window as sticky, so it is
-      visible on every virtual desktop.
-    - ``_NET_WM_WINDOW_TYPE_DOCK`` makes Mutter treat it as a panel/dock
-      rather than an application window, preventing workspace switches when
-      the window is interacted with.
-    - ``_NET_WM_STATE_SKIP_TASKBAR`` / ``_NET_WM_STATE_SKIP_PAGER`` keep it
-      out of the taskbar and workspace switcher.
+    EWMH expects the window type to be set before the window is mapped, and
+    state/desktop changes to be sent as ClientMessages to the root window
+    once the window is managed. The helper mirrors that split so Mutter does
+    not race or overwrite our requests.
     """
     surface = window.get_surface()
     if GdkX11 is None or not isinstance(surface, GdkX11.X11Surface):
@@ -133,6 +190,9 @@ def apply_sticky_dock_properties(window: Gtk.Window) -> bool:
     x11 = ctypes.CDLL(library_name)
     x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
     x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XDefaultScreen.argtypes = [ctypes.c_void_p]
+    x11.XRootWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    x11.XRootWindow.restype = ctypes.c_ulong
     x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
     x11.XInternAtom.restype = ctypes.c_ulong
     x11.XChangeProperty.argtypes = [
@@ -146,6 +206,13 @@ def apply_sticky_dock_properties(window: Gtk.Window) -> bool:
         ctypes.c_int,
     ]
     x11.XChangeProperty.restype = ctypes.c_int
+    x11.XSendEvent.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+        ctypes.c_int,
+        ctypes.c_long,
+        ctypes.POINTER(_XEvent),
+    ]
     x11.XFlush.argtypes = [ctypes.c_void_p]
     x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
 
@@ -154,40 +221,60 @@ def apply_sticky_dock_properties(window: Gtk.Window) -> bool:
         return False
 
     _XA_ATOM = 4
-    _XA_CARDINAL = 6
-
-    def _set_property(name: bytes, type_atom: int, values: list[int]) -> None:
-        prop = x11.XInternAtom(display, name, False)
-        count = len(values)
-        array = (ctypes.c_ulong * count)(*values)
-        x11.XChangeProperty(
-            display,
-            surface.get_xid(),
-            prop,
-            type_atom,
-            32,
-            0,
-            ctypes.cast(array, ctypes.c_void_p),
-            count,
-        )
+    _NET_WM_STATE_ADD = 1
 
     try:
-        _set_property(b"_NET_WM_DESKTOP", _XA_CARDINAL, [0xFFFFFFFF])
-        _set_property(
-            b"_NET_WM_WINDOW_TYPE",
-            _XA_ATOM,
-            [x11.XInternAtom(display, b"_NET_WM_WINDOW_TYPE_DOCK", False)],
+        window_id = surface.get_xid()
+
+        # Window type must be set before the WM starts managing the window.
+        # GdkX11 X11Surface.get_xid() is the same id the WM sees in
+        # MapRequest, so writing it here is the correct pre-map step.
+        dock_atom = x11.XInternAtom(
+            display, b"_NET_WM_WINDOW_TYPE_DOCK", False
         )
-        _set_property(
-            b"_NET_WM_STATE",
+        type_prop = x11.XInternAtom(display, b"_NET_WM_WINDOW_TYPE", False)
+        type_values = (ctypes.c_ulong * 1)(dock_atom)
+        x11.XChangeProperty(
+            display,
+            window_id,
+            type_prop,
             _XA_ATOM,
-            [
-                x11.XInternAtom(display, b"_NET_WM_STATE_SKIP_TASKBAR", False),
-                x11.XInternAtom(display, b"_NET_WM_STATE_SKIP_PAGER", False),
-                x11.XInternAtom(display, b"_NET_WM_STATE_STICKY", False),
-                x11.XInternAtom(display, b"_NET_WM_STATE_ABOVE", False),
-            ],
+            32,
+            0,
+            ctypes.cast(type_values, ctypes.c_void_p),
+            1,
         )
+
+        # State and desktop changes must go through ClientMessages once the
+        # window is mapped so the WM owns the update, matching the protocol
+        # already used by request_keep_above().
+        sticky = x11.XInternAtom(display, b"_NET_WM_STATE_STICKY", False)
+        skip_taskbar = x11.XInternAtom(
+            display, b"_NET_WM_STATE_SKIP_TASKBAR", False
+        )
+        skip_pager = x11.XInternAtom(
+            display, b"_NET_WM_STATE_SKIP_PAGER", False
+        )
+        above = x11.XInternAtom(display, b"_NET_WM_STATE_ABOVE", False)
+
+        _send_wm_state_client_message(
+            x11, display, window_id, _NET_WM_STATE_ADD, sticky
+        )
+        _send_wm_state_client_message(
+            x11, display, window_id, _NET_WM_STATE_ADD, skip_taskbar
+        )
+        _send_wm_state_client_message(
+            x11, display, window_id, _NET_WM_STATE_ADD, skip_pager
+        )
+        _send_wm_state_client_message(
+            x11, display, window_id, _NET_WM_STATE_ADD, above
+        )
+
+        # 0xFFFFFFFF means "show on all desktops" in EWMH.
+        _send_wm_desktop_client_message(
+            x11, display, window_id, 0xFFFFFFFF
+        )
+
         x11.XFlush(display)
     finally:
         x11.XCloseDisplay(display)
