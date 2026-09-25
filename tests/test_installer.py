@@ -21,4 +21,5 @@ def test_installer_uses_base_python_for_gi_and_private_venv() -> None:
 
     assert 'getattr(sys, "_base_executable", None) or sys.executable' in text
     assert '"$SYSTEM_PYTHON" - <<\'PY\'' in text
-    assert '"$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"' in text
+    assert '"$SYSTEM_PYTHON" -m venv --system-site-packages "$TMP_VENV"' in text
+    assert 'mv "$TMP_VENV" "$VENV"' in text
