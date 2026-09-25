@@ -135,6 +135,8 @@ EOF
 banner
 
 IS_GNOME=false
+GNOME_HELPER_INSTALLABLE=false
+GNOME_HELPER_ATTEMPTED=false
 if [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* || "${DESKTOP_SESSION:-}" == *gnome* ]]; then
     IS_GNOME=true
 fi
@@ -148,8 +150,6 @@ if command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1; then
     packages=(
         python3
         python3-pip
-        python3-setuptools
-        python3-wheel
         python3-gobject
         python3-cairo
         gtk4
@@ -160,8 +160,10 @@ if command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1; then
         xorg-x11-server-Xwayland
         pipewire-utils
         glib2
-        gnome-shell
     )
+    if $IS_GNOME; then
+        packages+=(gnome-shell)
+    fi
     missing=()
     for package in "${packages[@]}"; do
         if ! rpm -q "$package" >/dev/null 2>&1; then
@@ -225,11 +227,10 @@ mkdir -p "$APP_HOME" "$BIN_DIR" "$APPLICATIONS_DIR" "$ICON_DIR"
 rm -rf "$VENV"
 "$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"
 
-# Mochi uses setuptools.build_meta from pyproject.toml. Fedora normally provides
-# setuptools and wheel through system packages, but non-Fedora distributions may
-# create a venv where that backend is unavailable. Bootstrap Mochi's private
-# build tooling explicitly so installation does not depend on distro packaging.
-"$VENV/bin/python" -m pip install --upgrade "setuptools>=69" wheel
+# Mochi uses setuptools.build_meta from pyproject.toml. Reuse compatible build
+# tooling already visible through --system-site-packages when possible. Pip only
+# contacts an index if setuptools is missing/too old or wheel is unavailable.
+"$VENV/bin/python" -m pip install "setuptools>=69" wheel
 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"
 
 install_launcher "$LAUNCHER" "$VENV/bin/mochi"
@@ -252,6 +253,8 @@ fi
 if $IS_GNOME; then
     step "Installing Mochi's GNOME helper"
     if command -v gnome-extensions >/dev/null 2>&1; then
+        GNOME_HELPER_INSTALLABLE=true
+        GNOME_HELPER_ATTEMPTED=true
         if [[ -x "$ROOT/scripts/install-typing-extension.sh" ]]; then
             "$ROOT/scripts/install-typing-extension.sh"
         else
@@ -276,7 +279,7 @@ printf '%sUninstall:%s   %s\n' "$CYAN" "$RESET" "$UNINSTALL_LAUNCHER"
 
 if helper_is_active; then
     show_ready_notice
-elif $IS_GNOME; then
+elif $IS_GNOME && $GNOME_HELPER_INSTALLABLE && $GNOME_HELPER_ATTEMPTED; then
     show_gnome_reload_notice
 else
     printf '\n'
