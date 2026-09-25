@@ -132,6 +132,35 @@ EOF
     mv -f "$temporary" "$destination"
 }
 
+ensure_python_build_tools() {
+    if "$VENV/bin/python" - <<'PY'
+from importlib import metadata
+import re
+
+try:
+    setuptools_version = metadata.version("setuptools")
+    metadata.version("wheel")
+    import setuptools.build_meta  # noqa: F401
+except (metadata.PackageNotFoundError, ImportError):
+    raise SystemExit(1)
+
+match = re.match(r"^(\d+)(?:\.(\d+))?", setuptools_version)
+if match is None:
+    raise SystemExit(1)
+
+major, minor = (int(part or 0) for part in match.groups())
+if (major, minor) < (69, 0):
+    raise SystemExit(1)
+PY
+    then
+        ok "Python build tooling is already available"
+        return 0
+    fi
+
+    step "Installing Python build tooling"
+    "$VENV/bin/python" -m pip install "setuptools>=69" wheel
+}
+
 banner
 
 IS_GNOME=false
@@ -229,9 +258,9 @@ rm -rf "$VENV"
 "$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"
 
 # Mochi uses setuptools.build_meta from pyproject.toml. Reuse compatible build
-# tooling already visible through --system-site-packages when possible. Pip only
-# contacts an index if setuptools is missing/too old or wheel is unavailable.
-"$VENV/bin/python" -m pip install "setuptools>=69" wheel
+# tooling already visible through --system-site-packages when possible, and only
+# ask pip to fetch replacements when setuptools is too old or wheel is missing.
+ensure_python_build_tools
 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"
 
 install_launcher "$LAUNCHER" "$VENV/bin/mochi"
