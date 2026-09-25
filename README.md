@@ -25,6 +25,7 @@ through the time you naturally spend together.
 [Website](https://miflow13.github.io/mochi-desktop/) ·
 [Install](#install) ·
 [Documentation](docs/README.md) ·
+[Artist Kit](artist-kit/README.md) ·
 [Contributing](CONTRIBUTING.md) ·
 [Changelog](CHANGELOG.md) ·
 [Report a bug](#reporting-bugs)
@@ -73,6 +74,18 @@ This is still early work. APIs, packaging, and the extension surface may change
 before the first public SDK release.
 
 **[Follow Deskling SDK development →](https://github.com/miflow13/Deskling-SDK)**
+
+---
+
+## 🎨 Make something for Mochi
+
+**Mochi's master reference, shipped animation library, and animation design guide are open for artists to use.**
+
+You do not need to be a programmer to contribute an emote or animation. The **Mochi Artist Kit** documents the character rules, 256 × 256 runtime canvas, bottom-center anchoring, nearest-neighbor export rules, animation/state conventions, submission format, and the exact production assets used by Mochi.
+
+**[Open the Mochi Artist Kit →](artist-kit/README.md)**
+
+Want to make Mochi wave differently, react to something new, perform an absurd Linux joke, or invent an entirely new emote? Start with the canonical master, draw the frames, and share it with the project. 💚
 
 ---
 
