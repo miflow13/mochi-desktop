@@ -64,8 +64,6 @@ Mochi-specific code first.
 
 [![Deskling SDK — in development](https://img.shields.io/badge/Deskling%20SDK-in%20development-7FE719?style=for-the-badge)](https://github.com/miflow13/Deskling-SDK)
 
-**Bring the art. Define the behavior. Make a Deskling of your own.**
-
 </div>
 
 The SDK work is focused on extracting the reusable pieces behind Mochi:
