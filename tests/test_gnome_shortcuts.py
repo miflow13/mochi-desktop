@@ -25,3 +25,13 @@ def test_emote_catalogue_shortcut_default_is_ctrl_alt_e() -> None:
 
     assert 'name="emote-catalogue-shortcut"' in schema
     assert "&lt;Ctrl&gt;&lt;Alt&gt;e" in schema
+
+
+def test_focus_curiosity_pulse_requires_actual_window_change() -> None:
+    source = (EXTENSION / "extension.js").read_text(encoding="utf-8")
+
+    assert "this._lastFocusedWindow = global.display.get_focus_window();" in source
+    assert "if (focusedWindow === this._lastFocusedWindow)" in source
+    assert "this._lastFocusedWindow = focusedWindow;" in source
+    assert "if (focusedWindow !== null)" in source
+    assert "this._emitAppFocus(category);" in source
