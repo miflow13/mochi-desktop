@@ -52,6 +52,7 @@ through the time you naturally spend together.
 <div align="center">
 
 ## 🧰 Build your own Deskling
+<img width="256" height="256" alt="let_mochi_cook" src="https://github.com/user-attachments/assets/f8565ca9-7ea8-4613-9591-a0c0f0e368d3" />
 
 **A reusable Deskling SDK is in development.**
 
