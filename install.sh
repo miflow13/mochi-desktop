@@ -219,6 +219,12 @@ printf '%sTarget:%s %s\n' "$DIM" "$RESET" "$APP_HOME"
 mkdir -p "$APP_HOME" "$BIN_DIR" "$APPLICATIONS_DIR" "$ICON_DIR"
 rm -rf "$VENV"
 "$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"
+
+# Mochi uses setuptools.build_meta from pyproject.toml. Fedora normally provides
+# setuptools and wheel through system packages, but non-Fedora distributions may
+# create a venv where that backend is unavailable. Bootstrap Mochi's private
+# build tooling explicitly so installation does not depend on distro packaging.
+"$VENV/bin/python" -m pip install --upgrade "setuptools>=69" wheel
 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"
 
 install_launcher "$LAUNCHER" "$VENV/bin/mochi"
