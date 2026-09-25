@@ -97,7 +97,7 @@ if [[ "$1" == "-" ]]; then
         printf '%s\n' "$0"
         exit 0
     fi
-    if [[ "$payload" == *"metadata.version(\"setuptools\")"* ]]; then
+    if [[ "$payload" == *"from importlib import metadata"* ]]; then
         if [[ "$FAKE_BUILD_TOOLS_READY" == "1" ]]; then
             exit 0
         fi
