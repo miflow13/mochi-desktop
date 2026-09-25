@@ -12,6 +12,12 @@ Thanks for helping Mochi grow. Keep changes small, explain the behavior being ch
 6. Run the full test suite before requesting review.
 7. For interaction, animation, input, state, or windowing changes, also work through `REGRESSION_WATCHLIST.md` and verify live on the relevant Linux desktop environment.
 
+## Art and animation contributions
+
+Artists do not need to implement Python behavior to contribute an animation. Start with the [Mochi Artist Kit](artist-kit/README.md), use the canonical master and runtime animation library as references, and include the original transparent PNG frames or spritesheet plus the intended timing/loop information.
+
+Runtime integration can be handled separately. Artwork accepted into the production library must still follow the asset rules in [assets/mochi/README.md](assets/mochi/README.md).
+
 ## Commit style
 
 Use short, descriptive conventional prefixes:
