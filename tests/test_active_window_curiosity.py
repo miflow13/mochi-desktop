@@ -35,6 +35,9 @@ class _CuriosityBase:
     def _on_presence_app_category_changed(self, category: str) -> None:
         self._presence_app_category = category
 
+    def _on_presence_app_focus_changed(self, _category: str) -> None:
+        pass
+
     def _draw(self, _area, context, _width: int, _height: int) -> None:
         context.rectangle(48, 78, 16, 24)
         context.set_source_rgba(0.2, 0.6, 0.3, 1.0)
@@ -87,17 +90,48 @@ def test_category_change_debounces_then_starts_visual_only_cue() -> None:
     buddy.queue_draw.assert_called_once_with()
 
 
-def test_unknown_category_cancels_pending_cue_without_flashing() -> None:
+def test_unknown_category_uses_generic_question_cue() -> None:
     buddy = CuriosityHarness()
-    buddy._curiosity_source_id = 22
-    buddy._curiosity_pending_category = "terminal"
 
-    with patch("mochi.presence.curiosity.GLib.source_remove") as source_remove:
+    with patch(
+        "mochi.presence.curiosity.GLib.timeout_add",
+        return_value=22,
+    ) as timeout_add:
         buddy._schedule_curiosity_cue("unknown")
 
-    source_remove.assert_called_once_with(22)
-    assert buddy._curiosity_source_id is None
-    assert buddy._curiosity_pending_category is None
+    assert buddy._curiosity_pending_category == "unknown"
+    assert buddy._curiosity_source_id == 22
+    timeout_add.assert_called_once_with(
+        buddy.CURIOSITY_DEBOUNCE_MS,
+        buddy._show_scheduled_curiosity,
+    )
+
+
+
+def test_same_category_focus_pulse_still_schedules_curiosity() -> None:
+    buddy = CuriosityHarness()
+    buddy._presence_app_category = "browser"
+
+    with patch(
+        "mochi.presence.curiosity.GLib.timeout_add",
+        return_value=77,
+    ) as timeout_add:
+        buddy._on_presence_app_focus_changed("browser")
+
+    assert buddy._presence_app_category == "browser"
+    assert buddy._curiosity_pending_category == "browser"
+    assert buddy._curiosity_source_id == 77
+    timeout_add.assert_called_once()
+
+
+def test_curiosity_can_start_while_contextual_work_state_is_active() -> None:
+    buddy = CuriosityHarness()
+    buddy.state.transition_to(MochiState.TYPING)
+
+    with patch("mochi.presence.curiosity.time.monotonic", return_value=10.0):
+        assert buddy._begin_curiosity_cue("browser") is True
+
+    assert buddy._curiosity_category == "browser"
 
 
 def test_curiosity_respects_state_and_ambisense_suppression() -> None:
