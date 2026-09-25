@@ -189,7 +189,7 @@ v0.3 builds on the existing desktop-companion foundation:
 The goal is for these behaviors to cooperate through one character and state
 system rather than feel like unrelated GIF triggers.
 
-## Context, not content
+## Ambient Behaviors
 
 **AmbiSense** is Mochi's local, rule-based awareness system.
 
