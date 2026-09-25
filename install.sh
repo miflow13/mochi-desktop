@@ -141,7 +141,6 @@ import re
 
 try:
     setuptools_version = metadata.version("setuptools")
-    metadata.version("wheel")
     import setuptools.build_meta  # noqa: F401
 except (metadata.PackageNotFoundError, ImportError):
     raise SystemExit(1)
@@ -160,7 +159,7 @@ PY
     fi
 
     step "Installing Python build tooling"
-    "$python" -m pip install "setuptools>=69" wheel
+    "$python" -m pip install "setuptools>=69"
 }
 
 banner
@@ -268,7 +267,7 @@ fi
 
 # Mochi uses setuptools.build_meta from pyproject.toml. Reuse compatible build
 # tooling already visible through --system-site-packages when possible, and only
-# ask pip to fetch replacements when setuptools is too old or wheel is missing.
+# ask pip to fetch a newer setuptools when the visible one is too old or missing.
 if ! ensure_python_build_tools "$TMP_VENV/bin/python"; then
     warn "Failed to install Mochi build tooling into temporary environment."
     exit 1

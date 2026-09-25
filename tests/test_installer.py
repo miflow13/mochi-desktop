@@ -99,6 +99,9 @@ if [[ "$1" == "-" ]]; then
     fi
     if [[ "$payload" == *"from importlib import metadata"* ]]; then
         if [[ "$FAKE_BUILD_TOOLS_READY" == "1" ]]; then
+            if [[ "$payload" == *'metadata.version("wheel")'* && "$FAKE_WHEEL_READY" != "1" ]]; then
+                exit 1
+            fi
             exit 0
         fi
         exit 1
@@ -148,6 +151,7 @@ def _run_installer(
     desktop_session: str = "",
     with_gnome_extensions: bool = False,
     build_tools_ready: bool = True,
+    wheel_ready: bool = True,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     bin_dir, log_dir = _make_toolbox(
         tmp_path,
@@ -169,6 +173,7 @@ def _run_installer(
             "NO_COLOR": "1",
             "MOCHI_TEST_LOG_DIR": str(log_dir),
             "FAKE_BUILD_TOOLS_READY": "1" if build_tools_ready else "0",
+            "FAKE_WHEEL_READY": "1" if wheel_ready else "0",
         }
     )
 
@@ -261,12 +266,13 @@ def test_installer_reuses_compatible_private_venv_build_tools(tmp_path: Path) ->
         tmp_path,
         current_desktop="niri",
         build_tools_ready=True,
+        wheel_ready=False,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     python_log = _read_log(log_dir, "python.log")
     assert "-m venv --system-site-packages" in python_log
-    assert "-m pip install setuptools>=69 wheel" not in python_log
+    assert "-m pip install setuptools>=69" not in python_log
     assert "-m pip install --no-deps --no-build-isolation" in python_log
     assert "Python build tooling is already available" in result.stdout
 
@@ -281,7 +287,7 @@ def test_installer_bootstraps_missing_private_venv_build_tools(tmp_path: Path) -
     assert result.returncode == 0, result.stdout + result.stderr
     python_log = _read_log(log_dir, "python.log")
     assert "-m venv --system-site-packages" in python_log
-    assert "-m pip install setuptools>=69 wheel" in python_log
+    assert "-m pip install setuptools>=69" in python_log
     assert "Installing Python build tooling" in result.stdout
 
 
