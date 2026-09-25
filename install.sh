@@ -137,7 +137,8 @@ banner
 IS_GNOME=false
 GNOME_HELPER_INSTALLABLE=false
 GNOME_HELPER_ATTEMPTED=false
-if [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* || "${DESKTOP_SESSION:-}" == *gnome* ]]; then
+desktop="${XDG_CURRENT_DESKTOP:-} ${XDG_SESSION_DESKTOP:-} ${DESKTOP_SESSION:-}"
+if [[ "${desktop,,}" == *gnome* ]]; then
     IS_GNOME=true
 fi
 
