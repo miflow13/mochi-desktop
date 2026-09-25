@@ -276,12 +276,12 @@ printf '%sUninstall:%s   %s\n' "$CYAN" "$RESET" "$UNINSTALL_LAUNCHER"
 
 if helper_is_active; then
     show_ready_notice
-elif [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* || "${DESKTOP_SESSION:-}" == *gnome* ]]; then
+elif $IS_GNOME; then
     show_gnome_reload_notice
 else
     printf '\n'
-    warn "GNOME desktop-awareness helper is not active in this session."
-    printf 'On GNOME Wayland, a one-time logout/login may be required after installation.\n'
+    warn "GNOME desktop-awareness helper is unavailable on this desktop."
+    printf 'Mochi will run with reduced contextual awareness and without GNOME global shortcuts.\n'
 fi
 
 printf '\n'
