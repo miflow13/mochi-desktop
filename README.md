@@ -6,7 +6,7 @@
 
 ### A tiny Linux desktop buddy that grows with you.
 
-## 🎥 Mochi in the Wild
+
 
 Seeing Mochi pop up in the Linux community has been surreal. 💚
 
