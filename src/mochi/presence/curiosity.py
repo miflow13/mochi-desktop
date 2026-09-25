@@ -31,20 +31,18 @@ class ActiveWindowCuriosityMixin:
         "editor": "</>",
         "media": "♪",
         "pixel_art": "px",
+        "unknown": "?",
     }
     _CURIOSITY_START_STATES = frozenset(
         (
             MochiState.IDLE,
             MochiState.BLINKING,
             MochiState.WALKING,
-        )
-    )
-    _CURIOSITY_CONTINUE_STATES = _CURIOSITY_START_STATES | frozenset(
-        (
             MochiState.TYPING,
             MochiState.COMPUTER,
         )
     )
+    _CURIOSITY_CONTINUE_STATES = _CURIOSITY_START_STATES
 
     def __init__(self, *args, **kwargs) -> None:
         self._curiosity_category: str | None = None
@@ -57,8 +55,14 @@ class ActiveWindowCuriosityMixin:
     def _on_presence_app_category_changed(self, category: str) -> None:
         previous = self._presence_app_category
         super()._on_presence_app_category_changed(category)
+        # Backward-compatible fallback for older helpers that do not emit the
+        # dedicated focus pulse yet.
         if category != previous:
             self._schedule_curiosity_cue(category)
+
+    def _on_presence_app_focus_changed(self, category: str) -> None:
+        super()._on_presence_app_focus_changed(category)
+        self._schedule_curiosity_cue(category)
 
     def _cancel_curiosity_source(self) -> None:
         source_id = self._curiosity_source_id
