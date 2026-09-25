@@ -230,8 +230,11 @@ def test_gnome_detection_installs_gnome_dependency_and_helper(
     assert result.returncode == 0, result.stdout + result.stderr
     assert "gnome-shell" in _read_log(log_dir, "rpm.log")
     helper_log = _read_log(log_dir, "gnome-extensions.log")
+    assert "disable mochi-typing@miflow13" in helper_log
     assert "install --force" in helper_log
     assert "enable mochi-typing@miflow13" in helper_log
+    assert helper_log.index("disable mochi-typing@miflow13") < helper_log.index("install --force")
+    assert helper_log.index("install --force") < helper_log.index("enable mochi-typing@miflow13")
     assert "GNOME desktop awareness is active" in result.stdout
 
 
