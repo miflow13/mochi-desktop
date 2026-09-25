@@ -8,7 +8,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 try:
     gi.require_version("GdkWayland", "4.0")
@@ -47,6 +47,11 @@ class WindowPlacement:
         self.layer_shell_enabled = False
         self.layer_shell_enabled = self._enable_layer_shell()
 
+        # Make the X11/XWayland fallback behave as a sticky, non-focus-stealing
+        # desktop overlay instead of a regular application window. Deferred to
+        # the next idle tick because the GdkSurface is not realized yet.
+        GLib.idle_add(self._apply_x11_sticky_properties)
+
     def _enable_layer_shell(self) -> bool:
         display = self.window.get_display()
         if GdkWayland is None or not isinstance(display, GdkWayland.WaylandDisplay):
@@ -76,6 +81,31 @@ class WindowPlacement:
         self.move_to(self.position.x, self.position.y)
         self._logger.info("Using gtk4-layer-shell Wayland overlay")
         return True
+
+    def _apply_x11_sticky_properties(self) -> bool:
+        """Make the XWayland window sticky and non-focus-stealing.
+
+        On GNOME Wayland, Mochi runs as a regular X11 window managed by Mutter.
+        By default that binds the window to a single workspace and lets Mutter
+        focus it (and its workspace) on interaction. The EWMH properties applied
+        below turn Mochi into a desktop-wide overlay instead.
+
+        Deferred via GLib.idle_add because the GdkSurface is not realized yet
+        when WindowPlacement is constructed.
+        """
+        if self.layer_shell_enabled:
+            return GLib.SOURCE_REMOVE
+
+        if self.window.get_surface() is None:
+            # Not realized yet - keep retrying on the next idle tick.
+            return GLib.SOURCE_CONTINUE
+
+        from mochi.x11 import apply_sticky_dock_properties
+
+        if apply_sticky_dock_properties(self.window):
+            self._logger.info("Applied X11 sticky/dock properties to Mochi window")
+
+        return GLib.SOURCE_REMOVE
 
     def move_to(self, x: int, y: int) -> Position:
         self.position = self.clamp_position(x, y)
