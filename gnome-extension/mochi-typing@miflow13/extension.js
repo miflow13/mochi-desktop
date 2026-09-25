@@ -145,6 +145,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._appCategory = 'unknown';
         this._videoFocusHeartbeatId = 0;
         this._focusChangedId = 0;
+        this._lastFocusedWindow = global.display.get_focus_window();
         this._settings = this.getSettings();
 
         Main.wm.addKeybinding(
@@ -184,10 +185,22 @@ export default class MochiTypingActivityExtension extends Extension {
         this._focusChangedId = global.display.connect(
             'notify::focus-window',
             () => {
+                const focusedWindow = global.display.get_focus_window();
                 this._updateFileBrowsingState();
                 this._updateYouTubeFocusedState(false);
                 const category = this._updateAppCategory();
-                this._emitAppFocus(category);
+
+                // Mutter can notify focus-window more than once while the same
+                // Meta.Window remains focused. Curiosity should represent an
+                // actual change of attention, not notification churn.
+                if (focusedWindow === this._lastFocusedWindow)
+                    return;
+
+                this._lastFocusedWindow = focusedWindow;
+                // Temporary focus loss (Overview, shell surfaces, transitions)
+                // is not a new desktop target and should not make Mochi curious.
+                if (focusedWindow !== null)
+                    this._emitAppFocus(category);
             },
         );
         this._updateFileBrowsingState();
@@ -604,6 +617,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._fileBrowsingActive = false;
         this._youtubeFocusedActive = false;
         this._appCategory = 'unknown';
+        this._lastFocusedWindow = null;
         this._nameReady = false;
 
         if (this._dbusObject) {
