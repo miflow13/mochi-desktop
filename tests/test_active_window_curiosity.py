@@ -63,31 +63,17 @@ def _render(buddy: CuriosityHarness, *, now: float) -> bytes:
     return bytes(surface.get_data())
 
 
-def test_category_change_debounces_then_starts_visual_only_cue() -> None:
+def test_category_reclassification_does_not_trigger_curiosity() -> None:
     buddy = CuriosityHarness()
-    original_state = buddy.state.current
 
-    with patch(
-        "mochi.presence.curiosity.GLib.timeout_add",
-        return_value=91,
-    ) as timeout_add:
+    with patch("mochi.presence.curiosity.GLib.timeout_add") as timeout_add:
         buddy._on_presence_app_category_changed("terminal")
 
     assert buddy._presence_app_category == "terminal"
-    assert buddy._curiosity_pending_category == "terminal"
-    assert buddy._curiosity_source_id == 91
+    assert buddy._curiosity_pending_category is None
+    assert buddy._curiosity_source_id is None
     assert buddy._curiosity_category is None
-    timeout_add.assert_called_once_with(
-        buddy.CURIOSITY_DEBOUNCE_MS,
-        buddy._show_scheduled_curiosity,
-    )
-
-    with patch("mochi.presence.curiosity.time.monotonic", return_value=10.0):
-        assert buddy._show_scheduled_curiosity() is False
-
-    assert buddy._curiosity_category == "terminal"
-    assert buddy.state.current is original_state
-    buddy.queue_draw.assert_called_once_with()
+    timeout_add.assert_not_called()
 
 
 def test_unknown_category_uses_generic_question_cue() -> None:
@@ -132,6 +118,32 @@ def test_curiosity_can_start_while_contextual_work_state_is_active() -> None:
         assert buddy._begin_curiosity_cue("browser") is True
 
     assert buddy._curiosity_category == "browser"
+
+
+
+def test_same_category_curiosity_has_longer_cooldown() -> None:
+    buddy = CuriosityHarness()
+
+    with patch("mochi.presence.curiosity.time.monotonic", return_value=10.0):
+        assert buddy._begin_curiosity_cue("browser") is True
+
+    buddy._clear_curiosity_cue()
+    with patch("mochi.presence.curiosity.time.monotonic", return_value=20.0):
+        assert buddy._begin_curiosity_cue("browser") is False
+
+    with patch("mochi.presence.curiosity.time.monotonic", return_value=40.1):
+        assert buddy._begin_curiosity_cue("browser") is True
+
+
+def test_different_category_can_react_after_short_global_gap() -> None:
+    buddy = CuriosityHarness()
+
+    with patch("mochi.presence.curiosity.time.monotonic", return_value=10.0):
+        assert buddy._begin_curiosity_cue("browser") is True
+
+    buddy._clear_curiosity_cue()
+    with patch("mochi.presence.curiosity.time.monotonic", return_value=13.0):
+        assert buddy._begin_curiosity_cue("terminal") is True
 
 
 def test_curiosity_respects_state_and_ambisense_suppression() -> None:
