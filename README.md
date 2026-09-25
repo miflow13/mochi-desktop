@@ -233,8 +233,9 @@ model.
 ### Give Mochi a corner of your desktop
 
 The installer has a supported dependency path for Fedora. It creates a private
-Python environment, installs the GNOME helper, adds Mochi to the application
-grid, and installs `mochi` and `mochi-uninstall` under `~/.local/bin`.
+Python environment, adds Mochi to the application grid, and installs `mochi`
+and `mochi-uninstall` under `~/.local/bin`. On GNOME, it also installs the
+optional awareness helper when GNOME extension tooling is available.
 
 ### Install from source
 
@@ -247,9 +248,10 @@ cd mochi-desktop
 `main` currently tracks the v0.3 alpha line. The installer installs the source
 from the commit or branch you currently have checked out.
 
-After the first GNOME Wayland installation, log out and back in once so GNOME
-can load Mochi's optional awareness helper. Mochi still runs without the helper,
-but some contextual reactions and global shortcuts will be unavailable.
+If the installer says it installed Mochi's optional GNOME awareness helper,
+log out and back in once so GNOME can load it. If the helper was skipped,
+Mochi still runs without it, but some contextual reactions and global
+shortcuts will be unavailable.
 
 ### Update an installed copy
 
@@ -305,11 +307,16 @@ Global shortcuts require the GNOME helper.
 ## Compatibility
 
 - **Primary target:** Fedora + GNOME + Wayland.
+- **Community verified:** CachyOS + Umbriel + Wayland — installation and runtime
+  confirmed working by the reporter of [#125](https://github.com/miflow13/mochi-desktop/issues/125)
+  after the portability fixes in [#126](https://github.com/miflow13/mochi-desktop/pull/126).
 - Mochi uses an XWayland GTK window on GNOME Wayland for reliable desktop
   positioning.
 - Other distributions may work, but automatic dependency installation currently
-  supports Fedora.
-- GNOME provides the fullest AmbiSense integration.
+  supports Fedora. Mochi's installer no longer requires Fedora's Python build
+  packages to provide the local setuptools build backend.
+- GNOME provides the fullest AmbiSense integration. On non-GNOME desktops, the
+  optional GNOME helper is skipped instead of blocking installation.
 - Niri, fractional scaling, multi-monitor setups, and non-GNOME environments
   receive less regression coverage.
 

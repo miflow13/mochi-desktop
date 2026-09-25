@@ -132,7 +132,45 @@ EOF
     mv -f "$temporary" "$destination"
 }
 
+ensure_python_build_tools() {
+    local python="$1"
+
+    if "$python" - <<'PY'
+from importlib import metadata
+import re
+
+try:
+    setuptools_version = metadata.version("setuptools")
+    import setuptools.build_meta  # noqa: F401
+except (metadata.PackageNotFoundError, ImportError):
+    raise SystemExit(1)
+
+match = re.match(r"^(\d+)(?:\.(\d+))?", setuptools_version)
+if match is None:
+    raise SystemExit(1)
+
+major, minor = (int(part or 0) for part in match.groups())
+if (major, minor) < (69, 0):
+    raise SystemExit(1)
+PY
+    then
+        ok "Python build tooling is already available"
+        return 0
+    fi
+
+    step "Installing Python build tooling"
+    "$python" -m pip install "setuptools>=69"
+}
+
 banner
+
+IS_GNOME=false
+GNOME_HELPER_INSTALLABLE=false
+GNOME_HELPER_ATTEMPTED=false
+desktop="${XDG_CURRENT_DESKTOP:-} ${XDG_SESSION_DESKTOP:-} ${DESKTOP_SESSION:-}"
+if [[ "${desktop,,}" == *gnome* ]]; then
+    IS_GNOME=true
+fi
 
 if [[ ! -f "$ROOT/pyproject.toml" || ! -f "$DESKTOP_TEMPLATE" ]]; then
     echo "Run install.sh from a complete Mochi repository checkout." >&2
@@ -143,8 +181,6 @@ if command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1; then
     packages=(
         python3
         python3-pip
-        python3-setuptools
-        python3-wheel
         python3-gobject
         python3-cairo
         gtk4
@@ -155,8 +191,10 @@ if command -v dnf >/dev/null 2>&1 && command -v rpm >/dev/null 2>&1; then
         xorg-x11-server-Xwayland
         pipewire-utils
         glib2
-        gnome-shell
     )
+    if $IS_GNOME; then
+        packages+=(gnome-shell)
+    fi
     missing=()
     for package in "${packages[@]}"; do
         if ! rpm -q "$package" >/dev/null 2>&1; then
@@ -227,11 +265,10 @@ if ! "$SYSTEM_PYTHON" -m venv --system-site-packages "$TMP_VENV"; then
     exit 1
 fi
 
-# Mochi uses setuptools.build_meta from pyproject.toml. Fedora normally provides
-# setuptools and wheel through system packages, but non-Fedora distributions may
-# create a venv where that backend is unavailable. Bootstrap Mochi's private
-# build tooling explicitly so installation does not depend on distro packaging.
-if ! "$TMP_VENV/bin/python" -m pip install "setuptools>=69" wheel; then
+# Mochi uses setuptools.build_meta from pyproject.toml. Reuse compatible build
+# tooling already visible through --system-site-packages when possible, and only
+# ask pip to fetch a newer setuptools when the visible one is too old or missing.
+if ! ensure_python_build_tools "$TMP_VENV/bin/python"; then
     warn "Failed to install Mochi build tooling into temporary environment."
     exit 1
 fi
@@ -287,15 +324,27 @@ if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
     gtk4-update-icon-cache -f -t "$DATA_HOME/icons/hicolor" >/dev/null 2>&1 || true
 fi
 
-step "Installing Mochi's GNOME helper"
-if [[ -x "$ROOT/scripts/install-typing-extension.sh" ]]; then
-    "$ROOT/scripts/install-typing-extension.sh"
-else
-    bash "$ROOT/scripts/install-typing-extension.sh"
-fi
+if $IS_GNOME; then
+    step "Installing Mochi's GNOME helper"
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        GNOME_HELPER_INSTALLABLE=true
+        GNOME_HELPER_ATTEMPTED=true
+        if [[ -x "$ROOT/scripts/install-typing-extension.sh" ]]; then
+            "$ROOT/scripts/install-typing-extension.sh"
+        else
+            bash "$ROOT/scripts/install-typing-extension.sh"
+        fi
 
-# Give an extension that enabled immediately a moment to claim its D-Bus name.
-sleep 0.25
+        # Give an extension that enabled immediately a moment to claim its D-Bus name.
+        sleep 0.25
+    else
+        warn "GNOME extension tools were not found; skipping Mochi's optional awareness helper."
+        warn "Mochi can still run, but GNOME-specific contextual reactions and global shortcuts will be limited."
+    fi
+else
+    step "Skipping GNOME helper"
+    warn "Non-GNOME desktop detected; installing Mochi without the optional GNOME awareness helper."
+fi
 
 step "Installation complete"
 printf '%sLaunch:%s      %s\n' "$CYAN" "$RESET" "$LAUNCHER"
@@ -304,12 +353,12 @@ printf '%sUninstall:%s   %s\n' "$CYAN" "$RESET" "$UNINSTALL_LAUNCHER"
 
 if helper_is_active; then
     show_ready_notice
-elif [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* || "${DESKTOP_SESSION:-}" == *gnome* ]]; then
+elif $IS_GNOME && $GNOME_HELPER_INSTALLABLE && $GNOME_HELPER_ATTEMPTED; then
     show_gnome_reload_notice
 else
     printf '\n'
-    warn "GNOME desktop-awareness helper is not active in this session."
-    printf 'On GNOME Wayland, a one-time logout/login may be required after installation.\n'
+    warn "GNOME desktop-awareness helper is unavailable on this desktop."
+    printf 'Mochi will run with reduced contextual awareness and without GNOME global shortcuts.\n'
 fi
 
 printf '\n'
