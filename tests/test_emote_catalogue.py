@@ -34,6 +34,7 @@ def test_catalogue_contains_the_complete_authored_emote_set() -> None:
         "side-eye",
         "look",
         "table-flip",
+        "this-is-fine",
         "vs-code",
         "dance",
         "mochi-exe",
@@ -46,6 +47,9 @@ def test_catalogue_contains_the_complete_authored_emote_set() -> None:
     assert EMOTES_BY_ID["coffee"].available
     assert EMOTES_BY_ID["coffee"].animation == "coffee"
     assert not EMOTES_BY_ID["look"].is_unlocked(state)
+    assert not EMOTES_BY_ID["this-is-fine"].is_unlocked(state)
+    assert EMOTES_BY_ID["this-is-fine"].rarity == "rare"
+    assert EMOTES_BY_ID["this-is-fine"].animation == "this_is_fine"
     assert not EMOTES_BY_ID["vs-code"].is_unlocked(state)
     assert not EMOTES_BY_ID["mochi-exe"].is_unlocked(state)
     assert all(emote.available for emote in EMOTE_CATALOGUE)
@@ -65,6 +69,7 @@ def test_catalogue_paginates_six_emotes_per_page_in_canonical_order() -> None:
     assert tuple(emote.id for emote in catalogue_page_slice(EMOTE_CATALOGUE, 1)) == (
         "look",
         "table-flip",
+        "this-is-fine",
         "vs-code",
         "dance",
         "mochi-exe",
@@ -153,6 +158,7 @@ def test_catalogue_assigns_progressive_rarity_tiers() -> None:
         "common",
         "common",
         "uncommon",
+        "rare",
         "rare",
         "rare",
         "epic",

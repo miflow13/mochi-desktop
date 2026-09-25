@@ -604,6 +604,16 @@
         64
       ]
     },
+    "this_is_fine": {
+      "spritesheet": "this_is_fine/this_is_fine.png",
+      "frame_count": 16,
+      "fps": 8.333333333333334,
+      "loop": false,
+      "source_cell_size": [
+        256,
+        256
+      ]
+    },
     "level_up_default": {
       "spritesheet": "level_up_default/level_up_default.png",
       "frame_count": 16,

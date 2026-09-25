@@ -49,6 +49,14 @@ EMOTE_CATALOGUE = (
         reveal_on_unlock=True,
     ),
     EmoteDefinition(
+        "this-is-fine",
+        "This Is Fine",
+        "this_is_fine",
+        3,
+        rarity="rare",
+        reveal_on_unlock=True,
+    ),
+    EmoteDefinition(
         "vs-code",
         "VS Code",
         "vs_code",

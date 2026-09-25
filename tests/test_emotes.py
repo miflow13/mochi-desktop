@@ -17,6 +17,8 @@ def test_bond_emotes_unlock_at_requested_levels() -> None:
     assert EMOTES_BY_ID["side-eye"].is_unlocked(BondState(level=2))
     assert not EMOTES_BY_ID["table-flip"].is_unlocked(BondState(level=2))
     assert EMOTES_BY_ID["table-flip"].is_unlocked(BondState(level=3))
+    assert not EMOTES_BY_ID["this-is-fine"].is_unlocked(BondState(level=2))
+    assert EMOTES_BY_ID["this-is-fine"].is_unlocked(BondState(level=3))
     assert not EMOTES_BY_ID["vs-code"].is_unlocked(BondState(level=3))
     assert EMOTES_BY_ID["vs-code"].is_unlocked(BondState(level=4))
     assert not EMOTES_BY_ID["mochi-exe"].is_unlocked(BondState(level=5))
@@ -29,7 +31,7 @@ def test_reveal_queue_contains_authored_level_unlocks() -> None:
     ) == ("side-eye",)
     assert tuple(
         emote.id for emote in newly_unlocked_emotes(2, 3, reveal_only=True)
-    ) == ("table-flip",)
+    ) == ("table-flip", "this-is-fine")
     assert tuple(
         emote.id for emote in newly_unlocked_emotes(3, 4, reveal_only=True)
     ) == ("vs-code",)
@@ -55,6 +57,7 @@ def test_autonomous_pool_tracks_every_unlocked_catalogue_animation() -> None:
         "side_eye",
         "look",
         "table_flip",
+        "this_is_fine",
     )
     assert unlocked_emote_animation_names(BondState(level=6)) == (
         "heart",
@@ -65,6 +68,7 @@ def test_autonomous_pool_tracks_every_unlocked_catalogue_animation() -> None:
         "side_eye",
         "look",
         "table_flip",
+        "this_is_fine",
         "vs_code",
         "dance",
         "mochi_exe",

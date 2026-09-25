@@ -8,6 +8,7 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ### Added
 
+- Added **This Is Fine** as a rare Bond Level 3 catalogue emote with an animated hover preview and unlock reveal.
 - Added **Wave**, **VS Code**, and **Mochi.exe** to the Bond-aware Emote Catalogue, replacing the three placeholder mystery cards with authored animated previews and new bond unlocks.
 - Added **Coffee** as a completed Bond-aware catalogue emote with an animated hover preview.
 - Added **Focus with Mochi** sessions with configurable focus/break rounds,
