@@ -274,8 +274,6 @@ Global shortcuts require the GNOME helper.
 - **Workspace / Overview freeze — [#45](https://github.com/miflow13/mochi-desktop/issues/45):**
   entering GNOME Overview or switching workspaces during an emote can leave
   Mochi visually frozen on XWayland.
-- **Drag reversal responsiveness — [#68](https://github.com/miflow13/mochi-desktop/issues/68):**
-  drag-left/right poses can lag briefly after rapidly reversing direction.
 - Alpha behavior and compatibility can still change.
 
 Passing automated tests does not establish reliability across every compositor,
