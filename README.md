@@ -293,6 +293,9 @@ Global shortcuts require the GNOME helper.
 ## Compatibility
 
 - **Primary target:** Fedora + GNOME + Wayland.
+- **Community verified:** CachyOS + Umbriel + Wayland — installation and runtime
+  confirmed working by the reporter of [#125](https://github.com/miflow13/mochi-desktop/issues/125)
+  after the portability fixes in [#126](https://github.com/miflow13/mochi-desktop/pull/126).
 - Mochi uses an XWayland GTK window on GNOME Wayland for reliable desktop
   positioning.
 - Other distributions may work, but automatic dependency installation currently
