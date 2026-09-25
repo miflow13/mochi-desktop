@@ -122,7 +122,7 @@ def test_real_helper_lifecycle(tmp_path, monkeypatch):
         assert events["category"][-1] == "terminal"
         assert events["video"][-1] is True
         assert events["typing"] == []  # State sync must never invent a key pulse.
-        assert [len(adapter._helper._subscriptions) for adapter in adapters] == [2, 2, 1, 3, 1]
+        assert [len(adapter._helper._subscriptions) for adapter in adapters] == [2, 2, 2, 3, 1]
         assert all(adapter._helper.last_error is None for adapter in adapters)
 
     def assert_cleared_state():
