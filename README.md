@@ -234,9 +234,10 @@ cd mochi-desktop
 `main` currently tracks the v0.3 alpha line. The installer installs the source
 from the commit or branch you currently have checked out.
 
-After the first GNOME Wayland installation, log out and back in once so GNOME
-can load Mochi's optional awareness helper. Mochi still runs without the helper,
-but some contextual reactions and global shortcuts will be unavailable.
+If the installer says it installed Mochi's optional GNOME awareness helper,
+log out and back in once so GNOME can load it. If the helper was skipped,
+Mochi still runs without it, but some contextual reactions and global
+shortcuts will be unavailable.
 
 ### Update an installed copy
 
