@@ -934,7 +934,7 @@ def test_focus_wakes_mochi_when_the_next_focus_round_begins() -> None:
     harness._wake_up.assert_called_once_with()
 
 
-def test_shutdown_removes_timer_and_flushes_pending_bond_xp() -> None:
+def test_focus_shutdown_leaves_bond_flush_to_later_mro_owner() -> None:
     harness = _harness()
     harness._focus_source_id = 77
     harness._bond_unsaved_xp = 2
@@ -944,14 +944,14 @@ def test_shutdown_removes_timer_and_flushes_pending_bond_xp() -> None:
     harness.shutdown_presence()
 
     harness._stop_focus_timer.assert_called_once_with()
-    harness._persist_focus_xp_if_needed.assert_called_once_with()
+    harness._persist_focus_xp_if_needed.assert_not_called()
     harness._focus_ambience.stop.assert_called_once_with()
     window.destroy.assert_called_once_with()
     assert harness._focus_window is None
     assert harness.base_shutdown_calls == 1
 
 
-def test_shutdown_settles_elapsed_time_before_persisting() -> None:
+def test_shutdown_settles_elapsed_time_before_bond_mro_flush() -> None:
     harness = _harness()
     session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
     harness._focus_session = session
@@ -962,4 +962,14 @@ def test_shutdown_settles_elapsed_time_before_persisting() -> None:
 
     harness._award_bond.assert_called_once_with(1, persist=False)
     assert session.focus_minutes_completed == 1
-    harness._persist_focus_xp_if_needed.assert_called_once_with()
+    harness._persist_focus_xp_if_needed.assert_not_called()
+
+
+def test_focus_flush_considers_dirty_state_without_pending_xp() -> None:
+    harness = _harness()
+    harness._bond_state_dirty = True
+    harness._persist_bond_state = Mock()
+
+    FocusSessionMixin._persist_focus_xp_if_needed(harness)
+
+    harness._persist_bond_state.assert_called_once_with()

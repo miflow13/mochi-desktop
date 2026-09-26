@@ -1170,6 +1170,11 @@ ConfigStore saves:
 
 It also migrates an earlier preview representation if old bond_points/bond_phases data is present.
 
+BondMeterMixin tracks whether the saved state is dirty separately from the
+pending XP count. A state change such as the Dev Menu Reset can need persistence
+with zero pending XP. A failed save is logged and leaves the state dirty for a
+later attempt; it must not interrupt the progression or presentation lifecycle.
+
 ## Presentation/integration
 
 presence/bond_meter.py connects runtime activities to bond state and owns level-up/unlock presentation.
@@ -1333,7 +1338,11 @@ Elapsed/reward time must be settled before:
 - manual sleep;
 - shutdown.
 
-The pure model also reconciles the exact end of a configured focus block so floating-point drift does not lose the final minute's XP.
+On application shutdown, Focus settles its final reward before releasing its
+owned windows and sources. BondMeterMixin later in the cooperative shutdown
+chain owns the shared persistence flush. The pure model also reconciles the
+exact end of a configured focus block so floating-point drift does not lose the
+final minute's XP.
 
 ---
 
@@ -1811,7 +1820,10 @@ Because many feature layers extend shutdown_presence() cooperatively, every over
 2. clear ownership flags;
 3. call super().shutdown_presence().
 
-Shutdown is also a reward boundary for Focus/bond systems. Earned progress should be settled/persisted before teardown.
+Shutdown is also a reward boundary for Focus/bond systems. Settle earned
+progress before teardown, and let BondMeterMixin flush dirty state in its
+shutdown hook. A failed save must be visible without preventing resource
+cleanup or later shutdown hooks.
 
 ---
 

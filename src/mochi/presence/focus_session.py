@@ -902,7 +902,8 @@ class FocusSessionMixin:
         self._stop_focus_timer()
         self._stop_focus_visual()
         self._focus_ambience.stop()
-        self._persist_focus_xp_if_needed()
+        if not was_complete:
+            self._persist_focus_xp_if_needed()
         self._focus_plan = session.plan
         self._focus_session = None
         self._focus_last_tick = None
@@ -935,7 +936,9 @@ class FocusSessionMixin:
         )
         self._stop_focus_visual()
         self._focus_ambience.stop()
-        self._persist_focus_xp_if_needed()
+        # The completion award was already submitted with persist=True by
+        # _advance_focus_clock. Do not immediately retry its save here if it
+        # failed; leave the Bond state dirty for a later flush.
         self._show_focus_line(FOCUS_COMPLETE_LINE)
 
         if (
@@ -1221,7 +1224,10 @@ class FocusSessionMixin:
                 pass
 
     def _persist_focus_xp_if_needed(self) -> None:
-        if getattr(self, "_bond_unsaved_xp", 0) <= 0:
+        if (
+            getattr(self, "_bond_unsaved_xp", 0) <= 0
+            and not getattr(self, "_bond_state_dirty", False)
+        ):
             return
         persist = getattr(self, "_persist_bond_state", None)
         if callable(persist):
@@ -1308,7 +1314,8 @@ class FocusSessionMixin:
             self._advance_focus_clock(session)
         self._stop_focus_timer()
         self._focus_ambience.stop()
-        self._persist_focus_xp_if_needed()
+        # BondMeterMixin later in the application shutdown MRO owns the final
+        # persistence flush after Focus has released its windows and sources.
         if self._focus_window is not None:
             self._focus_window.destroy()
             self._focus_window = None
