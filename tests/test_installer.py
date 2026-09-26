@@ -40,6 +40,7 @@ def _make_toolbox(
         "cat",
         "chmod",
         "cp",
+        "date",
         "dirname",
         "grep",
         "install",
