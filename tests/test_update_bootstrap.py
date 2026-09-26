@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from mochi.update.bootstrap import bootstrap_updater
+from mochi.update.bootstrap import _runner_source, bootstrap_updater
 from mochi.update.model import UpdateMetadata, UpdateTarget
 
 
@@ -154,3 +154,12 @@ def test_bootstrap_prefers_base_interpreter_over_replaceable_venv(
 
     assert commands[0][0] == str(fake_base)
     assert "venv" not in commands[0][0]
+
+
+def test_bootstrap_runner_honors_gui_flag_without_resolving_main_again() -> None:
+    source = _runner_source()
+
+    assert 'request.get("gui")' in source
+    assert "run_external_update" in source
+    assert "UpdateChecker" not in source
+    assert "resolve_main_sha" not in source
