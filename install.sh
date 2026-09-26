@@ -10,6 +10,7 @@ APP_HOME="$DATA_HOME/mochi-desktop"
 VENV="$APP_HOME/venv"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/mochi"
+UPDATE_LAUNCHER="$BIN_DIR/mochi-update"
 UNINSTALL_LAUNCHER="$BIN_DIR/mochi-uninstall"
 INSTALLED_UNINSTALLER="$APP_HOME/uninstall.sh"
 APPLICATIONS_DIR="$DATA_HOME/applications"
@@ -197,6 +198,11 @@ install_integrations() {
     fi
 
     install_launcher "$LAUNCHER" "$VENV/bin/mochi"
+    if [[ ! -x "$VENV/bin/mochi-update" ]]; then
+        warn "Mochi updater is missing: $VENV/bin/mochi-update"
+        return 1
+    fi
+    install_launcher "$UPDATE_LAUNCHER" "$VENV/bin/mochi-update"
 
     install -m 0755 "$ROOT/uninstall.sh" "$INSTALLED_UNINSTALLER"
     install_launcher "$UNINSTALL_LAUNCHER" "$INSTALLED_UNINSTALLER"
@@ -276,6 +282,7 @@ show_install_complete() {
     step "Installation complete"
     printf '%sLaunch:%s      %s\n' "$CYAN" "$RESET" "$LAUNCHER"
     printf '%sApplication:%s GNOME app grid → Mochi\n' "$CYAN" "$RESET"
+    printf '%sUpdate:%s      %s\n' "$CYAN" "$RESET" "$UPDATE_LAUNCHER"
     printf '%sUninstall:%s   %s\n' "$CYAN" "$RESET" "$UNINSTALL_LAUNCHER"
 
     if helper_is_active; then
