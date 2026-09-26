@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import gi
 
@@ -16,9 +17,20 @@ from mochi.windowing import WindowPlacement
 from mochi.x11 import request_keep_above
 
 
+def signal_update_ready(path: Path) -> None:
+    """Atomically report that the updated Mochi reached normal activation."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text("ready\n", encoding="utf-8")
+    temporary.replace(path)
+
+
 class MochiApplication(Gtk.Application):
     def __init__(
-        self, config: ConfigStore, preview_animations: bool = False
+        self,
+        config: ConfigStore,
+        preview_animations: bool = False,
+        update_ready_file: Path | None = None,
     ) -> None:
         super().__init__(
             application_id=(
@@ -30,6 +42,7 @@ class MochiApplication(Gtk.Application):
         )
         self.config = config
         self.preview_animations = preview_animations
+        self.update_ready_file = update_ready_file
         self._logger = logging.getLogger(__name__)
         self._buddy: PresenceBuddy | PresenceX11Buddy | None = None
         self.sound = SoundManager(
@@ -225,6 +238,8 @@ class MochiApplication(Gtk.Application):
         )
 
         window.present()
+        if self.update_ready_file is not None:
+            signal_update_ready(self.update_ready_file)
         if not self.preview_animations:
             self.sound.play(SoundEvent.SPAWN)
 
