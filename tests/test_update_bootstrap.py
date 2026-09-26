@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 
 from mochi.update.bootstrap import _runner_source, bootstrap_updater
@@ -170,3 +172,42 @@ def test_bootstrap_runner_cleans_workspace_after_updater_exits() -> None:
 
     assert "shutil.rmtree(workspace" in source
     assert "finally:" in source
+
+
+def test_real_bootstrap_package_imports_without_rest_of_mochi(tmp_path: Path) -> None:
+    source_package = Path(__file__).resolve().parents[1] / "src" / "mochi" / "update"
+    asset_root = tmp_path / "share" / "mochi"
+    for name in ("idle", "wave", "sad_idle", "focus"):
+        (asset_root / name).mkdir(parents=True)
+
+    app_home = tmp_path / "app"
+    bootstrap_updater(
+        _target(),
+        gui=True,
+        wait_pid=4321,
+        app_home=app_home,
+        source_package=source_package,
+        asset_root=asset_root,
+        base_python=Path(sys._base_executable or sys.executable),
+        popen=lambda _args, *, env: _Process(),
+    )
+
+    workspace = next((app_home / "update-bootstrap").iterdir())
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(workspace)
+
+    completed = subprocess.run(
+        [
+            sys._base_executable or sys.executable,
+            "-c",
+            "from mochi.update.external import run_external_update; print('ok')",
+        ],
+        cwd=workspace,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "ok"
