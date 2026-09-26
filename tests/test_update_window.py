@@ -145,13 +145,13 @@ def test_safe_pre_swap_stages_offer_cancel_when_external_callback_exists(
     for stage in (
         UpdateStage.DOWNLOADING,
         UpdateStage.VERIFYING,
-        UpdateStage.INSTALLING,
     ):
         window.show_progress(UpdateProgress(stage=stage, message=stage.value))
         assert window.visible_actions == ("Cancel",)
 
     for stage in (
         UpdateStage.SWAPPING,
+        UpdateStage.INSTALLING,
         UpdateStage.REFRESHING,
         UpdateStage.RESTARTING,
     ):

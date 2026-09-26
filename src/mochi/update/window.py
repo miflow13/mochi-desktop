@@ -374,7 +374,6 @@ class UpdateWindow(Gtk.Window):
             and progress.stage in {
                 UpdateStage.DOWNLOADING,
                 UpdateStage.VERIFYING,
-                UpdateStage.INSTALLING,
             }
         ):
             self._set_actions((("Cancel", self._on_cancel, False),))

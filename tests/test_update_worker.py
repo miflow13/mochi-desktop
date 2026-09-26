@@ -74,6 +74,7 @@ class _Harness:
         self.launches: list[tuple[str, ...]] = []
         self.waited_pids: list[int] = []
         self.ready_timeouts: list[float] = []
+        self.lifecycle: list[str] = []
 
     def download(self, url: str, destination: Path, on_bytes) -> None:
         self.download_urls.append(url)
@@ -86,6 +87,7 @@ class _Harness:
         self.commands.append(argv)
 
         if "--stage-runtime" in argv:
+            self.lifecycle.append("stage")
             target = Path(argv[argv.index("--stage-runtime") + 1])
             if self.stage_returncode == 0:
                 (target / "bin").mkdir(parents=True, exist_ok=True)
@@ -118,6 +120,7 @@ class _Harness:
         return object()
 
     def wait_for_pid(self, pid: int) -> None:
+        self.lifecycle.append("wait")
         self.waited_pids.append(pid)
 
     def wait_for_ready(self, path: Path, timeout_seconds: float) -> bool:
@@ -200,20 +203,24 @@ def test_stage_failure_leaves_current_runtime_untouched(tmp_path: Path) -> None:
     assert not paths.backup_venv.exists()
 
 
-def test_worker_waits_for_running_mochi_only_after_candidate_is_staged(
+def test_worker_waits_then_builds_candidate_at_final_runtime_path(
     tmp_path: Path,
 ) -> None:
     paths = _paths(tmp_path)
     harness = _Harness(tmp_path)
-    events: list[UpdateStage] = []
     worker, _store = _worker(tmp_path, harness, paths)
 
-    assert worker.run(_target(), wait_pid=4321, on_progress=lambda p: events.append(p.stage)) == 0
+    assert worker.run(_target(), wait_pid=4321, on_progress=lambda _p: None) == 0
 
     assert harness.waited_pids == [4321]
-    assert UpdateStage.INSTALLING in events
-    assert UpdateStage.SWAPPING in events
-    assert events.index(UpdateStage.INSTALLING) < events.index(UpdateStage.SWAPPING)
+    assert harness.lifecycle[:2] == ["wait", "stage"]
+
+    stage_command = next(
+        command for command in harness.commands if "--stage-runtime" in command
+    )
+    target = Path(stage_command[stage_command.index("--stage-runtime") + 1])
+    assert target == paths.final_venv
+    assert target != paths.update_venv
 
 
 def test_successful_swap_waits_for_readiness_then_removes_backup_and_records_target(
@@ -284,6 +291,30 @@ def test_stale_backup_restores_when_final_runtime_is_missing(tmp_path: Path) -> 
     assert not paths.update_venv.exists()
 
 
+def test_recovery_prefers_known_good_backup_over_partial_final_runtime(
+    tmp_path: Path,
+) -> None:
+    paths = _paths(tmp_path)
+    shutil.rmtree(paths.final_venv)
+    (paths.backup_venv / "bin").mkdir(parents=True)
+    (paths.backup_venv / "old.marker").write_text("known-good", encoding="utf-8")
+    old_mochi = paths.backup_venv / "bin" / "mochi"
+    old_mochi.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    old_mochi.chmod(0o755)
+
+    (paths.final_venv / "bin").mkdir(parents=True)
+    (paths.final_venv / "partial.marker").write_text("partial", encoding="utf-8")
+
+    harness = _Harness(tmp_path)
+    worker, _store = _worker(tmp_path, harness, paths)
+
+    worker._recover_stale_paths()
+
+    assert (paths.final_venv / "old.marker").read_text(encoding="utf-8") == "known-good"
+    assert not (paths.final_venv / "partial.marker").exists()
+    assert not paths.backup_venv.exists()
+
+
 def test_failure_cleans_temp_workspace_and_ready_file(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     harness = _Harness(tmp_path, stage_returncode=3)
@@ -327,3 +358,19 @@ def test_default_pid_wait_has_a_bounded_timeout() -> None:
 def test_archive_extraction_uses_data_filter() -> None:
     source = __import__("inspect").getsource(UpdateWorker._extract_and_validate_source)
     assert 'filter="data"' in source
+
+
+def test_worker_never_promotes_a_built_virtualenv_by_renaming_it(
+    tmp_path: Path,
+) -> None:
+    paths = _paths(tmp_path)
+    harness = _Harness(tmp_path)
+    worker, _store = _worker(tmp_path, harness, paths)
+
+    assert worker.run(_target(), wait_pid=None, on_progress=lambda _p: None) == 0
+
+    stage_command = next(
+        command for command in harness.commands if "--stage-runtime" in command
+    )
+    assert str(paths.final_venv) in stage_command
+    assert str(paths.update_venv) not in stage_command
