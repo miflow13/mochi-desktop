@@ -8,6 +8,14 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ### Added
 
+- Added a polished **Mochi Update Service** for installed alpha builds. Mochi can
+  quietly detect newer `main` commits, announce an available update once, show
+  a compact GTK **What's new** window using real Mochi pixel art, and update
+  through the new `mochi-update` command or **Update & Restart** UI.
+- Updates are pinned to the exact discovered commit, staged beside the current
+  runtime, validated before swap, and rolled back if the replacement does not
+  start successfully. User bond/progression/preferences remain separate from
+  the replaceable runtime.
 - Added **This Is Fine** as a rare Bond Level 3 catalogue emote with an animated hover preview and unlock reveal.
 - Added **Wave**, **VS Code**, and **Mochi.exe** to the Bond-aware Emote Catalogue, replacing the three placeholder mystery cards with authored animated previews and new bond unlocks.
 - Added **Coffee** as a completed Bond-aware catalogue emote with an animated hover preview.
