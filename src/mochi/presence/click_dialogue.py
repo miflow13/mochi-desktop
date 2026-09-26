@@ -9,6 +9,7 @@ from mochi.sound import SoundEvent
 
 from .bond_meter import BondMeterMixin
 from .clicks import ClickBurstDetector
+from .curiosity import ActiveWindowCuriosityMixin
 from .edge_roam_controls import EdgeRoamMixin
 from .engine import SpeechText, speech_display_seconds
 from .emote_catalogue import EmoteCatalogueMixin
@@ -157,6 +158,7 @@ class ClickDialogueMixin:
 
 class PresenceBuddy(
     ClickDialogueMixin,
+    ActiveWindowCuriosityMixin,
     IdleLookMixin,
     QuickStartMixin,
     FocusSessionMixin,
@@ -175,6 +177,7 @@ class PresenceBuddy(
 
 class PresenceX11Buddy(
     ClickDialogueMixin,
+    ActiveWindowCuriosityMixin,
     IdleLookMixin,
     QuickStartMixin,
     FocusSessionMixin,

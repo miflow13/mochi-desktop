@@ -88,6 +88,7 @@ class PresenceBuddyMixin:
         self._app_category_monitor = AppCategorySignalAdapter(
             on_category_snapshot=self._on_presence_app_category_snapshot,
             on_category_changed=self._on_presence_app_category_changed,
+            on_focus_changed=self._on_presence_app_focus_changed,
             logger=self._logger,
         )
         if self._app_category_monitor.start():
@@ -670,6 +671,10 @@ class PresenceBuddyMixin:
         """Synchronize startup context without inventing a focus transition."""
         self._presence_app_category = category
         self._logger.debug("[presence] context app=%s (baseline)", category)
+
+    def _on_presence_app_focus_changed(self, category: str) -> None:
+        """Receive a privacy-reduced focus pulse even when category is unchanged."""
+        self._logger.debug("[presence] focus app=%s", category)
 
     def _on_presence_app_category_changed(self, category: str) -> None:
         previous = self._presence_app_category
