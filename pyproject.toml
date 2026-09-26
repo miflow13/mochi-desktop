@@ -14,6 +14,7 @@ dependencies = []
 
 [project.scripts]
 mochi = "mochi.main:main"
+mochi-update = "mochi.update_cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
