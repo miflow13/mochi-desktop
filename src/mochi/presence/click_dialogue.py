@@ -178,6 +178,7 @@ class PresenceBuddy(
 class PresenceX11Buddy(
     ClickDialogueMixin,
     IdleLookMixin,
+    UpdateControlsMixin,
     QuickStartMixin,
     FocusSessionMixin,
     FedoraModeMixin,
