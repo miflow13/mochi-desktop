@@ -4,7 +4,7 @@
 
 **Target:** post-v0.3 / v0.4 supporting work
 
-**Status:** design approved in chat; written spec awaiting review; implementation not started
+**Status:** written spec approved; Milestone 0 implementation plan ready for review; implementation not started
 
 ## Purpose
 
