@@ -161,7 +161,8 @@ Required conceptual fields:
   "display_name": "Green Beanie",
   "slot": "head",
   "layer": "head",
-  "anchor": [32, 40],
+  "source_cell_size": [64, 64],
+  "anchor": [32, 16],
   "offset": [0, 0],
   "assets": {
     "default": "default.png"
@@ -169,6 +170,8 @@ Required conceptual fields:
   "hide_during": []
 }
 ```
+
+`anchor` and `offset` are authored in the accessory's source-grid coordinates. The accessory loader normalizes both the image and these coordinates into Mochi's 256×256 runtime space before composition.
 
 Optional fields may include:
 
@@ -284,30 +287,52 @@ The array length for an animation must match its effective frame count.
 
 Attachment coordinates are expressed in Mochi's normalized **256×256 logical frame space**, regardless of the original source cell size of that animation.
 
-## Accessory anchor placement
+## Accessory normalization and anchor placement
 
-Each accessory defines an anchor inside its own source canvas.
+A 64×64 accessory canvas represents the same full logical frame as Mochi's 256×256 runtime cell. It is **not** a tight-cropped image that is drawn at 1:1 runtime pixels.
 
-If Mochi's current `head` point is:
+The accessory loader mirrors the existing animation loader:
+
+```text
+64×64 source image
+→ nearest-neighbor ×4
+→ 256×256 runtime surface
+```
+
+Source-grid anchor and offset coordinates are normalized by the same scale factor.
+
+For example, if a beanie manifest defines:
+
+```text
+source anchor: (32, 16)
+source offset: (0, 0)
+```
+
+the compositor receives:
+
+```text
+runtime anchor: (128, 64)
+runtime offset: (0, 0)
+```
+
+If Mochi's current normalized `head` point is:
 
 ```text
 (128, 54)
 ```
 
-and the accessory anchor is:
+the accessory layer origin is:
 
 ```text
-(32, 40)
+x = 128 - 128 + 0 = 0
+y = 54  - 64  + 0 = -10
 ```
 
-then the accessory render origin is:
+The full normalized accessory layer is then clipped/composited into the same 256×256 frame space as the base sprite.
 
-```text
-x = 128 - 32 + offset_x
-y = 54  - 40 + offset_y
-```
+This allows an accessory to be authored on a coarse, real pixel-art grid while still following small per-frame attachment-point changes after normalization.
 
-This calculation is pure and independently testable.
+The normalization and placement calculations are pure and independently testable.
 
 No runtime auto-fit, arbitrary scaling, or rotation is performed to make an accessory fit a pose.
 
@@ -356,9 +381,19 @@ This directly implements the product requirement that the user's chosen identity
 
 The standard first-party accessory source canvas is **64×64** transparent PNG.
 
-The compositor resolves this asset into Mochi's 256×256 logical composition space using integer/nearest-neighbor rules.
+That 64×64 canvas represents the **entire Mochi frame**, not a tight crop around the hat/glasses/item. At load time it is normalized to a 256×256 runtime surface with nearest-neighbor scaling, matching the existing sprite-loader model.
 
-Accessories that genuinely require a different source canvas may be supported in a future manifest revision, but v1 should keep one canonical authoring size.
+```text
+authoring grid: 64×64
+runtime grid:   256×256
+scale:          exactly 4×
+```
+
+Accessory anchors and offsets are stored in 64×64 source-grid coordinates and normalized by the same factor.
+
+This preserves authentic coarse pixel geometry while giving the compositor one coordinate system for base frames, attachment points, and accessory layers.
+
+Accessories that genuinely require a different source cell may be supported in a future manifest revision, but v1 keeps one canonical 64×64 source grid.
 
 ### Rendering rules
 
@@ -458,7 +493,8 @@ Example manifest:
   "display_name": "Green Beanie",
   "slot": "head",
   "layer": "head",
-  "anchor": [32, 40],
+  "source_cell_size": [64, 64],
+  "anchor": [32, 16],
   "offset": [0, 0],
   "assets": {
     "default": "default.png",
@@ -530,7 +566,8 @@ Reject/skip an accessory when:
 For built-in v1 assets:
 
 - PNG;
-- 64×64 source canvas;
+- declared source cell size is 64×64 for v1;
+- image dimensions match the declared 64×64 source cell;
 - readable image data;
 - transparent-capable image mode;
 - no malformed file.
@@ -944,11 +981,14 @@ Test without GTK:
 Example geometry test:
 
 ```text
-Mochi point:      (128, 54)
-Accessory anchor: (32, 40)
-Offset:           (0, 0)
+Source cell:             64×64
+Runtime cell:            256×256
+Source accessory anchor: (32, 16)
+Normalized anchor:       (128, 64)
+Mochi attachment point:  (128, 54)
+Normalized offset:       (0, 0)
 
-Expected origin:  (96, 14)
+Expected layer origin:   (0, -10)
 ```
 
 ### Asset validation tests
