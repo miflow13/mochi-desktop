@@ -219,6 +219,19 @@ class UpdateWorker:
             if cancel_event is not None and cancel_event.is_set():
                 return 130
 
+            if wait_pid is not None:
+                self._wait_for_pid(wait_pid)
+            if cancel_event is not None and cancel_event.is_set():
+                return 130
+
+            on_progress(UpdateProgress(UpdateStage.SWAPPING, "Preparing runtime…"))
+            if not self.paths.final_venv.exists():
+                raise RuntimeError("current Mochi runtime is missing before update")
+            if self.paths.backup_venv.exists():
+                shutil.rmtree(self.paths.backup_venv)
+            self.paths.final_venv.rename(self.paths.backup_venv)
+            swapped = True
+
             on_progress(UpdateProgress(UpdateStage.INSTALLING, "Installing Mochi…"))
             env = os.environ.copy()
             env["MOCHI_INSTALLED_COMMIT"] = target.commit
@@ -226,33 +239,18 @@ class UpdateWorker:
                 [
                     source_root / "install.sh",
                     "--stage-runtime",
-                    self.paths.update_venv,
+                    self.paths.final_venv,
                 ],
                 cwd=source_root,
                 env=env,
             )
             if getattr(stage, "returncode", 1) != 0:
                 failure_code = int(getattr(stage, "returncode", 1) or 1)
+                self._rollback_and_relaunch()
+                swapped = False
                 return failure_code
 
-            if cancel_event is not None and cancel_event.is_set():
-                return 130
-
             installed_version = self._validate_candidate()
-            if cancel_event is not None and cancel_event.is_set():
-                return 130
-
-            if wait_pid is not None:
-                self._wait_for_pid(wait_pid)
-
-            on_progress(UpdateProgress(UpdateStage.SWAPPING, "Finishing update…"))
-            if not self.paths.final_venv.exists():
-                raise RuntimeError("current Mochi runtime is missing before swap")
-            if self.paths.backup_venv.exists():
-                shutil.rmtree(self.paths.backup_venv)
-            self.paths.final_venv.rename(self.paths.backup_venv)
-            self.paths.update_venv.rename(self.paths.final_venv)
-            swapped = True
 
             on_progress(
                 UpdateProgress(UpdateStage.REFRESHING, "Refreshing desktop integration…")
@@ -318,10 +316,10 @@ class UpdateWorker:
         if self.paths.update_venv.exists():
             shutil.rmtree(self.paths.update_venv, ignore_errors=True)
 
-        if not self.paths.final_venv.exists() and self.paths.backup_venv.exists():
+        if self.paths.backup_venv.exists():
+            if self.paths.final_venv.exists():
+                shutil.rmtree(self.paths.final_venv, ignore_errors=True)
             self.paths.backup_venv.rename(self.paths.final_venv)
-        elif self.paths.final_venv.exists() and self.paths.backup_venv.exists():
-            shutil.rmtree(self.paths.backup_venv, ignore_errors=True)
 
     def _extract_and_validate_source(
         self,
@@ -361,11 +359,11 @@ class UpdateWorker:
         return source_root
 
     def _validate_candidate(self) -> str:
-        python = self.paths.update_venv / "bin" / "python"
-        mochi = self.paths.update_venv / "bin" / "mochi"
-        manifest = self.paths.update_venv / "share" / "mochi" / "manifest.json"
+        python = self.paths.final_venv / "bin" / "python"
+        mochi = self.paths.final_venv / "bin" / "mochi"
+        manifest = self.paths.final_venv / "share" / "mochi" / "manifest.json"
         default_art = (
-            self.paths.update_venv
+            self.paths.final_venv
             / "share"
             / "mochi"
             / "master"
