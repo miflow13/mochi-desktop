@@ -73,6 +73,8 @@ class _BaseBuddy:
         self._cancel_walk = Mock()
         self._play_animation = Mock()
         self.resumed_other_ambient = False
+        self.context_menu_close_requested = False
+        self.pending_context_action = None
 
     def _transition_to(self, next_state: MochiState) -> bool:
         if next_state is MochiState.WALKING and self.state.current is not MochiState.IDLE:
@@ -89,6 +91,10 @@ class _BaseBuddy:
     def _maybe_resume_ambient_activity(self) -> bool:
         self.resumed_other_ambient = True
         return False
+
+    def _close_context_menu_then(self, action) -> None:
+        self.context_menu_close_requested = True
+        self.pending_context_action = action
 
     def _on_context_menu_closed(self, _popover) -> None:
         self._context_menu_open = False
@@ -218,7 +224,7 @@ class EdgeRoamActivationTests(unittest.TestCase):
         self.assertIsNotNone(motion)
         self.assertEqual(motion.origin[1], 8)
 
-    def test_context_menu_open_defers_activation(self) -> None:
+    def test_context_menu_toggle_closes_before_starting_nearest_edge_walk(self) -> None:
         buddy = _make_buddy(state=MochiState.IDLE, context_menu_open=True)
 
         buddy._toggle_edge_roam(None)
@@ -226,6 +232,8 @@ class EdgeRoamActivationTests(unittest.TestCase):
         self.assertTrue(buddy._edge_roam)
         self.assertTrue(buddy._edge_roam_start_pending)
         self.assertIsNot(buddy.state.current, MochiState.WALKING)
+        self.assertTrue(buddy.context_menu_close_requested)
+        self.assertIsNotNone(buddy.pending_context_action)
 
         # Menu closes through the real hook; the pending activation should
         # now proceed without any polling timer.
@@ -233,6 +241,7 @@ class EdgeRoamActivationTests(unittest.TestCase):
 
         self.assertIs(buddy.state.current, MochiState.WALKING)
         self.assertFalse(buddy._edge_roam_start_pending)
+        self.assertEqual(buddy._walk_motion.target[1], 8)
 
     def test_developer_menu_close_also_consumes_pending_activation(self) -> None:
         buddy = _make_buddy(state=MochiState.IDLE, context_menu_open=True)
