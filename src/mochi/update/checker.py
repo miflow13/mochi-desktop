@@ -57,6 +57,27 @@ class GitHubUpdateSource:
             raise ValueError("GitHub commit response did not include a SHA")
         return sha.strip()
 
+    def compare_commits(self, installed_commit: str, target_commit: str) -> str:
+        installed_commit = str(installed_commit).strip()
+        target_commit = str(target_commit).strip()
+        if not installed_commit or not target_commit:
+            raise ValueError("both installed and target commits are required")
+
+        url = (
+            "https://api.github.com/repos/"
+            f"{OFFICIAL_REPOSITORY}/compare/{installed_commit}...{target_commit}"
+        )
+        data = json.loads(
+            self._read_url(url, self._timeout_seconds).decode("utf-8")
+        )
+        if not isinstance(data, dict):
+            raise ValueError("GitHub compare response must be an object")
+
+        status = data.get("status")
+        if status not in {"identical", "ahead", "behind", "diverged"}:
+            raise ValueError("GitHub compare response has an invalid status")
+        return status
+
     def fetch_metadata(self, commit: str) -> UpdateMetadata:
         commit = str(commit).strip()
         if not commit:
@@ -144,6 +165,17 @@ class UpdateChecker:
         self._config.save_last_update_check(checked_at)
 
         if target_commit == installed.commit:
+            return UpdateCheckResult(status=UpdateStatus.UP_TO_DATE)
+
+        try:
+            relation = self._source.compare_commits(installed.commit, target_commit)
+        except Exception as error:
+            return UpdateCheckResult(
+                status=UpdateStatus.CHECK_FAILED,
+                error=str(error),
+            )
+
+        if relation != "ahead":
             return UpdateCheckResult(status=UpdateStatus.UP_TO_DATE)
 
         try:
