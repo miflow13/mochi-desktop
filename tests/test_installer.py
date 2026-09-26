@@ -93,6 +93,10 @@ printf '%s\n' "$*" >> "$MOCHI_TEST_LOG_DIR/python.log"
 
 if [[ "$1" == "-" ]]; then
     payload="$(cat)"
+    if [[ "$payload" == *'metadata.version("mochi-desktop")'* ]]; then
+        printf '0.3.0a1\n'
+        exit 0
+    fi
     if [[ "$payload" == *"_base_executable"* ]]; then
         printf '%s\n' "$0"
         exit 0
@@ -173,6 +177,8 @@ def _run_installer(
     project_install_ready: bool = True,
     project_install_terminates: bool = False,
     existing_venv_marker: str | None = None,
+    installer_args: tuple[str, ...] = (),
+    installed_commit: str = "test-commit",
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     bin_dir, log_dir = _make_toolbox(
         tmp_path,
@@ -187,6 +193,8 @@ def _run_installer(
             existing_venv_marker,
             encoding="utf-8",
         )
+        (venv / "bin").mkdir()
+        _write_executable(venv / "bin" / "mochi", "#!/bin/bash\nexit 0\n")
 
     env = os.environ.copy()
     env.update(
@@ -206,11 +214,12 @@ def _run_installer(
             "FAKE_PROJECT_INSTALL_TERMINATES": (
                 "1" if project_install_terminates else "0"
             ),
+            "MOCHI_INSTALLED_COMMIT": installed_commit,
         }
     )
 
     result = subprocess.run(
-        ["/bin/bash", str(INSTALLER)],
+        ["/bin/bash", str(INSTALLER), *installer_args],
         cwd=ROOT,
         env=env,
         text=True,
@@ -404,6 +413,113 @@ def test_project_install_failure_restores_or_removes_environment(
     assert not tuple(app_home.glob("venv.backup.*"))
     assert not tuple(app_home.glob("venv.new.*"))
 
+
+
+def test_normal_install_writes_installed_build_metadata(tmp_path: Path) -> None:
+    result, _log_dir = _run_installer(tmp_path, current_desktop="niri")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    install_json = (
+        tmp_path
+        / "home"
+        / ".local"
+        / "share"
+        / "mochi-desktop"
+        / "install.json"
+    )
+    data = __import__("json").loads(install_json.read_text(encoding="utf-8"))
+    assert data["version"] == "0.3.0a1"
+    assert data["commit"] == "test-commit"
+    assert data["channel"] == "main"
+    assert data["installed_at"]
+
+
+def test_stage_runtime_builds_candidate_without_touching_current_install(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    candidate = home / ".local" / "share" / "mochi-desktop" / "venv.update"
+
+    result, log_dir = _run_installer(
+        tmp_path,
+        current_desktop="GNOME",
+        with_gnome_extensions=True,
+        existing_venv_marker="working-old-install",
+        installer_args=("--stage-runtime", str(candidate)),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    final_venv = home / ".local" / "share" / "mochi-desktop" / "venv"
+    assert (final_venv / "old-install.marker").read_text(encoding="utf-8") == (
+        "working-old-install"
+    )
+    assert (candidate / "bin" / "mochi").exists()
+    assert not (home / ".local" / "bin" / "mochi").exists()
+    assert not (
+        home
+        / ".local"
+        / "share"
+        / "applications"
+        / "io.github.mochi_desktop.Mochi.desktop"
+    ).exists()
+    assert not (log_dir / "gnome-extensions.log").exists()
+    assert not (
+        home / ".local" / "share" / "mochi-desktop" / "install.json"
+    ).exists()
+
+
+def test_stage_runtime_failure_preserves_current_install(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    candidate = home / ".local" / "share" / "mochi-desktop" / "venv.update"
+
+    result, _log_dir = _run_installer(
+        tmp_path,
+        current_desktop="niri",
+        existing_venv_marker="working-old-install",
+        project_install_ready=False,
+        installer_args=("--stage-runtime", str(candidate)),
+    )
+
+    assert result.returncode != 0
+    final_venv = home / ".local" / "share" / "mochi-desktop" / "venv"
+    assert (final_venv / "old-install.marker").read_text(encoding="utf-8") == (
+        "working-old-install"
+    )
+    assert not candidate.exists()
+
+
+def test_refresh_integrations_reuses_final_runtime_without_rebuilding(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+
+    result, log_dir = _run_installer(
+        tmp_path,
+        current_desktop="niri",
+        existing_venv_marker="working-old-install",
+        installer_args=("--refresh-integrations",),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    python_log = _read_log(log_dir, "python.log")
+    assert "-m venv" not in python_log
+    assert "-m pip install --no-deps --no-build-isolation" not in python_log
+
+    launcher = home / ".local" / "bin" / "mochi"
+    launcher_text = launcher.read_text(encoding="utf-8")
+    final_mochi = (
+        home
+        / ".local"
+        / "share"
+        / "mochi-desktop"
+        / "venv"
+        / "bin"
+        / "mochi"
+    )
+    assert str(final_mochi) in launcher_text
+    assert not (
+        home / ".local" / "share" / "mochi-desktop" / "install.json"
+    ).exists()
 
 def test_abnormal_exit_restores_previous_environment(tmp_path: Path) -> None:
     result, _log_dir = _run_installer(
