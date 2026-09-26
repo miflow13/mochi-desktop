@@ -16,11 +16,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Install test runtime
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            python3-pip \
             python3-pytest \
             python3-gi \
             python3-cairo \
@@ -33,3 +36,61 @@ jobs:
         env:
           PYTHONPATH: src
         run: xvfb-run -a python3 -m pytest -q
+
+
+      - name: Compile Python sources
+        env:
+          PYTHONPATH: src
+        run: python3 -m compileall -q src tests
+
+      - name: Check installer shell syntax
+        run: bash -n install.sh
+
+      - name: Check committed diff whitespace
+        shell: bash
+        run: |
+          if [[ -n "${{ github.base_ref }}" ]]; then
+            git diff --check "origin/${{ github.base_ref }}...HEAD"
+          else
+            git diff --check HEAD^..HEAD
+          fi
+
+      - name: Build and audit wheel
+        run: |
+          rm -rf /tmp/mochi-wheel
+          python3 -m pip wheel . --no-deps -w /tmp/mochi-wheel
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          wheels = sorted(Path("/tmp/mochi-wheel").glob("mochi_desktop-*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"expected one Mochi wheel, found {len(wheels)}")
+
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = archive.namelist()
+
+          required_suffixes = (
+              "/share/mochi/manifest.json",
+              "/share/mochi/master/mochi_default.png",
+              "/share/mochi/idle/idle_01.png",
+              "/share/mochi/audio/",
+          )
+          for suffix in required_suffixes:
+              if not any(
+                  name.endswith(suffix) if not suffix.endswith("/") else suffix in name
+                  for name in names
+              ):
+                  raise SystemExit(f"wheel is missing required runtime content: {suffix}")
+
+          required_modules = (
+              "mochi/update/checker.py",
+              "mochi/update/worker.py",
+              "mochi/update/window.py",
+              "mochi/update/external.py",
+              "mochi/update_cli.py",
+          )
+          for module in required_modules:
+              if module not in names:
+                  raise SystemExit(f"wheel is missing updater module: {module}")
+          PY
