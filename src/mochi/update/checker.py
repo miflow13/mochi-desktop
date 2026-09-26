@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 from mochi.config import ConfigStore
 
+from .constants import OFFICIAL_REPOSITORY
 from .model import (
     UpdateCheckResult,
     UpdateMetadata,
@@ -18,7 +19,6 @@ from .model import (
 from .storage import InstallMetadataStore
 
 
-OFFICIAL_REPOSITORY = "miflow13/mochi-desktop"
 AUTO_CHECK_INTERVAL_SECONDS = 86_400
 DEFAULT_NETWORK_TIMEOUT_SECONDS = 3.0
 
