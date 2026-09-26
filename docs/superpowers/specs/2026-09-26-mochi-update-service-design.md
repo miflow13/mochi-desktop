@@ -1,7 +1,9 @@
 # Mochi Update Service — Design
 
-**Date:** 2026-09-26  
-**Target:** post-v0.3 / v0.4 supporting work  
+**Date:** 2026-09-26
+
+**Target:** post-v0.3 / v0.4 supporting work
+
 **Status:** approved design, implementation not started
 
 ## Purpose
@@ -117,7 +119,8 @@ A Wave or similarly lightweight authored animation may accompany that acknowledg
 
 Friendly error copy:
 
-> Hmm... something went wrong.  
+> Hmm... something went wrong.
+>
 > Your current Mochi is still safe.
 
 Actions:
