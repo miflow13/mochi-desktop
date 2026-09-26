@@ -12,18 +12,6 @@ from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState
 
 
-_EDGE_ROAM_INTERRUPTABLE_STATES = frozenset(
-    (
-        MochiState.COMPUTER,
-        MochiState.TYPING,
-        MochiState.WATCHING,
-        MochiState.DANCING,
-        MochiState.SEARCHING,
-        MochiState.IDLE_EMOTE,
-    )
-)
-
-
 class EdgeRoamMixin:
     """Keep autonomous wandering on the current monitor's safe perimeter."""
 
@@ -90,14 +78,6 @@ class EdgeRoamMixin:
             # Choose one direction per activation so Mochi feels like he is
             # patrolling the perimeter instead of jittering back and forth.
             self._edge_roam_clockwise = random.choice((True, False))
-            # Edge Roam is an explicit user movement request. Persistent
-            # window-focus modes may otherwise own a contextual state forever,
-            # while the menu's Focus thinking visual temporarily owns
-            # IDLE_EMOTE. Either leaves activation pending after the menu
-            # closes. Yield only those ambient/presentation states; direct
-            # reactions, sleep, drag, feeding, and held modes keep priority.
-            if self.state.current in _EDGE_ROAM_INTERRUPTABLE_STATES:
-                self._cancel_active_emote()
             if self.state.current is MochiState.WALKING:
                 self._cancel_walk()
                 if self._transition_to(MochiState.IDLE):
@@ -134,8 +114,6 @@ class EdgeRoamMixin:
         if not self._edge_roam or not self._edge_roam_start_pending:
             return False
         if self._context_menu_open:
-            return False
-        if getattr(self, "_stay_put", False):
             return False
         if self.state.current is MochiState.WALKING:
             self._edge_roam_start_pending = False
