@@ -150,6 +150,22 @@ class EdgeRoamActivationTests(unittest.TestCase):
                 self.assertIs(buddy.state.current, busy_state)
                 self.assertTrue(buddy._edge_roam_start_pending)
 
+    def test_stay_put_suppresses_pending_start_until_released(self) -> None:
+        buddy = _make_buddy(state=MochiState.IDLE)
+        buddy._stay_put = True
+
+        buddy._toggle_edge_roam(None)
+
+        self.assertTrue(buddy._edge_roam)
+        self.assertTrue(buddy._edge_roam_start_pending)
+        self.assertIs(buddy.state.current, MochiState.IDLE)
+
+        buddy._stay_put = False
+        self.assertTrue(buddy._try_start_pending_edge_roam())
+        self.assertIs(buddy.state.current, MochiState.WALKING)
+        self.assertFalse(buddy._edge_roam_start_pending)
+        self.assertEqual(buddy._walk_motion.target[1], 8)
+
     def test_pending_activation_starts_once_mochi_returns_to_idle(self) -> None:
         buddy = _make_buddy(state=MochiState.HEART)
         buddy._toggle_edge_roam(None)

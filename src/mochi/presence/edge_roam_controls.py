@@ -115,6 +115,8 @@ class EdgeRoamMixin:
             return False
         if self._context_menu_open:
             return False
+        if getattr(self, "_stay_put", False):
+            return False
         if self.state.current is MochiState.WALKING:
             self._edge_roam_start_pending = False
             return True
