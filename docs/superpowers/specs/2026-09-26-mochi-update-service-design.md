@@ -153,16 +153,16 @@ It must not download the application archive or modify the installation.
 
 Small persistent metadata using Mochi's existing local configuration approach.
 
-Conceptual fields:
+Conceptual preference/check fields:
 
 ```text
 update_checks_enabled = true
 update_channel = "main"
 last_update_check = ...
 dismissed_commit = ...
-installed_version = ...
-installed_commit = ...
 ```
+
+Installed build identity is stored separately under the application home because it describes the installed runtime, not a user preference.
 
 No account, telemetry identifier, device identifier, analytics payload, or cloud state is introduced.
 
@@ -191,6 +191,21 @@ mochi-uninstall
 `mochi-update` owns download, verification, installation, rollback coordination, and relaunch.
 
 The Mochi process must exit cleanly before its active runtime environment is replaced.
+
+## Updater execution independence
+
+The critical updater process must not depend on the runtime environment it is about to replace.
+
+The installed `mochi-update` command may begin as a lightweight launcher, but before the venv swap it must bootstrap the updater runner into a stable temporary/application-owned location and use an interpreter/resources that remain available while `venv` is renamed.
+
+Acceptable implementation shapes include:
+
+- a small shell launcher that starts a system-Python updater runner copied outside the active venv; or
+- a bootstrap step that copies the required updater module/UI assets to the update workspace before entering the critical phase.
+
+The updater must not rely on late imports or asset reads from the old venv after that venv has been moved to `venv.backup`.
+
+This requirement prevents the updater from deleting or renaming the code it still needs to finish rollback, report progress, or relaunch Mochi.
 
 ## Update source and race avoidance
 
@@ -247,7 +262,13 @@ Requirements:
 
 ## Installed metadata
 
-The installer records the build that is actually installed.
+The installer records the build that is actually installed in application-owned data, conceptually:
+
+```text
+~/.local/share/mochi-desktop/install.json
+```
+
+This record is separate from relationship/preferences configuration and may be replaced whenever the application runtime is replaced.
 
 Conceptual record:
 
