@@ -9,7 +9,9 @@ import unittest
 from unittest.mock import Mock
 
 from mochi.config import Position
+from mochi.presence.click_dialogue import PresenceBuddy, PresenceX11Buddy
 from mochi.presence.edge_roam_controls import EdgeRoamMixin
+from mochi.presence.music_dance import MusicDanceMixin
 from mochi.state import MochiState
 
 
@@ -286,6 +288,18 @@ class EdgeRoamActivationTests(unittest.TestCase):
 
         self.assertIs(buddy.state.current, MochiState.WALKING)
         self.assertFalse(buddy._edge_roam_start_pending)
+
+
+    def test_production_mro_checks_pending_edge_roam_before_contextual_resume(self) -> None:
+        for buddy_type in (PresenceBuddy, PresenceX11Buddy):
+            with self.subTest(buddy_type=buddy_type.__name__):
+                mro = buddy_type.__mro__
+                self.assertLess(
+                    mro.index(EdgeRoamMixin),
+                    mro.index(MusicDanceMixin),
+                    "Edge Roam must get first chance at an IDLE handoff before "
+                    "terminal/music/file ambient owners reclaim the state",
+                )
 
     def test_disabled_edge_roam_never_starts_from_ambient_resume(self) -> None:
         buddy = _make_buddy(state=MochiState.IDLE, edge_roam=False)
