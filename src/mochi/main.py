@@ -6,7 +6,6 @@ import argparse
 import logging
 import os
 import sys
-from pathlib import Path
 from collections.abc import MutableMapping
 from pathlib import Path
 
