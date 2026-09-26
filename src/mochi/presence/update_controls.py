@@ -179,9 +179,17 @@ class UpdateControlsMixin:
                 on_retry=lambda: self._start_update_check(manual=True),
                 on_close=self._destroy_update_window,
             )
+            self._update_window.connect(
+                "close-request",
+                self._on_update_window_close_request,
+            )
             if getattr(self, "_window", None) is not None:
                 self._update_window.set_transient_for(self._window)
         return self._update_window
+
+    def _on_update_window_close_request(self, _window: Gtk.Window) -> bool:
+        self._destroy_update_window()
+        return True
 
     def _show_update_window(self, target: UpdateTarget) -> None:
         window = self._get_update_window()
