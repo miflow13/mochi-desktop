@@ -163,3 +163,10 @@ def test_bootstrap_runner_honors_gui_flag_without_resolving_main_again() -> None
     assert "run_external_update" in source
     assert "UpdateChecker" not in source
     assert "resolve_main_sha" not in source
+
+
+def test_bootstrap_runner_cleans_workspace_after_updater_exits() -> None:
+    source = _runner_source()
+
+    assert "shutil.rmtree(workspace" in source
+    assert "finally:" in source
