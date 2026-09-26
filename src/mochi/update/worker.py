@@ -148,6 +148,12 @@ def _default_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _runtime_environment() -> dict[str, str]:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    return env
+
+
 class UpdateWorker:
     def __init__(
         self,
@@ -186,6 +192,7 @@ class UpdateWorker:
         extracted_path = workspace / "source"
         swapped = False
         failure_code = 1
+        runtime_env = _runtime_environment()
 
         try:
             self._recover_stale_paths()
@@ -233,8 +240,8 @@ class UpdateWorker:
             swapped = True
 
             on_progress(UpdateProgress(UpdateStage.INSTALLING, "Installing Mochi…"))
-            env = os.environ.copy()
-            env["MOCHI_INSTALLED_COMMIT"] = target.commit
+            install_env = runtime_env.copy()
+            install_env["MOCHI_INSTALLED_COMMIT"] = target.commit
             stage = self._run_command(
                 [
                     source_root / "install.sh",
@@ -242,15 +249,15 @@ class UpdateWorker:
                     self.paths.final_venv,
                 ],
                 cwd=source_root,
-                env=env,
+                env=install_env,
             )
             if getattr(stage, "returncode", 1) != 0:
                 failure_code = int(getattr(stage, "returncode", 1) or 1)
-                self._rollback_and_relaunch()
+                self._rollback_and_relaunch(runtime_env)
                 swapped = False
                 return failure_code
 
-            installed_version = self._validate_candidate()
+            installed_version = self._validate_candidate(runtime_env)
 
             on_progress(
                 UpdateProgress(UpdateStage.REFRESHING, "Refreshing desktop integration…")
@@ -258,11 +265,11 @@ class UpdateWorker:
             refresh = self._run_command(
                 [source_root / "install.sh", "--refresh-integrations"],
                 cwd=source_root,
-                env=env,
+                env=install_env,
             )
             if getattr(refresh, "returncode", 1) != 0:
                 failure_code = int(getattr(refresh, "returncode", 1) or 1)
-                self._rollback_and_relaunch()
+                self._rollback_and_relaunch(runtime_env)
                 swapped = False
                 return failure_code
 
@@ -274,11 +281,11 @@ class UpdateWorker:
                     "--update-ready-file",
                     self.paths.ready_file,
                 ],
-                env=os.environ.copy(),
+                env=runtime_env,
             )
 
             if not self._wait_for_ready(self.paths.ready_file, READY_TIMEOUT_SECONDS):
-                self._rollback_and_relaunch()
+                self._rollback_and_relaunch(runtime_env)
                 swapped = False
                 return 1
 
@@ -300,7 +307,7 @@ class UpdateWorker:
         except Exception as error:
             if swapped:
                 try:
-                    self._rollback_and_relaunch()
+                    self._rollback_and_relaunch(runtime_env)
                     swapped = False
                 except Exception:
                     pass
@@ -358,7 +365,7 @@ class UpdateWorker:
             raise ValueError("update archive is missing required Mochi files")
         return source_root
 
-    def _validate_candidate(self) -> str:
+    def _validate_candidate(self, env: dict[str, str]) -> str:
         python = self.paths.final_venv / "bin" / "python"
         mochi = self.paths.final_venv / "bin" / "mochi"
         manifest = self.paths.final_venv / "share" / "mochi" / "manifest.json"
@@ -383,12 +390,12 @@ class UpdateWorker:
                 "-c",
                 (
                     "from importlib import metadata; "
-                    "import mochi; "
+                    "import mochi.main; "
                     "print(metadata.version('mochi-desktop'))"
                 ),
             ],
             cwd=None,
-            env=os.environ.copy(),
+            env=env,
         )
         if getattr(result, "returncode", 1) != 0:
             raise RuntimeError("candidate Mochi import/version check failed")
@@ -397,7 +404,7 @@ class UpdateWorker:
             raise RuntimeError("candidate Mochi version is unavailable")
         return version[-1].strip()
 
-    def _rollback_and_relaunch(self) -> None:
+    def _rollback_and_relaunch(self, env: dict[str, str]) -> None:
         if self.paths.final_venv.exists():
             shutil.rmtree(self.paths.final_venv, ignore_errors=True)
         if not self.paths.backup_venv.exists():
@@ -405,5 +412,5 @@ class UpdateWorker:
         self.paths.backup_venv.rename(self.paths.final_venv)
         self._launch_command(
             [self.paths.final_venv / "bin" / "mochi"],
-            env=os.environ.copy(),
+            env=env,
         )

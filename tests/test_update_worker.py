@@ -7,9 +7,12 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import threading
 import time
+
+import pytest
 
 from mochi.update.model import InstalledBuild, UpdateMetadata, UpdateTarget
 from mochi.update.storage import InstallMetadataStore
@@ -71,7 +74,9 @@ class _Harness:
         self.ready = ready
         self.download_urls: list[str] = []
         self.commands: list[tuple[str, ...]] = []
+        self.command_environments: list[dict[str, str]] = []
         self.launches: list[tuple[str, ...]] = []
+        self.launch_environments: list[dict[str, str]] = []
         self.waited_pids: list[int] = []
         self.ready_timeouts: list[float] = []
         self.lifecycle: list[str] = []
@@ -85,6 +90,7 @@ class _Harness:
     def run_command(self, args, *, cwd=None, env=None):
         argv = tuple(str(value) for value in args)
         self.commands.append(argv)
+        self.command_environments.append(dict(env or {}))
 
         if "--stage-runtime" in argv:
             self.lifecycle.append("stage")
@@ -117,6 +123,7 @@ class _Harness:
     def launch(self, args, *, env=None):
         argv = tuple(str(value) for value in args)
         self.launches.append(argv)
+        self.launch_environments.append(dict(env or {}))
         return object()
 
     def wait_for_pid(self, pid: int) -> None:
@@ -221,6 +228,54 @@ def test_worker_waits_then_builds_candidate_at_final_runtime_path(
     target = Path(stage_command[stage_command.index("--stage-runtime") + 1])
     assert target == paths.final_venv
     assert target != paths.update_venv
+
+
+def test_worker_does_not_leak_bootstrap_pythonpath_into_installed_runtime(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    paths = _paths(tmp_path)
+    harness = _Harness(tmp_path)
+    worker, _store = _worker(tmp_path, harness, paths)
+    monkeypatch.setenv("PYTHONPATH", "/tmp/mochi-update-bootstrap")
+
+    assert worker.run(_target(), wait_pid=None, on_progress=lambda _p: None) == 0
+
+    environments = harness.command_environments + harness.launch_environments
+    assert environments
+    assert all("PYTHONPATH" not in environment for environment in environments)
+
+
+def test_candidate_validation_rejects_runtime_without_main_module(
+    tmp_path: Path,
+) -> None:
+    paths = _paths(tmp_path)
+    package_root = tmp_path / "partial-package"
+    (package_root / "mochi").mkdir(parents=True)
+    (package_root / "mochi" / "__init__.py").write_text("", encoding="utf-8")
+    metadata = package_root / "mochi_desktop-0.4.0a1.dist-info"
+    metadata.mkdir()
+    (metadata / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: mochi-desktop\nVersion: 0.4.0a1\n",
+        encoding="utf-8",
+    )
+
+    python = paths.final_venv / "bin" / "python"
+    python.write_text(
+        f'#!/bin/sh\nPYTHONPATH="{package_root}" exec "{sys.executable}" "$@"\n',
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+    (paths.final_venv / "share" / "mochi" / "master").mkdir(parents=True)
+    (paths.final_venv / "share" / "mochi" / "manifest.json").write_text(
+        "{}\n", encoding="utf-8"
+    )
+    (paths.final_venv / "share" / "mochi" / "master" / "mochi_default.png").touch()
+
+    worker = UpdateWorker(paths=paths)
+
+    with pytest.raises(RuntimeError, match="candidate Mochi import/version check failed"):
+        worker._validate_candidate({})
 
 
 def test_successful_swap_waits_for_readiness_then_removes_backup_and_records_target(
