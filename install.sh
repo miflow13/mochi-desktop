@@ -466,4 +466,3 @@ install_integrations
 write_install_metadata
 show_install_complete
 exit 0
-
