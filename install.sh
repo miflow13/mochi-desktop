@@ -255,49 +255,56 @@ PY
 step "Installing Mochi"
 printf '%sTarget:%s %s\n' "$DIM" "$RESET" "$APP_HOME"
 mkdir -p "$APP_HOME" "$BIN_DIR" "$APPLICATIONS_DIR" "$ICON_DIR"
-if ! TMP_VENV="$(mktemp -d "$APP_HOME/venv.new.XXXXXX")"; then
-    warn "Failed to create temporary Mochi environment."
-    exit 1
+
+BACKUP_VENV=""
+VENV_INSTALL_IN_PROGRESS=false
+
+rollback_private_venv() {
+    local status=$?
+    trap - EXIT
+    set +e
+    if [[ "$VENV_INSTALL_IN_PROGRESS" == "true" ]]; then
+        if [[ -n "$BACKUP_VENV" && -d "$BACKUP_VENV" ]]; then
+            rm -rf "$VENV"
+            if ! mv "$BACKUP_VENV" "$VENV"; then
+                warn "Failed to restore the previous Mochi environment."
+            fi
+        elif [[ -z "$BACKUP_VENV" ]]; then
+            rm -rf "$VENV"
+        fi
+    fi
+    exit "$status"
+}
+
+trap rollback_private_venv EXIT
+
+if [[ -d "$VENV" ]]; then
+    BACKUP_VENV="$APP_HOME/venv.backup.$$"
+    rm -rf "$BACKUP_VENV"
+    VENV_INSTALL_IN_PROGRESS=true
+    if ! mv "$VENV" "$BACKUP_VENV"; then
+        warn "Failed to back up existing Mochi environment."
+        exit 1
+    fi
+else
+    VENV_INSTALL_IN_PROGRESS=true
 fi
-trap '[[ -d "$TMP_VENV" ]] && rm -rf "$TMP_VENV"' EXIT
-if ! "$SYSTEM_PYTHON" -m venv --system-site-packages "$TMP_VENV"; then
-    warn "Failed to create temporary Mochi virtual environment."
+
+if ! "$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"; then
+    warn "Failed to create Mochi virtual environment."
     exit 1
 fi
 
 # Mochi uses setuptools.build_meta from pyproject.toml. Reuse compatible build
 # tooling already visible through --system-site-packages when possible, and only
 # ask pip to fetch a newer setuptools when the visible one is too old or missing.
-if ! ensure_python_build_tools "$TMP_VENV/bin/python"; then
-    warn "Failed to install Mochi build tooling into temporary environment."
+if ! ensure_python_build_tools "$VENV/bin/python"; then
+    warn "Failed to install Mochi build tooling into the new environment."
     exit 1
-fi
-if ! "$TMP_VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then
-    warn "Failed to install Mochi into temporary environment."
-    exit 1
-fi
-BACKUP_VENV=""
-if [[ -d "$VENV" ]]; then
-    BACKUP_VENV="$APP_HOME/venv.backup.$$"
-    rm -rf "$BACKUP_VENV"
-    if ! mv "$VENV" "$BACKUP_VENV"; then
-        warn "Failed to back up existing Mochi environment."
-        exit 1
-    fi
 fi
 
-if ! mv "$TMP_VENV" "$VENV"; then
-    rm -rf "$VENV"
-    rm -rf "$TMP_VENV"
-    if [[ -n "$BACKUP_VENV" && -d "$BACKUP_VENV" ]]; then
-        if ! mv "$BACKUP_VENV" "$VENV"; then
-            warn "Failed to replace or restore Mochi's virtual environment."
-            exit 1
-        fi
-        warn "Failed to activate new Mochi environment; restored previous environment."
-    else
-        warn "Failed to activate new Mochi environment."
-    fi
+if ! "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then
+    warn "Failed to install Mochi into the new environment."
     exit 1
 fi
 
@@ -305,6 +312,7 @@ if [[ -n "$BACKUP_VENV" && -d "$BACKUP_VENV" ]]; then
     rm -rf "$BACKUP_VENV"
 fi
 
+VENV_INSTALL_IN_PROGRESS=false
 trap - EXIT
 
 install_launcher "$LAUNCHER" "$VENV/bin/mochi"

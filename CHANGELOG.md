@@ -16,6 +16,10 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
   writing animations.
 - Added a dedicated breathing idle animation for Mochi's persistent sad mood.
 
+### Fixed
+
+- Source installs now generate the `mochi` launcher from the final virtual-environment path instead of a deleted temporary directory.
+
 ### Changed
 
 - Slowed Mochi's default breathing loop from **3.9s to 4.95s** so his resting motion is gentler and less visually distracting in peripheral vision.
