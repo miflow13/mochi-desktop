@@ -72,6 +72,7 @@ class _BaseBuddy:
         self._walk_elapsed_ms = 0
         self._cancel_walk = Mock()
         self._play_animation = Mock()
+        self.cancelled_active_emotes = 0
         self.resumed_other_ambient = False
         self.context_menu_close_requested = False
         self.pending_context_action = None
@@ -87,6 +88,21 @@ class _BaseBuddy:
         # through to this because EdgeRoamMixin._start_walk short-circuits
         # to the edge-following implementation whenever _edge_roam is True.
         self._transition_to(MochiState.WALKING)
+
+    def _cancel_active_emote(self) -> bool:
+        if self.state.current not in (
+            MochiState.COMPUTER,
+            MochiState.TYPING,
+            MochiState.WATCHING,
+            MochiState.DANCING,
+            MochiState.SEARCHING,
+            MochiState.IDLE_EMOTE,
+        ):
+            return False
+        self.cancelled_active_emotes += 1
+        self._transition_to(MochiState.IDLE)
+        self._play_animation("idle")
+        return True
 
     def _maybe_resume_ambient_activity(self) -> bool:
         self.resumed_other_ambient = True
@@ -149,6 +165,33 @@ class EdgeRoamActivationTests(unittest.TestCase):
                 self.assertTrue(buddy._edge_roam)
                 self.assertIs(buddy.state.current, busy_state)
                 self.assertTrue(buddy._edge_roam_start_pending)
+
+    def test_activation_interrupts_contextual_focus_and_starts_after_menu_closes(self) -> None:
+        for contextual_state in (
+            MochiState.COMPUTER,
+            MochiState.TYPING,
+            MochiState.WATCHING,
+            MochiState.DANCING,
+            MochiState.SEARCHING,
+            MochiState.IDLE_EMOTE,
+        ):
+            with self.subTest(contextual_state=contextual_state):
+                buddy = _make_buddy(
+                    state=contextual_state,
+                    context_menu_open=True,
+                )
+
+                buddy._toggle_edge_roam(None)
+
+                self.assertEqual(buddy.cancelled_active_emotes, 1)
+                self.assertIs(buddy.state.current, MochiState.IDLE)
+                self.assertTrue(buddy._edge_roam_start_pending)
+
+                buddy._on_context_menu_closed(None)
+
+                self.assertIs(buddy.state.current, MochiState.WALKING)
+                self.assertFalse(buddy._edge_roam_start_pending)
+                self.assertEqual(buddy._walk_motion.target[1], 8)
 
     def test_stay_put_suppresses_pending_start_until_released(self) -> None:
         buddy = _make_buddy(state=MochiState.IDLE)
