@@ -21,6 +21,7 @@ from .storage import InstallMetadataStore
 
 
 READY_TIMEOUT_SECONDS = 10.0
+PID_WAIT_TIMEOUT_SECONDS = 30.0
 
 
 class _UpdateCancelled(Exception):
@@ -122,7 +123,8 @@ def _default_launch_command(args, *, env=None):
 def _default_wait_for_pid(pid: int) -> None:
     if pid <= 0:
         return
-    while True:
+    deadline = time.monotonic() + PID_WAIT_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
@@ -130,6 +132,7 @@ def _default_wait_for_pid(pid: int) -> None:
         except PermissionError:
             return
         time.sleep(0.1)
+    raise TimeoutError(f"Mochi process {pid} did not exit in time")
 
 
 def _default_wait_for_ready(path: Path, timeout_seconds: float) -> bool:
@@ -340,7 +343,7 @@ class UpdateWorker:
                 if member_path != destination_root and destination_root not in member_path.parents:
                     raise ValueError("update archive contains an unsafe path")
 
-            archive.extractall(destination, members=members)  # noqa: S202
+            archive.extractall(destination, members=members, filter="data")
 
         roots = [path for path in destination.iterdir() if path.is_dir()]
         if len(roots) != 1:
