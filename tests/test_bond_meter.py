@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
+
+import pytest
 
 from mochi.animation import AnimationPlayer
 from mochi.bond_orbs import XpOrbField
@@ -25,6 +28,7 @@ from mochi.presence.bond_meter import (
     BOND_PERSIST_INTERVAL_XP,
     BondMeterMixin,
 )
+from mochi.presence.focus_session import FocusSessionMixin
 from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState, PresentationState, StateMachine
 
@@ -83,6 +87,10 @@ class _BondShutdownHarness(BondMeterMixin, _ShutdownBase):
     pass
 
 
+class _BondFocusHarness(FocusSessionMixin, BondMeterMixin, _ShutdownBase):
+    pass
+
+
 class _TickBase:
     def _tick(self) -> bool:
         self.behavior_tick_calls += 1
@@ -121,6 +129,7 @@ def _runtime_harness(state: BondState | None = None):
     harness._bond_progress_overlay.presentation_active = False
     harness._bond_typing_source_id = None
     harness._bond_unsaved_xp = 0
+    harness._bond_state_dirty = False
     harness._bond_feed_last_completed_at = None
     harness._bond_feed_count_in_window = 0
     harness._focus_session = None
@@ -132,6 +141,29 @@ def _runtime_harness(state: BondState | None = None):
     harness._dismiss_presence_bubble = Mock()
     harness.queue_draw = Mock()
     harness._on_bond_level_up = Mock()
+    return harness
+
+
+def _bond_focus_harness(state: BondState | None = None):
+    harness = object.__new__(_BondFocusHarness)
+    harness.__dict__.update(_runtime_harness(state).__dict__)
+    harness._focus_session = None
+    harness._focus_source_id = None
+    harness._focus_last_tick = None
+    harness._focus_window = None
+    harness._focus_ambience = Mock()
+    harness._focus_completion_heart_pending = False
+    harness._focus_setup_visible = False
+    harness._focus_context_menu_visible = False
+    harness._focus_setup_pending = False
+    harness._focus_idle_paused = False
+    harness._focus_plan = FocusPlan()
+    harness._current_animation = None
+    harness._stop_focus_visual = Mock()
+    harness._show_focus_line = Mock()
+    harness._start_heart_emote = Mock()
+    harness._ensure_focus_thinking_visual = Mock()
+    harness._ensure_focus_visual = Mock(return_value=True)
     return harness
 
 
@@ -150,6 +182,7 @@ def test_restore_loads_persisted_relationship_state() -> None:
     harness._restore_bond_state()
 
     assert harness._bond_state == BondState(level=3, xp=210)
+    assert harness._bond_state_dirty is False
     harness._bond_level_label.set_label.assert_called_once_with("Bond Lv. 3")
     harness._bond_meter.set_state.assert_called_once_with(BondState(level=3, xp=210))
     harness._bond_progress_overlay.update.assert_called_once_with(
@@ -182,6 +215,25 @@ def test_first_completed_feed_awards_30_xp_persists_and_shows_bar() -> None:
         harness._bond_state,
         BOND_FEED_FIRST_XP,
     )
+    harness._bond_progress_overlay.finish_activity.assert_called_once()
+    assert harness.completion_chain_calls == 1
+
+
+def test_feed_completion_chain_continues_when_bond_save_fails() -> None:
+    harness = object.__new__(_BondCompletionHarness)
+    runtime = _runtime_harness()
+    harness.__dict__.update(runtime.__dict__)
+    harness.completion_chain_calls = 0
+    harness.state.current = MochiState.EATING
+    harness._config.save_bond_state.side_effect = OSError("disk unavailable")
+
+    with patch("mochi.presence.bond_meter.time.monotonic", return_value=100.0):
+        harness._on_feed_animation_completed()
+
+    assert harness._bond_state == BondState(level=1, xp=BOND_FEED_FIRST_XP)
+    assert harness._bond_unsaved_xp == BOND_FEED_FIRST_XP
+    assert harness._bond_state_dirty is True
+    harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
     harness._bond_progress_overlay.finish_activity.assert_called_once()
     assert harness.completion_chain_calls == 1
 
@@ -240,6 +292,44 @@ def test_typing_progress_batches_disk_writes() -> None:
     assert harness._bond_state == BondState(level=1, xp=101)
     harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
     assert harness._bond_unsaved_xp == 0
+
+
+def test_typing_keeps_timer_and_dirty_xp_when_threshold_save_fails() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=100))
+    harness._bond_typing_source_id = 44
+    harness._bond_unsaved_xp = BOND_PERSIST_INTERVAL_XP - 1
+    harness._config.save_bond_state.side_effect = OSError("disk unavailable")
+
+    assert BondMeterMixin._bond_typing_tick(harness) is True
+
+    assert harness._bond_state == BondState(level=1, xp=101)
+    assert harness._bond_unsaved_xp == BOND_PERSIST_INTERVAL_XP
+    assert harness._bond_state_dirty is True
+    harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
+    harness._logger.exception.assert_called_once()
+    assert harness._bond_typing_source_id == 44
+
+
+def test_bond_save_failure_reports_failure_and_keeps_dirty_state() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=101))
+    harness._bond_unsaved_xp = 1
+    harness._config.save_bond_state.side_effect = OSError("disk unavailable")
+
+    saved = BondMeterMixin._persist_bond_state(harness)
+
+    assert saved is False
+    assert harness._bond_state_dirty is True
+    assert harness._bond_unsaved_xp == 1
+    harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
+    harness._logger.exception.assert_called_once()
+
+
+def test_unexpected_bond_save_error_is_not_swallowed() -> None:
+    harness = _runtime_harness()
+    harness._config.save_bond_state.side_effect = RuntimeError("broken save code")
+
+    with pytest.raises(RuntimeError, match="broken save code"):
+        BondMeterMixin._persist_bond_state(harness)
 
 
 def test_typing_activity_starts_one_timer_without_showing_bond_hud() -> None:
@@ -474,6 +564,7 @@ def test_rapid_dev_awards_bound_visuals_and_flush_pending_xp_on_shutdown(tmp_pat
     )
     assert harness._config.load_bond_state() == BondState(level=1, xp=90)
     assert harness._bond_unsaved_xp == 10
+    assert harness._bond_state_dirty is True
     assert harness._bond_progress_overlay.notify_xp_gain.call_count == 100
 
     harness.shutdown_presence()
@@ -484,6 +575,7 @@ def test_rapid_dev_awards_bound_visuals_and_flush_pending_xp_on_shutdown(tmp_pat
         == 1 + 100 // BOND_PERSIST_INTERVAL_XP
     )
     assert harness._bond_unsaved_xp == 0
+    assert harness._bond_state_dirty is False
     assert harness.shutdown_chain_calls == 1
 
 
@@ -500,6 +592,7 @@ def test_dev_award_persists_level_crossing_before_shutdown(tmp_path) -> None:
     assert harness._bond_state == BondState(level=3, xp=0)
     assert harness._config.load_bond_state() == harness._bond_state
     assert harness._bond_unsaved_xp == 0
+    assert harness._bond_state_dirty is False
     assert harness.state.presentation is PresentationState.LEVEL_UP
     harness._sound.play_level_up.assert_called_once_with()
     harness._bond_orbs.trigger_level_up.assert_called_once_with()
@@ -540,20 +633,53 @@ def test_dev_level_up_card_previews_next_level_without_mutating_state() -> None:
     harness._config.save_bond_state.assert_not_called()
 
 
-def test_dev_real_level_up_crosses_boundary_with_one_xp() -> None:
+def test_dev_real_level_up_crosses_boundary_with_one_xp(tmp_path) -> None:
     harness = _runtime_harness(BondState(level=2, xp=33))
-    harness._set_bond_state_for_ui = Mock(
-        side_effect=lambda state: setattr(harness, "_bond_state", state)
+    harness.state.current = MochiState.IDLE
+    config = ConfigStore(tmp_path / "real-level-up-config.json")
+    config.save_bond_state = Mock(wraps=config.save_bond_state)
+    harness._config = config
+    harness._on_bond_level_up = lambda previous, new: BondMeterMixin._on_bond_level_up(
+        harness, previous, new
     )
-    harness._persist_bond_state = Mock()
-    harness._award_bond = Mock()
 
     BondMeterMixin._test_bond_real_level_up(harness)
 
-    near = BondState(level=2, xp=BondState(level=2).xp_required - 1)
-    harness._set_bond_state_for_ui.assert_called_once_with(near)
-    harness._persist_bond_state.assert_called_once_with()
-    harness._award_bond.assert_called_once_with(1, persist=True)
+    assert harness._bond_state == BondState(level=3, xp=0)
+    assert config.load_bond_state() == harness._bond_state
+    config.save_bond_state.assert_called_once_with(harness._bond_state)
+    assert harness._bond_state_dirty is False
+    assert harness._bond_unsaved_xp == 0
+    assert harness.state.presentation is PresentationState.LEVEL_UP
+    harness._sound.play_level_up.assert_called_once_with()
+    harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    assert harness._pending_emote_unlocks
+
+
+def test_dev_real_level_up_presents_after_its_single_save_fails(tmp_path) -> None:
+    harness = _runtime_harness(BondState(level=1, xp=12))
+    harness.state.current = MochiState.IDLE
+    harness._on_bond_level_up = lambda previous, new: BondMeterMixin._on_bond_level_up(
+        harness, previous, new
+    )
+    config = ConfigStore(tmp_path / "failed-real-level-up-config.json")
+    harness._config = config
+
+    with patch.object(
+        Path, "write_text", side_effect=OSError("disk unavailable")
+    ) as write:
+        harness._test_bond_real_level_up()
+
+    write.assert_called_once()
+
+    assert harness._bond_state == BondState(level=2, xp=0)
+    assert harness._bond_unsaved_xp == 1
+    assert harness._bond_state_dirty is True
+    assert config.load_bond_state() == BondState()
+    assert harness.state.presentation is PresentationState.LEVEL_UP
+    harness._sound.play_level_up.assert_called_once_with()
+    harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    assert len(harness._pending_emote_unlocks) == 1
 
 
 def test_dev_reset_restores_level_one_and_dismisses_overlay() -> None:
@@ -567,7 +693,166 @@ def test_dev_reset_restores_level_one_and_dismisses_overlay() -> None:
 
     harness._set_bond_state_for_ui.assert_called_once_with(BondState())
     harness._persist_bond_state.assert_called_once_with()
+    assert harness._bond_state_dirty is True
+    assert harness._bond_unsaved_xp == 0
     harness._bond_progress_overlay.dismiss.assert_called_once_with()
+
+
+def test_dev_reset_failed_save_is_retried_at_shutdown_without_pending_xp(
+    tmp_path,
+) -> None:
+    harness = object.__new__(_BondShutdownHarness)
+    harness.__dict__.update(_runtime_harness(BondState(level=7, xp=222)).__dict__)
+    harness.shutdown_chain_calls = 0
+    config = ConfigStore(tmp_path / "config.json")
+    real_save = config.save_bond_state
+    real_save(BondState(level=7, xp=222))
+    harness._config = config
+    write_calls = []
+    real_write = Path.write_text
+
+    def fail_first_write(path, *args, **kwargs):
+        write_calls.append(path)
+        if len(write_calls) == 1:
+            raise OSError("disk unavailable")
+        return real_write(path, *args, **kwargs)
+
+    with patch.object(Path, "write_text", fail_first_write):
+        harness._test_bond_reset()
+
+        assert harness._bond_state == BondState()
+        assert harness._bond_unsaved_xp == 0
+        assert harness._bond_state_dirty is True
+        assert config.load_bond_state() == BondState(level=7, xp=222)
+
+        harness.shutdown_presence()
+
+    assert len(write_calls) == 2
+    assert config.load_bond_state() == BondState()
+    assert harness._bond_state_dirty is False
+    assert harness._bond_unsaved_xp == 0
+    harness._logger.exception.assert_called_once()
+    assert harness.shutdown_chain_calls == 1
+
+
+def test_bond_shutdown_continues_cleanup_when_save_fails() -> None:
+    harness = _bond_focus_harness(BondState(level=1, xp=120))
+    harness.shutdown_chain_calls = 0
+    harness._bond_unsaved_xp = 1
+    harness._bond_state_dirty = True
+    harness._config.save_bond_state.side_effect = OSError("disk unavailable")
+    overlay = harness._bond_progress_overlay
+    harness._focus_source_id = 77
+    harness._focus_window = Mock()
+    focus_window = harness._focus_window
+
+    with patch("mochi.presence.focus_session.GLib.source_remove") as remove:
+        harness.shutdown_presence()
+
+    remove.assert_called_once_with(77)
+    harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
+    harness._logger.exception.assert_called_once()
+    assert harness._bond_state_dirty is True
+    focus_window.destroy.assert_called_once_with()
+    assert harness._focus_window is None
+    harness._focus_ambience.stop.assert_called_once_with()
+    overlay.destroy.assert_called_once_with()
+    assert harness._bond_progress_overlay is None
+    assert harness.state.presentation is PresentationState.NORMAL
+    assert harness.shutdown_chain_calls == 1
+
+
+def test_level_up_presentation_runs_after_failed_save_and_retry_does_not_replay(
+    tmp_path,
+) -> None:
+    initial = BondState(level=1, xp=BondState(level=1).xp_required - 1)
+    harness = _runtime_harness(initial)
+    harness.state.current = MochiState.IDLE
+    harness._on_bond_level_up = lambda previous, new: BondMeterMixin._on_bond_level_up(
+        harness, previous, new
+    )
+    config = ConfigStore(tmp_path / "level-up-config.json")
+    harness._config = config
+
+    with patch.object(
+        Path, "write_text", side_effect=OSError("disk unavailable")
+    ) as write:
+        advance = BondMeterMixin._award_bond(harness, 1, persist=True)
+
+    write.assert_called_once()
+
+    assert advance.xp_awarded == 1
+    assert harness._bond_state == BondState(level=2, xp=0)
+    assert config.load_bond_state() == BondState()
+    assert harness._bond_unsaved_xp == 1
+    assert harness._bond_state_dirty is True
+    assert harness.state.presentation is PresentationState.LEVEL_UP
+    harness._sound.play_level_up.assert_called_once_with()
+    harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    assert len(harness._pending_emote_unlocks) == 1
+    harness._logger.exception.assert_called_once()
+
+    harness._persist_bond_state()
+
+    assert harness._bond_state == BondState(level=2, xp=0)
+    assert config.load_bond_state() == BondState(level=2, xp=0)
+    assert harness._bond_unsaved_xp == 0
+    assert harness._bond_state_dirty is False
+    harness._sound.play_level_up.assert_called_once_with()
+    harness._bond_orbs.trigger_level_up.assert_called_once_with()
+
+
+def test_focus_completion_survives_failed_bond_save_without_retry_or_lost_xp() -> None:
+    harness = _bond_focus_harness(
+        BondState(level=1, xp=BondState(level=1).xp_required - 1)
+    )
+    harness._on_bond_level_up = Mock()
+    harness._focus_session = FocusSession(
+        FocusPlan(focus_minutes=5, break_minutes=1, rounds=1)
+    )
+    harness._focus_session.remaining_seconds = 1.0
+    harness._focus_session.focus_minutes_completed = 4
+    harness._focus_session._focus_xp_seconds = 59.0
+    harness._focus_last_tick = 0.0
+    harness._focus_source_id = 77
+    harness._config.save_bond_state.side_effect = OSError("disk unavailable")
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=1.0):
+        result = harness._focus_tick()
+
+    assert result == 0
+    assert harness._bond_state == BondState(level=2, xp=10)
+    assert harness._bond_unsaved_xp == 11
+    assert harness._bond_state_dirty is True
+    harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
+    harness._on_bond_level_up.assert_called_once_with(1, 2)
+    harness._show_focus_line.assert_called_once()
+    harness._focus_ambience.stop.assert_called_once_with()
+
+
+def test_focus_cancel_finishes_cleanup_when_bond_save_fails() -> None:
+    harness = _bond_focus_harness(BondState(level=1, xp=100))
+    session = FocusSession(FocusPlan(focus_minutes=5, break_minutes=1, rounds=1))
+    harness._focus_session = session
+    harness._focus_last_tick = 0.0
+    harness._focus_source_id = 77
+    harness._focus_window = Mock()
+    harness._config.save_bond_state.side_effect = OSError("disk unavailable")
+
+    with patch("mochi.presence.focus_session.time.monotonic", return_value=60.0), patch(
+        "mochi.presence.focus_session.GLib.source_remove"
+    ) as remove:
+        harness._cancel_focus_session()
+
+    assert harness._bond_state == BondState(level=1, xp=101)
+    assert harness._bond_unsaved_xp == 1
+    assert harness._bond_state_dirty is True
+    harness._config.save_bond_state.assert_called_once_with(harness._bond_state)
+    harness._logger.exception.assert_called_once()
+    remove.assert_called_once_with(77)
+    assert harness._focus_session is None
+    harness._focus_window.present_setup.assert_called_once_with(session.plan)
+    harness._show_focus_line.assert_called_once()
 
 
 def test_typing_refresh_does_not_dismiss_active_level_up_card() -> None:
