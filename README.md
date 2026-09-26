@@ -57,6 +57,11 @@ through the time you naturally spend together.
 
 ## What's new lately
 
+-  **Built-in Mochi updater** — Mochi can now check for new builds, show a polished
+  GTK update window, install an exact newer `main` commit through a staged restart,
+  and keep the previous runtime recoverable if something goes wrong. Update checks
+  are quiet, opt-in for installation, and development builds will not be downgraded
+  to an older or diverged `main`.
 -  **Broader Linux portability** — safer installs across GNOME and non-GNOME
   desktops, with behavioral installer regression coverage for the new paths.
 -  **Mochi Artist Kit** — the master reference, animation guide, workspace
