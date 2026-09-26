@@ -19,6 +19,7 @@ from mochi.emotes import EMOTES_BY_ID
 from mochi.focus import FocusPhase, FocusPlan, FocusSession
 from mochi.presence.bond_meter import (
     BOND_DEV_VISUAL_ORB_LIMIT,
+    BOND_DEV_SPAM_AWARDS,
     BOND_DEV_SWARM_XP,
     BOND_FEED_VISUAL_ORB_LIMIT,
     BOND_PERSIST_INTERVAL_XP,
@@ -441,6 +442,15 @@ def test_dev_award_one_uses_real_bond_path() -> None:
         persist=False,
         visual_orb_limit=BOND_DEV_VISUAL_ORB_LIMIT,
     )
+
+
+def test_dev_spam_action_runs_fifty_real_awards() -> None:
+    harness = _runtime_harness(BondState(level=1, xp=20))
+    harness._test_bond_award_one = Mock()
+
+    BondMeterMixin._test_bond_spam_awards(harness)
+
+    assert harness._test_bond_award_one.call_count == BOND_DEV_SPAM_AWARDS == 50
 
 
 def test_rapid_dev_awards_bound_visuals_and_flush_pending_xp_on_shutdown(tmp_path) -> None:
