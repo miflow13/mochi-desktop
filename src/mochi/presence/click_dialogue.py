@@ -23,6 +23,7 @@ from .integration import (
 from .music_dance import MusicDanceMixin
 from .nameplate_controls import NameplateMixin
 from .terminal_cowork import TerminalCoworkMixin
+from .update_controls import UpdateControlsMixin
 
 
 CLICK_BURST_PHRASES = (
@@ -158,6 +159,7 @@ class ClickDialogueMixin:
 class PresenceBuddy(
     ClickDialogueMixin,
     IdleLookMixin,
+    UpdateControlsMixin,
     QuickStartMixin,
     FocusSessionMixin,
     FedoraModeMixin,
