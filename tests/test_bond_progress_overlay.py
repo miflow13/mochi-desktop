@@ -87,6 +87,27 @@ def test_xp_gain_keeps_hud_text_quiet_and_schedules_brief_highlight() -> None:
     assert overlay._gain_source_id == 91
 
 
+def test_repeated_xp_gains_keep_one_owned_flash_timer() -> None:
+    overlay = _overlay_harness()
+    overlay.resume = Mock()
+
+    with patch(
+        "mochi.presence.bond_progress_overlay.GLib.timeout_add",
+        side_effect=range(100, 200),
+    ) as timeout, patch(
+        "mochi.presence.bond_progress_overlay.GLib.source_remove"
+    ) as remove:
+        for xp in range(1, 101):
+            overlay.notify_xp_gain(BondState(level=1, xp=xp), 1)
+
+    assert timeout.call_count == 100
+    assert remove.call_count == 99
+    assert [entry.args[0] for entry in remove.call_args_list] == list(
+        range(100, 199)
+    )
+    assert overlay._gain_source_id == 199
+
+
 def test_level_up_switches_to_dedicated_celebration_card() -> None:
     overlay = _overlay_harness()
     overlay.resume = Mock()
