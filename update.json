@@ -1,0 +1,9 @@
+{
+  "version": "0.3.0a1",
+  "channel": "main",
+  "highlights": [
+    "Mochi can tell you when a new update is available.",
+    "Updates install through a safer staged restart flow.",
+    "A failed update keeps your current Mochi recoverable."
+  ]
+}
