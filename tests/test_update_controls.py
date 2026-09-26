@@ -111,6 +111,7 @@ def test_context_menu_adds_update_row_after_quick_start() -> None:
 
 def test_available_update_changes_menu_label_and_shows_one_bubble_without_state_change() -> None:
     buddy = _Harness()
+    buddy._build_context_menu()
     result = UpdateCheckResult(
         status=UpdateStatus.UPDATE_AVAILABLE,
         target=_target(),
@@ -217,6 +218,7 @@ def test_shutdown_invalidates_update_callbacks_and_destroys_window() -> None:
 
 def test_late_result_after_shutdown_is_ignored() -> None:
     buddy = _Harness()
+    buddy._build_context_menu()
     buddy.shutdown_presence()
     buddy._made_label.reset_mock()
 
