@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tarfile
+import threading
 
 from mochi.update.model import InstalledBuild, UpdateMetadata, UpdateTarget
 from mochi.update.storage import InstallMetadataStore
@@ -293,3 +294,23 @@ def test_failure_cleans_temp_workspace_and_ready_file(tmp_path: Path) -> None:
     assert not paths.update_venv.exists()
     assert paths.temp_root.exists()
     assert list(paths.temp_root.iterdir()) == []
+
+
+def test_cancel_before_swap_keeps_current_runtime_and_skips_install(tmp_path: Path) -> None:
+    paths = _paths(tmp_path)
+    harness = _Harness(tmp_path)
+    worker, _store = _worker(tmp_path, harness, paths)
+    cancel = threading.Event()
+    cancel.set()
+
+    result = worker.run(
+        _target(),
+        wait_pid=None,
+        on_progress=lambda _p: None,
+        cancel_event=cancel,
+    )
+
+    assert result == 130
+    assert (paths.final_venv / "old.marker").read_text(encoding="utf-8") == "old"
+    assert harness.commands == []
+    assert not paths.backup_venv.exists()
