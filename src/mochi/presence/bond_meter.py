@@ -36,6 +36,7 @@ BOND_PERSIST_INTERVAL_XP = 15
 BOND_FEED_HOLD_SECONDS = 2.4
 BOND_FEED_VISUAL_ORB_LIMIT = MAX_ACTIVE_ORBS * 2
 BOND_DEV_VISUAL_ORB_LIMIT = MAX_ACTIVE_ORBS * 2
+BOND_DEV_SPAM_AWARDS = 50
 BOND_DEV_SWARM_XP = 60
 LEVEL_UP_DEFAULT_ANIMATION = "level_up_default"
 EMOTE_UNLOCK_DEMO_DELAY_MS = 150
@@ -198,6 +199,17 @@ class BondMeterMixin:
         card.append(award_button)
         animated_rows.append(award_button)
 
+        spam_button, _ = self._make_menu_button(
+            "Stress +1 XP ×50",
+            "media-seek-forward-symbolic",
+            self._test_bond_spam_awards,
+        )
+        spam_button.set_tooltip_text(
+            "Runs 50 rapid real +1 XP awards through the Dev Menu path"
+        )
+        card.append(spam_button)
+        animated_rows.append(spam_button)
+
         swarm_button, _ = self._make_menu_button(
             "Preview 60 XP swarm",
             "weather-clear-symbolic",
@@ -263,6 +275,11 @@ class BondMeterMixin:
             persist=False,
             visual_orb_limit=BOND_DEV_VISUAL_ORB_LIMIT,
         )
+
+    def _test_bond_spam_awards(self, _button=None) -> None:
+        """Stress the real Dev Menu XP path with one synchronous burst."""
+        for _ in range(BOND_DEV_SPAM_AWARDS):
+            self._test_bond_award_one()
 
     def _test_bond_swarm(self, _button=None) -> None:
         """Preview a feed-sized particle swarm without mutating bond progress."""
