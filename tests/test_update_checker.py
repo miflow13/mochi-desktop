@@ -23,6 +23,8 @@ class _FakeSource:
         metadata: UpdateMetadata | None = None,
         resolve_error: Exception | None = None,
         metadata_error: Exception | None = None,
+        relation: str = "ahead",
+        compare_error: Exception | None = None,
     ) -> None:
         self.sha = sha
         self.metadata = metadata or UpdateMetadata(
@@ -32,6 +34,8 @@ class _FakeSource:
         )
         self.resolve_error = resolve_error
         self.metadata_error = metadata_error
+        self.relation = relation
+        self.compare_error = compare_error
         self.calls: list[object] = []
 
     def resolve_main_sha(self) -> str:
@@ -39,6 +43,12 @@ class _FakeSource:
         if self.resolve_error is not None:
             raise self.resolve_error
         return self.sha
+
+    def compare_commits(self, installed_commit: str, target_commit: str) -> str:
+        self.calls.append(("compare", installed_commit, target_commit))
+        if self.compare_error is not None:
+            raise self.compare_error
+        return self.relation
 
     def fetch_metadata(self, commit: str) -> UpdateMetadata:
         self.calls.append(("metadata", commit))
@@ -95,7 +105,11 @@ def test_new_commit_returns_exact_target_and_metadata(tmp_path: Path) -> None:
     assert result.target.commit == "new-sha"
     assert result.target.metadata.version == "0.4.0a1"
     assert result.announce is True
-    assert source.calls == ["resolve", ("metadata", "new-sha")]
+    assert source.calls == [
+        "resolve",
+        ("compare", "old-sha", "new-sha"),
+        ("metadata", "new-sha"),
+    ]
 
 
 def test_automatic_check_inside_24_hour_cooldown_does_not_touch_network(
@@ -144,6 +158,42 @@ def test_unknown_installed_commit_never_claims_update_available(tmp_path: Path) 
     assert source.calls == []
 
 
+def test_main_behind_feature_build_is_not_offered_as_an_update(tmp_path: Path) -> None:
+    source = _FakeSource(sha="main-sha", relation="behind")
+    checker, _config, source = _checker(
+        tmp_path,
+        installed_commit="feature-sha",
+        source=source,
+    )
+
+    result = checker.check(manual=True, now=1_000.0)
+
+    assert result.status is UpdateStatus.UP_TO_DATE
+    assert result.target is None
+    assert source.calls == [
+        "resolve",
+        ("compare", "feature-sha", "main-sha"),
+    ]
+
+
+def test_diverged_build_is_not_offered_main_as_an_update(tmp_path: Path) -> None:
+    source = _FakeSource(sha="main-sha", relation="diverged")
+    checker, _config, source = _checker(
+        tmp_path,
+        installed_commit="branch-sha",
+        source=source,
+    )
+
+    result = checker.check(manual=True, now=1_000.0)
+
+    assert result.status is UpdateStatus.UP_TO_DATE
+    assert result.target is None
+    assert source.calls == [
+        "resolve",
+        ("compare", "branch-sha", "main-sha"),
+    ]
+
+
 def test_bad_metadata_falls_back_without_losing_known_target(tmp_path: Path) -> None:
     source = _FakeSource(metadata_error=ValueError("bad metadata"))
     checker, _config, _source = _checker(tmp_path, source=source)
@@ -186,6 +236,8 @@ def test_github_source_pins_metadata_to_resolved_commit() -> None:
         calls.append((url, timeout))
         if url.endswith("/commits/main"):
             return json.dumps({"sha": "abc123"}).encode()
+        if url.endswith("/compare/old123...abc123"):
+            return json.dumps({"status": "ahead"}).encode()
         if url.endswith("/abc123/update.json"):
             return json.dumps(
                 {
@@ -199,13 +251,19 @@ def test_github_source_pins_metadata_to_resolved_commit() -> None:
     source = GitHubUpdateSource(read_url=read_url, timeout_seconds=2.5)
 
     commit = source.resolve_main_sha()
+    relation = source.compare_commits("old123", commit)
     metadata = source.fetch_metadata(commit)
 
     assert commit == "abc123"
+    assert relation == "ahead"
     assert metadata.highlights == ("one", "two", "three")
     assert calls == [
         (
             "https://api.github.com/repos/miflow13/mochi-desktop/commits/main",
+            2.5,
+        ),
+        (
+            "https://api.github.com/repos/miflow13/mochi-desktop/compare/old123...abc123",
             2.5,
         ),
         (
