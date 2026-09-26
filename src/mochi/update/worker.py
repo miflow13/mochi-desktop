@@ -23,6 +23,10 @@ from .storage import InstallMetadataStore
 READY_TIMEOUT_SECONDS = 10.0
 
 
+class _UpdateCancelled(Exception):
+    pass
+
+
 class UpdateStage(Enum):
     DOWNLOADING = "downloading"
     VERIFYING = "verifying"
@@ -172,6 +176,7 @@ class UpdateWorker:
         *,
         wait_pid: int | None,
         on_progress: Callable[[UpdateProgress], None],
+        cancel_event=None,
     ) -> int:
         workspace = Path(tempfile.mkdtemp(prefix="mochi-update-", dir=self.paths.temp_root))
         archive_path = workspace / "source.tar.gz"
@@ -181,6 +186,8 @@ class UpdateWorker:
 
         try:
             self._recover_stale_paths()
+            if cancel_event is not None and cancel_event.is_set():
+                return 130
 
             url = (
                 f"https://codeload.github.com/{OFFICIAL_REPOSITORY}/tar.gz/"
@@ -189,6 +196,8 @@ class UpdateWorker:
             on_progress(UpdateProgress(UpdateStage.DOWNLOADING, "Getting the newest Mochi…"))
 
             def report_bytes(downloaded: int, total: int | None) -> None:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise _UpdateCancelled()
                 on_progress(
                     UpdateProgress(
                         UpdateStage.DOWNLOADING,
@@ -199,9 +208,13 @@ class UpdateWorker:
                 )
 
             self._download_archive(url, archive_path, report_bytes)
+            if cancel_event is not None and cancel_event.is_set():
+                return 130
 
             on_progress(UpdateProgress(UpdateStage.VERIFYING, "Verifying update…"))
             source_root = self._extract_and_validate_source(archive_path, extracted_path)
+            if cancel_event is not None and cancel_event.is_set():
+                return 130
 
             on_progress(UpdateProgress(UpdateStage.INSTALLING, "Installing Mochi…"))
             env = os.environ.copy()
@@ -219,7 +232,12 @@ class UpdateWorker:
                 failure_code = int(getattr(stage, "returncode", 1) or 1)
                 return failure_code
 
+            if cancel_event is not None and cancel_event.is_set():
+                return 130
+
             installed_version = self._validate_candidate()
+            if cancel_event is not None and cancel_event.is_set():
+                return 130
 
             if wait_pid is not None:
                 self._wait_for_pid(wait_pid)
@@ -276,6 +294,8 @@ class UpdateWorker:
             swapped = False
             on_progress(UpdateProgress(UpdateStage.SUCCESS, "All updated!"))
             return 0
+        except _UpdateCancelled:
+            return 130
         except Exception as error:
             if swapped:
                 try:
