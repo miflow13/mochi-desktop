@@ -113,8 +113,26 @@ if [[ "$1" == "-m" && "$2" == "venv" ]]; then
     mkdir -p "$4/bin"
     cp "$0" "$4/bin/python"
     chmod +x "$4/bin/python"
-    printf '#!/bin/bash\nexit 0\n' > "$4/bin/mochi"
+    printf '#!%s/bin/python\nexit 0\n' "$4" > "$4/bin/mochi"
+    printf '#!%s/bin/python\nexit 0\n' "$4" > "$4/bin/pip"
+    printf 'export VIRTUAL_ENV=%s\n' "$4" > "$4/bin/activate"
+    printf 'command = python3 -m venv %s\n' "$4" > "$4/pyvenv.cfg"
     chmod +x "$4/bin/mochi"
+    chmod +x "$4/bin/pip"
+    exit 0
+fi
+
+if [[ "$1" == "-m" && "$2" == "pip" && "$3" == "install" && "$*" == *"--no-deps --no-build-isolation"* ]]; then
+    if [[ "$FAKE_PROJECT_INSTALL_TERMINATES" == "1" ]]; then
+        kill -TERM "$PPID"
+        exit 143
+    fi
+    if [[ "$FAKE_PROJECT_INSTALL_READY" != "1" ]]; then
+        exit 42
+    fi
+    venv_bin="$(dirname "$0")"
+    printf '#!%s\nexit 0\n' "$0" > "$venv_bin/mochi"
+    chmod +x "$venv_bin/mochi"
     exit 0
 fi
 
@@ -152,6 +170,9 @@ def _run_installer(
     with_gnome_extensions: bool = False,
     build_tools_ready: bool = True,
     wheel_ready: bool = True,
+    project_install_ready: bool = True,
+    project_install_terminates: bool = False,
+    existing_venv_marker: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     bin_dir, log_dir = _make_toolbox(
         tmp_path,
@@ -159,6 +180,13 @@ def _run_installer(
     )
     home = tmp_path / "home"
     home.mkdir()
+    if existing_venv_marker is not None:
+        venv = home / ".local" / "share" / "mochi-desktop" / "venv"
+        venv.mkdir(parents=True)
+        (venv / "old-install.marker").write_text(
+            existing_venv_marker,
+            encoding="utf-8",
+        )
 
     env = os.environ.copy()
     env.update(
@@ -174,6 +202,10 @@ def _run_installer(
             "MOCHI_TEST_LOG_DIR": str(log_dir),
             "FAKE_BUILD_TOOLS_READY": "1" if build_tools_ready else "0",
             "FAKE_WHEEL_READY": "1" if wheel_ready else "0",
+            "FAKE_PROJECT_INSTALL_READY": "1" if project_install_ready else "0",
+            "FAKE_PROJECT_INSTALL_TERMINATES": (
+                "1" if project_install_terminates else "0"
+            ),
         }
     )
 
@@ -294,32 +326,96 @@ def test_installer_bootstraps_missing_private_venv_build_tools(tmp_path: Path) -
 def test_installer_preserves_transactional_private_venv_replacement() -> None:
     text = INSTALLER.read_text(encoding="utf-8")
 
-    assert 'if ! TMP_VENV="$(mktemp -d "$APP_HOME/venv.new.XXXXXX")"; then' in text
-    assert '"$SYSTEM_PYTHON" -m venv --system-site-packages "$TMP_VENV"' in text
-    assert 'if ! ensure_python_build_tools "$TMP_VENV/bin/python"; then' in text
-    assert 'if ! "$TMP_VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then' in text
+    assert "trap rollback_private_venv EXIT" in text
+    assert '"$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"' in text
+    assert 'if ! ensure_python_build_tools "$VENV/bin/python"; then' in text
+    assert 'if ! "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then' in text
 
     backup_move = 'mv "$VENV" "$BACKUP_VENV"'
-    replacement_move = 'mv "$TMP_VENV" "$VENV"'
-    restore_move = 'if ! mv "$BACKUP_VENV" "$VENV"; then'
+    create_venv = '"$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"'
+    restore_move = 'mv "$BACKUP_VENV" "$VENV"'
     cleanup_failed_replacement = 'rm -rf "$VENV"'
-    cleanup_failed_tmp = 'rm -rf "$TMP_VENV"'
 
     assert backup_move in text
-    assert replacement_move in text
     assert restore_move in text
     assert cleanup_failed_replacement in text
-    assert cleanup_failed_tmp in text
 
-    replacement_index = text.index(replacement_move)
-    cleanup_failed_replacement_index = text.index(
-        cleanup_failed_replacement,
-        replacement_index,
+    backup_index = text.index(backup_move)
+    create_index = text.index(create_venv)
+    install_index = text.index(
+        'if ! "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then'
     )
-    cleanup_failed_tmp_index = text.index(cleanup_failed_tmp, replacement_index)
-    restore_index = text.index(restore_move, replacement_index)
 
-    assert text.index(backup_move) < replacement_index
-    assert replacement_index < cleanup_failed_replacement_index
-    assert cleanup_failed_replacement_index < cleanup_failed_tmp_index
-    assert replacement_index < restore_index
+    assert backup_index < create_index < install_index
+    assert text.index(cleanup_failed_replacement) < backup_index
+    assert text.index(restore_move) < backup_index
+
+
+def test_installer_console_script_uses_final_venv_path(tmp_path: Path) -> None:
+    result, _log_dir = _run_installer(
+        tmp_path,
+        current_desktop="niri",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    venv = tmp_path / "home" / ".local" / "share" / "mochi-desktop" / "venv"
+    console_script = venv / "bin" / "mochi"
+    first_line = console_script.read_text(encoding="utf-8").splitlines()[0]
+
+    assert "venv.new." not in first_line
+    assert first_line == f"#!{venv / 'bin' / 'python'}"
+
+
+def test_installer_virtual_environment_has_no_temporary_path_references(
+    tmp_path: Path,
+) -> None:
+    result, _log_dir = _run_installer(
+        tmp_path,
+        current_desktop="niri",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    venv = tmp_path / "home" / ".local" / "share" / "mochi-desktop" / "venv"
+    for relative_path in ("bin/mochi", "bin/pip", "bin/activate", "pyvenv.cfg"):
+        text = (venv / relative_path).read_text(encoding="utf-8")
+        assert "venv.new." not in text, relative_path
+        assert str(venv) in text, relative_path
+
+
+@pytest.mark.parametrize("existing_venv_marker", [None, "working-old-install"])
+def test_project_install_failure_restores_or_removes_environment(
+    tmp_path: Path,
+    existing_venv_marker: str | None,
+) -> None:
+    result, _log_dir = _run_installer(
+        tmp_path,
+        current_desktop="niri",
+        project_install_ready=False,
+        existing_venv_marker=existing_venv_marker,
+    )
+
+    assert result.returncode != 0
+    app_home = tmp_path / "home" / ".local" / "share" / "mochi-desktop"
+    venv = app_home / "venv"
+    if existing_venv_marker is None:
+        assert not venv.exists()
+    else:
+        assert (venv / "old-install.marker").read_text(encoding="utf-8") == existing_venv_marker
+    assert not tuple(app_home.glob("venv.backup.*"))
+    assert not tuple(app_home.glob("venv.new.*"))
+
+
+def test_abnormal_exit_restores_previous_environment(tmp_path: Path) -> None:
+    result, _log_dir = _run_installer(
+        tmp_path,
+        current_desktop="niri",
+        project_install_terminates=True,
+        existing_venv_marker="working-old-install",
+    )
+
+    assert result.returncode != 0
+    app_home = tmp_path / "home" / ".local" / "share" / "mochi-desktop"
+    venv = app_home / "venv"
+    assert (venv / "old-install.marker").read_text(encoding="utf-8") == "working-old-install"
+    assert not tuple(app_home.glob("venv.backup.*"))
+    assert not tuple(app_home.glob("venv.new.*"))
