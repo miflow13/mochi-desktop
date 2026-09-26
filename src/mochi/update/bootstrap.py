@@ -54,6 +54,7 @@ def _runner_source() -> str:
 import json
 from pathlib import Path
 
+from mochi.update.external import run_external_update
 from mochi.update.model import UpdateMetadata, UpdateTarget
 from mochi.update.worker import UpdateWorker
 
@@ -68,6 +69,15 @@ target = UpdateTarget(
         highlights=tuple(request.get("highlights", ())),
     ),
 )
+
+if request.get("gui"):
+    raise SystemExit(
+        run_external_update(
+            target,
+            wait_pid=request.get("wait_pid"),
+        )
+    )
+
 worker = UpdateWorker()
 raise SystemExit(
     worker.run(
