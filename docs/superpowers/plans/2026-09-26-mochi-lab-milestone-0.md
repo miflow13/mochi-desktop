@@ -27,7 +27,7 @@
 ## Review Focus
 
 - **A mood/derived animation renders a different asset name from Mochi's semantic state:** resolve attachment/override data from the actual player animation first and use the semantic animation only as a fallback; tests cover actual-vs-semantic name resolution.
-- **A selected accessory ID is missing, malformed, or belongs to a different slot:** normalize it out of the loadout instead of raising; tests cover unknown IDs, invalid manifests, and slot mismatch.
+- **A selected accessory ID is missing, malformed, corrupt on disk, or belongs to a different slot:** keep it out of the catalogue/loadout instead of raising; tests cover unknown IDs, invalid manifests, corrupt/wrong-size PNGs, and slot mismatch.
 - **An attachment point is missing or the frame index is outside available metadata:** omit only that accessory layer and keep base Mochi visible; tests cover missing slot points and out-of-range frames.
 - **A 64×64 accessory is composed at a negative logical origin or near frame edges:** preserve the signed origin and let Cairo clip naturally; tests cover the spec's `(0, -10)` placement example.
 - **A source checkout works but an installed runtime cannot find appearance assets:** source-root and `sys.prefix/share/mochi` discovery plus setuptools data-file tests must prove both manifest/attachment and accessory PNG packaging paths.
@@ -114,7 +114,9 @@ assert definition.anchor == (32, 24)
 assert definition.assets["default"] == accessory_dir / "default.png"
 ```
 
-Also assert rejection of unsupported format, unknown slot/layer, missing default asset, source size other than 64×64, anchor outside 0–63, malformed JSON, and `../` asset-path escape.
+Also assert rejection of unsupported format, unknown slot/layer, missing default asset, declared source size other than 64×64, anchor outside 0–63, malformed JSON, and `../` asset-path escape.
+
+Create temporary PNG fixtures and assert that an unreadable/corrupt PNG and a decodable PNG whose actual dimensions do not match the declared 64×64 source cell are rejected before entering the catalogue.
 
 Add a catalogue test with one valid and one invalid directory: `items()` contains only the valid accessory and `get("missing") is None`.
 
@@ -132,7 +134,7 @@ Expected: FAIL because the appearance package/interfaces do not exist.
 
 Use string slot/layer identifiers from the spec rather than introducing a dependency on GTK or current behavior enums.
 
-`load_accessory_definition()` resolves asset paths against the manifest directory and verifies they remain inside that directory. It validates existence and metadata but does not load Cairo surfaces.
+`load_accessory_definition()` resolves asset paths against the manifest directory and verifies they remain inside that directory. During validation, decode each referenced PNG with Cairo only far enough to prove it is readable and that its dimensions exactly match the declared 64×64 v1 source cell; discard the temporary validation surface immediately. Cairo stays out of `models.py`, `attachments.py`, `loadout.py`, and `compositor.py`, so composition remains renderer-independent.
 
 `AccessoryCatalogue` discovers:
 1. an explicitly supplied `root`;
