@@ -127,3 +127,33 @@ def test_sprite_renderer_explicitly_uses_nearest_neighbor() -> None:
     source = inspect.getsource(UpdaterSprite)
     assert "FILTER_NEAREST" in source
     assert issubclass(UpdaterSprite, Gtk.DrawingArea)
+
+
+def test_safe_pre_swap_stages_offer_cancel_when_external_callback_exists(
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+    window = UpdateWindow(
+        on_later=lambda: None,
+        on_update_restart=lambda: None,
+        on_retry=lambda: None,
+        on_close=lambda: None,
+        on_cancel=lambda: calls.append("cancel"),
+        asset_root=tmp_path,
+    )
+
+    for stage in (
+        UpdateStage.DOWNLOADING,
+        UpdateStage.VERIFYING,
+        UpdateStage.INSTALLING,
+    ):
+        window.show_progress(UpdateProgress(stage=stage, message=stage.value))
+        assert window.visible_actions == ("Cancel",)
+
+    for stage in (
+        UpdateStage.SWAPPING,
+        UpdateStage.REFRESHING,
+        UpdateStage.RESTARTING,
+    ):
+        window.show_progress(UpdateProgress(stage=stage, message=stage.value))
+        assert "Cancel" not in window.visible_actions
