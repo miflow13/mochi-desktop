@@ -35,6 +35,7 @@ BOND_TYPING_TICK_SECONDS = 1
 BOND_PERSIST_INTERVAL_XP = 15
 BOND_FEED_HOLD_SECONDS = 2.4
 BOND_FEED_VISUAL_ORB_LIMIT = MAX_ACTIVE_ORBS * 2
+BOND_DEV_VISUAL_ORB_LIMIT = MAX_ACTIVE_ORBS * 2
 BOND_DEV_SWARM_XP = 60
 LEVEL_UP_DEFAULT_ANIMATION = "level_up_default"
 EMOTE_UNLOCK_DEMO_DELAY_MS = 150
@@ -191,7 +192,8 @@ class BondMeterMixin:
             self._test_bond_award_one,
         )
         award_button.set_tooltip_text(
-            "Awards one real bond XP and persists the updated bond state"
+            f"Awards one real bond XP; saves every {BOND_PERSIST_INTERVAL_XP} XP, "
+            "on level-up, and on exit"
         )
         card.append(award_button)
         animated_rows.append(award_button)
@@ -255,8 +257,12 @@ class BondMeterMixin:
         return popover
 
     def _test_bond_award_one(self, _button=None) -> None:
-        """Award one real XP for progress/persistence QA."""
-        self._award_bond(1, persist=True)
+        """Award real XP without unbounded visual or per-click disk work."""
+        self._award_bond(
+            1,
+            persist=False,
+            visual_orb_limit=BOND_DEV_VISUAL_ORB_LIMIT,
+        )
 
     def _test_bond_swarm(self, _button=None) -> None:
         """Preview a feed-sized particle swarm without mutating bond progress."""
@@ -383,7 +389,11 @@ class BondMeterMixin:
         if callable(queue_draw):
             queue_draw()
 
-        if persist or self._bond_unsaved_xp >= BOND_PERSIST_INTERVAL_XP:
+        if (
+            persist
+            or advance.levelled_up
+            or self._bond_unsaved_xp >= BOND_PERSIST_INTERVAL_XP
+        ):
             self._persist_bond_state()
 
         self._logger.debug(

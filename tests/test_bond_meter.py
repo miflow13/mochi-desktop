@@ -2,25 +2,29 @@
 
 from __future__ import annotations
 
+import random
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from mochi.animation import AnimationPlayer
+from mochi.bond_orbs import XpOrbField
 from mochi.care import (
     BOND_FEED_FIRST_XP,
     BOND_FEED_REWARD_WINDOW_SECONDS,
     BOND_FEED_SECOND_XP,
     BondState,
 )
+from mochi.config import ConfigStore
 from mochi.emotes import EMOTES_BY_ID
 from mochi.focus import FocusPhase, FocusPlan, FocusSession
-from mochi.sprites import ANIMATIONS
 from mochi.presence.bond_meter import (
+    BOND_DEV_VISUAL_ORB_LIMIT,
     BOND_DEV_SWARM_XP,
     BOND_FEED_VISUAL_ORB_LIMIT,
     BOND_PERSIST_INTERVAL_XP,
     BondMeterMixin,
 )
+from mochi.sprites import ANIMATIONS
 from mochi.state import MochiState, PresentationState, StateMachine
 
 
@@ -432,7 +436,64 @@ def test_dev_award_one_uses_real_bond_path() -> None:
 
     BondMeterMixin._test_bond_award_one(harness)
 
-    harness._award_bond.assert_called_once_with(1, persist=True)
+    harness._award_bond.assert_called_once_with(
+        1,
+        persist=False,
+        visual_orb_limit=BOND_DEV_VISUAL_ORB_LIMIT,
+    )
+
+
+def test_rapid_dev_awards_bound_visuals_and_flush_pending_xp_on_shutdown(tmp_path) -> None:
+    harness = object.__new__(_BondShutdownHarness)
+    harness.__dict__.update(_runtime_harness().__dict__)
+    harness.shutdown_chain_calls = 0
+    harness.state.current = MochiState.IDLE
+    harness._bond_orbs = XpOrbField(rng=random.Random(2))
+    harness._config = ConfigStore(tmp_path / "config.json")
+    harness._config.save_bond_state = Mock(wraps=harness._config.save_bond_state)
+
+    for _ in range(100):
+        harness._test_bond_award_one()
+
+    assert harness._bond_state == BondState(level=1, xp=100)
+    assert harness._bond_orbs.outstanding_orb_count == BOND_DEV_VISUAL_ORB_LIMIT
+    assert harness._bond_orbs.marker_count <= 3
+    assert (
+        harness._config.save_bond_state.call_count
+        == 100 // BOND_PERSIST_INTERVAL_XP
+    )
+    assert harness._config.load_bond_state() == BondState(level=1, xp=90)
+    assert harness._bond_unsaved_xp == 10
+    assert harness._bond_progress_overlay.notify_xp_gain.call_count == 100
+
+    harness.shutdown_presence()
+
+    assert harness._config.load_bond_state() == BondState(level=1, xp=100)
+    assert (
+        harness._config.save_bond_state.call_count
+        == 1 + 100 // BOND_PERSIST_INTERVAL_XP
+    )
+    assert harness._bond_unsaved_xp == 0
+    assert harness.shutdown_chain_calls == 1
+
+
+def test_dev_award_persists_level_crossing_before_shutdown(tmp_path) -> None:
+    near_level = BondState(level=2, xp=BondState(level=2).xp_required - 1)
+    harness = _runtime_harness(near_level)
+    harness._config = ConfigStore(tmp_path / "config.json")
+    harness._on_bond_level_up = lambda previous, new: BondMeterMixin._on_bond_level_up(
+        harness, previous, new
+    )
+
+    harness._test_bond_award_one()
+
+    assert harness._bond_state == BondState(level=3, xp=0)
+    assert harness._config.load_bond_state() == harness._bond_state
+    assert harness._bond_unsaved_xp == 0
+    assert harness.state.presentation is PresentationState.LEVEL_UP
+    harness._sound.play_level_up.assert_called_once_with()
+    harness._bond_orbs.trigger_level_up.assert_called_once_with()
+    assert harness._pending_emote_unlocks
 
 
 def test_dev_swarm_is_visual_only() -> None:
