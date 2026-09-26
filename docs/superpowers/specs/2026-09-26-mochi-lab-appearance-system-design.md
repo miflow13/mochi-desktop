@@ -4,7 +4,7 @@
 
 **Target:** post-v0.3 / v0.4 supporting work
 
-**Status:** approved conversational design, implementation not started
+**Status:** design approved in chat; written spec awaiting review; implementation not started
 
 ## Purpose
 
