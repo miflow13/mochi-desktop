@@ -142,6 +142,26 @@ Fresh Fedora GNOME/Wayland/XWayland QA:
 - [ ] During a helper outage, verify MPRIS playback and Downloads activity remain functional
 - [ ] Stop Mochi and verify no later helper events affect it
 
+## Update Service / Install Lifecycle
+
+- [ ] Automatic update check stays quiet when offline and never blocks startup
+- [ ] One newly discovered target produces at most one update speech bubble
+- [ ] **Later** suppresses repeat announcements for the same target commit
+- [ ] **Check for updates** works repeatedly from the context menu
+- [ ] Opening/closing the updater leaves the context menu usable
+- [ ] Drag still works after opening/closing the updater
+- [ ] Background update discovery does not interrupt Sleep, Focus, pickup/drag, or ambient ownership
+- [ ] **Update & Restart** downloads/stages the exact commit that was approved
+- [ ] Cancel before runtime swap leaves the current installation untouched
+- [ ] Cancel/close is unavailable once the critical swap/restart phase begins
+- [ ] Successful update preserves Bond XP, unlocks, position, audio, Focus, and ordinary config
+- [ ] Candidate-install failure leaves the current runtime untouched
+- [ ] Integration-refresh or startup-handshake failure restores the prior runtime
+- [ ] Update bootstrap/temp workspaces are cleaned after success, failure, or cancellation
+- [ ] GNOME helper refresh notice remains informative and non-blocking
+- [ ] Updated Mochi relaunches from the updater and from the GNOME app grid
+- [ ] `mochi-update` and in-app updating use the same exact-target transaction path
+
 ## Release Gate
 
 - [ ] Relevant focused tests pass
