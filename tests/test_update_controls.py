@@ -86,6 +86,9 @@ class _Harness(UpdateControlsMixin, _Base):
 
     def _destroy_update_window(self) -> None:
         self.destroyed += 1
+        if self._update_window is not None:
+            self._update_window.destroy()
+            self._update_window = None
 
 
 def test_preview_mode_does_not_schedule_automatic_update_check() -> None:
@@ -252,3 +255,39 @@ def test_update_controls_are_composed_into_both_production_buddies() -> None:
         assert UpdateControlsMixin in buddy_type.__mro__, (
             f"{buddy_type.__name__} must include UpdateControlsMixin"
         )
+
+
+def test_window_manager_close_releases_update_window_for_clean_second_open(
+    monkeypatch,
+) -> None:
+    buddy = _Harness()
+    created: list[object] = []
+
+    class _FakeUpdateWindow:
+        def __init__(self, **_kwargs) -> None:
+            self.destroyed = False
+            self.close_callback = None
+            created.append(self)
+
+        def connect(self, signal_name, callback) -> None:
+            assert signal_name == "close-request"
+            self.close_callback = callback
+
+        def destroy(self) -> None:
+            self.destroyed = True
+
+    monkeypatch.setattr(
+        "mochi.presence.update_controls.UpdateWindow",
+        _FakeUpdateWindow,
+    )
+
+    first = buddy._get_update_window()
+    assert first.close_callback is not None
+
+    assert first.close_callback(first) is True
+    assert first.destroyed is True
+    assert buddy._update_window is None
+
+    second = buddy._get_update_window()
+    assert second is not first
+    assert len(created) == 2
