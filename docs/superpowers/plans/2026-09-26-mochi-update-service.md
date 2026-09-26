@@ -94,7 +94,7 @@
   - `UpdateMetadata(version: str, channel: str, highlights: tuple[str, ...])`
   - `InstalledBuild(version: str, commit: str | None, channel: str, installed_at: str)`
   - `UpdateTarget(commit: str, metadata: UpdateMetadata)`
-  - `UpdateCheckResult(status: UpdateStatus, target: UpdateTarget | None = None, error: str | None = None)`
+  - `UpdateCheckResult(status: UpdateStatus, target: UpdateTarget | None = None, error: str | None = None, announce: bool = False)`
   - `InstallMetadataStore(path: Path | None = None)`
   - `InstallMetadataStore.load() -> InstalledBuild | None`
   - `InstallMetadataStore.save(build: InstalledBuild) -> None`
@@ -183,8 +183,8 @@ manual=True inside cooldown -> HTTP call occurs
 network/timeout exception -> CHECK_FAILED, no exception escapes
 missing install metadata -> safe CHECK_FAILED/unknown-current result, no false update claim
 malformed update.json -> UPDATE_AVAILABLE still carries exact SHA with fallback metadata
-dismissed target -> result remains UPDATE_AVAILABLE but announcement eligibility is false/derivable without changing target
-newer target than dismissed commit -> eligible again
+dismissed target -> result remains UPDATE_AVAILABLE with `announce is False` without changing target
+newer target than dismissed commit -> `announce is True` again
 ```
 
 Also assert one call resolves `main` and metadata is fetched using the returned SHA, never a second `main` lookup.
@@ -249,7 +249,7 @@ normal install writes install.json
 project-install failure in staging leaves final existing marker intact
 ```
 
-Update the fake Python venv builder to create both `mochi` and `mochi-update` when package install succeeds after Task 6 lands; until then only assert `mochi`.
+At this task boundary, assert only the existing `mochi` runtime executable. Task 6 adds and tests the `mochi-update` console script after its entry point exists.
 
 - [ ] **Step 2: Run installer tests and confirm RED**
 
@@ -397,7 +397,7 @@ git commit -m "feat: add transactional Mochi updater"
 - Consumes: Task 1 update target.
 - Produces:
   - `bootstrap_updater(target: UpdateTarget, *, gui: bool, wait_pid: int | None = None) -> subprocess.Popen`
-  - bootstrap workspace containing a copied `mochi/update` package and the minimal updater art directories used by `window.py`.
+  - bootstrap workspace containing a copied `mochi/update` package plus these existing authored art directories: `idle`, `wave`, `sad_idle`, and `focus`.
   - worker process started with the base/system Python executable, not `sys.executable` from the replaceable private venv.
 
 - [ ] **Step 1: Write failing bootstrap tests**
@@ -406,7 +406,7 @@ Assert:
 
 ```text
 bootstrap copies the update package to a temporary/app-owned workspace
-bootstrap copies only the updater animation assets selected by Task 7
+bootstrap copies only `idle`, `wave`, `sad_idle`, and `focus` updater animation assets
 worker command uses sys._base_executable when executable, else /usr/bin/python3 fallback
 target SHA/version/channel and wait_pid survive serialization into worker args
 renaming the original installed package path after Popen setup does not remove worker source/assets
