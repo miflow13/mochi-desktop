@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tarfile
 import threading
+import time
 
 from mochi.update.model import InstalledBuild, UpdateMetadata, UpdateTarget
 from mochi.update.storage import InstallMetadataStore
@@ -314,3 +315,15 @@ def test_cancel_before_swap_keeps_current_runtime_and_skips_install(tmp_path: Pa
     assert (paths.final_venv / "old.marker").read_text(encoding="utf-8") == "old"
     assert harness.commands == []
     assert not paths.backup_venv.exists()
+
+
+def test_default_pid_wait_has_a_bounded_timeout() -> None:
+    import mochi.update.worker as worker_module
+
+    assert hasattr(worker_module, "PID_WAIT_TIMEOUT_SECONDS")
+    assert 1 <= worker_module.PID_WAIT_TIMEOUT_SECONDS <= 60
+
+
+def test_archive_extraction_uses_data_filter() -> None:
+    source = __import__("inspect").getsource(UpdateWorker._extract_and_validate_source)
+    assert 'filter="data"' in source
