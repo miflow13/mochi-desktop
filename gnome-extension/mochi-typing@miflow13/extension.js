@@ -196,11 +196,12 @@ export default class MochiTypingActivityExtension extends Extension {
                 if (focusedWindow === this._lastFocusedWindow)
                     return;
 
-                this._lastFocusedWindow = focusedWindow;
                 // Temporary focus loss (Overview, shell surfaces, transitions)
                 // is not a new desktop target and should not make Mochi curious.
-                if (focusedWindow !== null)
+                if (focusedWindow !== null) {
+                    this._lastFocusedWindow = focusedWindow;
                     this._emitAppFocus(category);
+                }
             },
         );
         this._updateFileBrowsingState();

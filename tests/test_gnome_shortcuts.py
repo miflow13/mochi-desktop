@@ -35,3 +35,11 @@ def test_focus_curiosity_pulse_requires_actual_window_change() -> None:
     assert "this._lastFocusedWindow = focusedWindow;" in source
     assert "if (focusedWindow !== null)" in source
     assert "this._emitAppFocus(category);" in source
+
+    non_null_guard = source.index("if (focusedWindow !== null)")
+    remembered_window = source.index(
+        "this._lastFocusedWindow = focusedWindow;",
+        non_null_guard,
+    )
+    emitted_focus = source.index("this._emitAppFocus(category);", remembered_window)
+    assert non_null_guard < remembered_window < emitted_focus

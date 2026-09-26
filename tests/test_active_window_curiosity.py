@@ -31,6 +31,7 @@ class _CuriosityBase:
         self._logger = Mock()
         self._placement = None
         self.base_shutdown_called = False
+        self.base_press_args = None
 
     def _on_presence_app_category_changed(self, category: str) -> None:
         self._presence_app_category = category
@@ -45,6 +46,9 @@ class _CuriosityBase:
 
     def _tick(self) -> bool:
         return True
+
+    def _on_pressed(self, *args) -> None:
+        self.base_press_args = args
 
     def shutdown_presence(self) -> None:
         self.base_shutdown_called = True
@@ -192,6 +196,22 @@ def test_direct_interaction_clears_an_active_curiosity_cue() -> None:
 
     assert buddy._curiosity_category is None
     buddy.queue_draw.assert_called_once_with()
+
+
+def test_direct_press_immediately_cancels_pending_and_active_curiosity() -> None:
+    buddy = CuriosityHarness()
+    buddy._curiosity_source_id = 42
+    buddy._curiosity_pending_category = "terminal"
+    buddy._curiosity_category = "browser"
+
+    with patch("mochi.presence.curiosity.GLib.source_remove") as source_remove:
+        buddy._on_pressed("gesture", 1, 12.0, 18.0)
+
+    source_remove.assert_called_once_with(42)
+    assert buddy._curiosity_source_id is None
+    assert buddy._curiosity_pending_category is None
+    assert buddy._curiosity_category is None
+    assert buddy.base_press_args == ("gesture", 1, 12.0, 18.0)
 
 
 def test_curiosity_draw_adds_bubble_and_temporary_body_lean() -> None:

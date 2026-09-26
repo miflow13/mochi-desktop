@@ -96,6 +96,12 @@ class ActiveWindowCuriosityMixin:
             self._begin_curiosity_cue(category)
         return GLib.SOURCE_REMOVE
 
+    def _on_pressed(self, *args) -> None:
+        self._cancel_curiosity_source()
+        self._curiosity_pending_category = None
+        self._clear_curiosity_cue()
+        super()._on_pressed(*args)
+
     def _curiosity_allowed(self, *, continuing: bool = False) -> bool:
         if (
             getattr(self, "_preview_mode", False)
