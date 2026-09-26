@@ -13,6 +13,7 @@ from mochi.update.model import (
     UpdateStatus,
     UpdateTarget,
 )
+from mochi.presence.click_dialogue import PresenceBuddy, PresenceX11Buddy
 from mochi.presence.update_controls import UpdateControlsMixin
 
 
@@ -244,3 +245,10 @@ def test_update_mixin_never_transitions_mochi_state() -> None:
     )
 
     assert buddy.transition_calls == 0
+
+
+def test_update_controls_are_composed_into_both_production_buddies() -> None:
+    for buddy_type in (PresenceBuddy, PresenceX11Buddy):
+        assert UpdateControlsMixin in buddy_type.__mro__, (
+            f"{buddy_type.__name__} must include UpdateControlsMixin"
+        )
