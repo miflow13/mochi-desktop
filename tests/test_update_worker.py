@@ -291,6 +291,30 @@ def test_stale_backup_restores_when_final_runtime_is_missing(tmp_path: Path) -> 
     assert not paths.update_venv.exists()
 
 
+def test_recovery_prefers_known_good_backup_over_partial_final_runtime(
+    tmp_path: Path,
+) -> None:
+    paths = _paths(tmp_path)
+    shutil.rmtree(paths.final_venv)
+    (paths.backup_venv / "bin").mkdir(parents=True)
+    (paths.backup_venv / "old.marker").write_text("known-good", encoding="utf-8")
+    old_mochi = paths.backup_venv / "bin" / "mochi"
+    old_mochi.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    old_mochi.chmod(0o755)
+
+    (paths.final_venv / "bin").mkdir(parents=True)
+    (paths.final_venv / "partial.marker").write_text("partial", encoding="utf-8")
+
+    harness = _Harness(tmp_path)
+    worker, _store = _worker(tmp_path, harness, paths)
+
+    worker._recover_stale_paths()
+
+    assert (paths.final_venv / "old.marker").read_text(encoding="utf-8") == "known-good"
+    assert not (paths.final_venv / "partial.marker").exists()
+    assert not paths.backup_venv.exists()
+
+
 def test_failure_cleans_temp_workspace_and_ready_file(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
     harness = _Harness(tmp_path, stage_returncode=3)
