@@ -200,6 +200,7 @@ class UpdateWindow(Gtk.Window):
         on_update_restart: Callable[[], None],
         on_retry: Callable[[], None],
         on_close: Callable[[], None],
+        on_cancel: Callable[[], None] | None = None,
         asset_root: Path | None = None,
     ) -> None:
         super().__init__(title="Mochi Update")
@@ -211,6 +212,7 @@ class UpdateWindow(Gtk.Window):
         self._on_update_restart = on_update_restart
         self._on_retry = on_retry
         self._on_close = on_close
+        self._on_cancel = on_cancel
 
         self.state_name = "idle"
         self.title_text = ""
@@ -367,7 +369,17 @@ class UpdateWindow(Gtk.Window):
             self.progress_is_indeterminate = True
             self._progress.pulse()
 
-        self._set_actions(())
+        if (
+            self._on_cancel is not None
+            and progress.stage in {
+                UpdateStage.DOWNLOADING,
+                UpdateStage.VERIFYING,
+                UpdateStage.INSTALLING,
+            }
+        ):
+            self._set_actions((("Cancel", self._on_cancel, False),))
+        else:
+            self._set_actions(())
 
     def show_failure(self, message: str, details: str) -> None:
         self.state_name = "failure"
