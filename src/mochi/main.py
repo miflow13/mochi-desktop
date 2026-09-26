@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 from collections.abc import MutableMapping
 from pathlib import Path
 
@@ -24,6 +25,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--reset-position",
         action="store_true",
         help="forget Mochi's saved position before starting",
+    )
+    parser.add_argument(
+        "--update-ready-file",
+        type=Path,
+        default=None,
+        help=argparse.SUPPRESS,
     )
     return parser
 
