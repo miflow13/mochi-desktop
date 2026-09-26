@@ -255,8 +255,8 @@ model.
 ### Give Mochi a corner of your desktop
 
 The installer has a supported dependency path for Fedora. It creates a private
-Python environment, adds Mochi to the application grid, and installs `mochi`
-and `mochi-uninstall` under `~/.local/bin`. On GNOME, it also installs the
+Python environment, adds Mochi to the application grid, and installs `mochi`,
+`mochi-update`, and `mochi-uninstall` under `~/.local/bin`. On GNOME, it also installs the
 optional awareness helper when GNOME extension tooling is available.
 
 ### Install from source
@@ -277,7 +277,31 @@ shortcuts will be unavailable.
 
 ### Update an installed copy
 
-Quit Mochi first, then update a clean source checkout:
+Installed Mochi can now check for updates without touching the source checkout
+you originally cloned.
+
+Mochi performs a quiet update check at most once per day. When a newer alpha
+build is available, Mochi can show a single small speech bubble and the
+right-click menu changes to **Update available**. Choose it to review a short
+**What's new** summary, then select **Update & Restart** when you are ready.
+
+You can also check manually from Mochi's right-click menu or run:
+
+```bash
+mochi-update
+```
+
+The current alpha update channel follows the latest commit on `main`. One
+update attempt is pinned to the exact commit Mochi found, downloads a clean
+archive of that commit, prepares the replacement runtime beside the current
+one, and only swaps after the candidate passes validation. The previous runtime
+is kept until the updated Mochi starts successfully, so a failed update can
+restore the working installation.
+
+Bond progress, unlocks, preferences, and other user state are stored separately
+from the replaceable runtime and are not reset by an ordinary update.
+
+For development/source checkouts, the manual workflow is still available:
 
 ```bash
 git switch main
@@ -285,10 +309,9 @@ git pull --ff-only origin main
 ./install.sh
 ```
 
-Relaunch afterward. `git pull` alone does not update the app-grid installation,
-and an already-running process keeps its loaded code. If you have local commits
-or uncommitted changes, preserve them on a branch or stash them before syncing
-`main`.
+That manual path updates the checked-out source and installed runtime. The
+normal in-app/`mochi-update` path does **not** switch branches, stash files, or
+modify a developer checkout.
 
 ### Fedora with Niri
 

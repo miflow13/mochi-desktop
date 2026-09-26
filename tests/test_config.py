@@ -83,6 +83,40 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertTrue(store.has_seen_intro())
 
 
+    def test_update_preferences_default_and_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            store = ConfigStore(path)
+
+            self.assertTrue(store.load_update_checks_enabled())
+            self.assertIsNone(store.load_last_update_check())
+            self.assertIsNone(store.load_dismissed_update_commit())
+
+            store.save_update_checks_enabled(False)
+            store.save_last_update_check(1234.5)
+            store.save_dismissed_update_commit("abc123")
+
+            self.assertFalse(store.load_update_checks_enabled())
+            self.assertEqual(store.load_last_update_check(), 1234.5)
+            self.assertEqual(store.load_dismissed_update_commit(), "abc123")
+
+            store.save_dismissed_update_commit(None)
+            self.assertIsNone(store.load_dismissed_update_commit())
+
+    def test_invalid_update_preferences_fall_back_safely(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(
+                '{"update_checks_enabled": "yes", "last_update_check": "oops", '
+                '"dismissed_update_commit": 123}\n',
+                encoding="utf-8",
+            )
+            store = ConfigStore(path)
+
+            self.assertTrue(store.load_update_checks_enabled())
+            self.assertIsNone(store.load_last_update_check())
+            self.assertIsNone(store.load_dismissed_update_commit())
+
     def test_bond_state_defaults_round_trips_and_migrates_old_progress(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"

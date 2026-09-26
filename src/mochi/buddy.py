@@ -88,6 +88,7 @@ class Buddy(Gtk.DrawingArea):
         "stay-put": 224,
         "edge-roam": 268,
         "quick-start": 312,
+        "update": 356,
     }
     CONTEXT_MENU_BASE_SIZED_ROWS = frozenset(
         ("header", "separator", "status", "sleep", "close")

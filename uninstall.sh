@@ -7,6 +7,7 @@ DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 APP_HOME="$DATA_HOME/mochi-desktop"
 LAUNCHER="$HOME/.local/bin/mochi"
+UPDATE_LAUNCHER="$HOME/.local/bin/mochi-update"
 UNINSTALL_LAUNCHER="$HOME/.local/bin/mochi-uninstall"
 DESKTOP_FILE="$DATA_HOME/applications/$APP_ID.desktop"
 ICON_FILE="$DATA_HOME/icons/hicolor/256x256/apps/$APP_ID.png"
@@ -33,7 +34,7 @@ if command -v gnome-extensions >/dev/null 2>&1; then
     gnome-extensions disable "$EXTENSION_UUID" >/dev/null 2>&1 || true
 fi
 
-rm -f "$LAUNCHER" "$UNINSTALL_LAUNCHER" "$DESKTOP_FILE" "$ICON_FILE" "$AUTOSTART_FILE"
+rm -f "$LAUNCHER" "$UPDATE_LAUNCHER" "$UNINSTALL_LAUNCHER" "$DESKTOP_FILE" "$ICON_FILE" "$AUTOSTART_FILE"
 rm -rf "$EXTENSION_DIR"
 
 if $PURGE; then

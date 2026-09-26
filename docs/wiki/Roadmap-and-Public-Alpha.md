@@ -21,6 +21,7 @@ The v0.3 feature work is now on `main`. Current priorities are:
 - Fedora/GNOME/Wayland/XWayland QA
 - tester feedback from different monitor/compositor setups
 - documentation and release polish
+- supporting update infrastructure so alpha testers can safely move to newer `main` builds without managing Git
 
 This phase is no longer about adding another major system before the release checkpoint.
 
@@ -179,6 +180,17 @@ Shipped direction:
 - level-up/unlock feedback
 - Focus with Mochi
 - continued contextual personality and reliability work
+
+### Supporting infrastructure between v0.3 and v0.4
+
+The update service is release/distribution infrastructure rather than a new
+personality pillar. It provides quiet update discovery, a user-approved
+**Update & Restart** flow, an exact-commit staged install, startup verification,
+and rollback while preserving local relationship/configuration data.
+
+During the public alpha, the updater follows `main`. A later stable channel may
+move ordinary users to signed/versioned GitHub Release artifacts without
+changing the in-app experience.
 
 ### v0.4 — Develops Personality
 

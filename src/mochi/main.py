@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 from collections.abc import MutableMapping
+from pathlib import Path
 
 from mochi.config import ConfigStore
 
@@ -23,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--reset-position",
         action="store_true",
         help="forget Mochi's saved position before starting",
+    )
+    parser.add_argument(
+        "--update-ready-file",
+        type=Path,
+        default=None,
+        help=argparse.SUPPRESS,
     )
     return parser
 
@@ -85,7 +92,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     application = MochiApplication(
-        config=config, preview_animations=args.preview_animations
+        config=config,
+        preview_animations=args.preview_animations,
+        update_ready_file=args.update_ready_file,
     )
     return application.run([sys.argv[0]])
 

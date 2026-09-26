@@ -10,6 +10,7 @@ APP_HOME="$DATA_HOME/mochi-desktop"
 VENV="$APP_HOME/venv"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/mochi"
+UPDATE_LAUNCHER="$BIN_DIR/mochi-update"
 UNINSTALL_LAUNCHER="$BIN_DIR/mochi-uninstall"
 INSTALLED_UNINSTALLER="$APP_HOME/uninstall.sh"
 APPLICATIONS_DIR="$DATA_HOME/applications"
@@ -18,6 +19,32 @@ ICON_DIR="$DATA_HOME/icons/hicolor/256x256/apps"
 ICON_FILE="$ICON_DIR/$APP_ID.png"
 DESKTOP_TEMPLATE="$ROOT/packaging/$APP_ID.desktop.in"
 ICON_SOURCE="$ROOT/assets/mochi/master/mochi_default.png"
+INSTALL_METADATA="$APP_HOME/install.json"
+
+INSTALL_MODE="full"
+if (($#)); then
+    case "$1" in
+        --stage-runtime)
+            if (($# != 2)) || [[ "$2" != /* ]]; then
+                echo "--stage-runtime requires one absolute venv path." >&2
+                exit 2
+            fi
+            INSTALL_MODE="stage"
+            VENV="$2"
+            ;;
+        --refresh-integrations)
+            if (($# != 1)); then
+                echo "--refresh-integrations does not accept extra arguments." >&2
+                exit 2
+            fi
+            INSTALL_MODE="refresh"
+            ;;
+        *)
+            echo "Unknown installer option: $1" >&2
+            exit 2
+            ;;
+    esac
+fi
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
     BOLD=$'\033[1m'
@@ -162,6 +189,114 @@ PY
     "$python" -m pip install "setuptools>=69"
 }
 
+install_integrations() {
+    mkdir -p "$APP_HOME" "$BIN_DIR" "$APPLICATIONS_DIR" "$ICON_DIR"
+
+    if [[ ! -x "$VENV/bin/mochi" ]]; then
+        warn "Mochi runtime is missing: $VENV/bin/mochi"
+        return 1
+    fi
+
+    install_launcher "$LAUNCHER" "$VENV/bin/mochi"
+    if [[ ! -x "$VENV/bin/mochi-update" ]]; then
+        warn "Mochi updater is missing: $VENV/bin/mochi-update"
+        return 1
+    fi
+    install_launcher "$UPDATE_LAUNCHER" "$VENV/bin/mochi-update"
+
+    install -m 0755 "$ROOT/uninstall.sh" "$INSTALLED_UNINSTALLER"
+    install_launcher "$UNINSTALL_LAUNCHER" "$INSTALLED_UNINSTALLER"
+
+    install -m 0644 "$ICON_SOURCE" "$ICON_FILE"
+    sed "s|@MOCHI_EXEC@|$LAUNCHER|g" "$DESKTOP_TEMPLATE" > "$DESKTOP_FILE"
+    chmod 0644 "$DESKTOP_FILE"
+
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "$APPLICATIONS_DIR" >/dev/null 2>&1 || true
+    fi
+
+    if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
+        gtk4-update-icon-cache -f -t "$DATA_HOME/icons/hicolor" >/dev/null 2>&1 || true
+    fi
+
+    if $IS_GNOME; then
+        step "Installing Mochi's GNOME helper"
+        if command -v gnome-extensions >/dev/null 2>&1; then
+            GNOME_HELPER_INSTALLABLE=true
+            GNOME_HELPER_ATTEMPTED=true
+            if [[ -x "$ROOT/scripts/install-typing-extension.sh" ]]; then
+                "$ROOT/scripts/install-typing-extension.sh"
+            else
+                bash "$ROOT/scripts/install-typing-extension.sh"
+            fi
+            sleep 0.25
+        else
+            warn "GNOME extension tools were not found; skipping Mochi's optional awareness helper."
+            warn "Mochi can still run, but GNOME-specific contextual reactions and global shortcuts will be limited."
+        fi
+    else
+        step "Skipping GNOME helper"
+        warn "Non-GNOME desktop detected; installing Mochi without the optional GNOME awareness helper."
+    fi
+}
+
+write_install_metadata() {
+    local version commit commit_json installed_at temporary
+
+    version="$(
+        "$VENV/bin/python" - <<'PY'
+from importlib import metadata
+
+print(metadata.version("mochi-desktop"))
+PY
+    )"
+    if [[ -z "$version" ]]; then
+        warn "Could not determine installed Mochi version."
+        return 1
+    fi
+
+    commit="${MOCHI_INSTALLED_COMMIT:-}"
+    if [[ -z "$commit" ]] && command -v git >/dev/null 2>&1; then
+        commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+    fi
+    if [[ -n "$commit" ]]; then
+        commit_json="\"$commit\""
+    else
+        commit_json="null"
+    fi
+
+    installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    temporary="$INSTALL_METADATA.tmp"
+    cat > "$temporary" <<EOF
+{
+  "version": "$version",
+  "commit": $commit_json,
+  "channel": "main",
+  "installed_at": "$installed_at"
+}
+EOF
+    mv -f "$temporary" "$INSTALL_METADATA"
+}
+
+show_install_complete() {
+    step "Installation complete"
+    printf '%sLaunch:%s      %s\n' "$CYAN" "$RESET" "$LAUNCHER"
+    printf '%sApplication:%s GNOME app grid → Mochi\n' "$CYAN" "$RESET"
+    printf '%sUpdate:%s      %s\n' "$CYAN" "$RESET" "$UPDATE_LAUNCHER"
+    printf '%sUninstall:%s   %s\n' "$CYAN" "$RESET" "$UNINSTALL_LAUNCHER"
+
+    if helper_is_active; then
+        show_ready_notice
+    elif $IS_GNOME && $GNOME_HELPER_INSTALLABLE && $GNOME_HELPER_ATTEMPTED; then
+        show_gnome_reload_notice
+    else
+        printf '\n'
+        warn "GNOME desktop-awareness helper is unavailable on this desktop."
+        printf 'Mochi will run with reduced contextual awareness and without GNOME global shortcuts.\n'
+    fi
+    printf '\n'
+}
+
 banner
 
 IS_GNOME=false
@@ -252,6 +387,12 @@ from gi.repository import Gtk  # noqa: F401
 print("✓ GTK4 / PyGObject OK")
 PY
 
+if [[ "$INSTALL_MODE" == "refresh" ]]; then
+    install_integrations
+    show_install_complete
+    exit 0
+fi
+
 step "Installing Mochi"
 printf '%sTarget:%s %s\n' "$DIM" "$RESET" "$APP_HOME"
 mkdir -p "$APP_HOME" "$BIN_DIR" "$APPLICATIONS_DIR" "$ICON_DIR"
@@ -315,58 +456,13 @@ fi
 VENV_INSTALL_IN_PROGRESS=false
 trap - EXIT
 
-install_launcher "$LAUNCHER" "$VENV/bin/mochi"
-
-install -m 0755 "$ROOT/uninstall.sh" "$INSTALLED_UNINSTALLER"
-install_launcher "$UNINSTALL_LAUNCHER" "$INSTALLED_UNINSTALLER"
-
-install -m 0644 "$ICON_SOURCE" "$ICON_FILE"
-sed "s|@MOCHI_EXEC@|$LAUNCHER|g" "$DESKTOP_TEMPLATE" > "$DESKTOP_FILE"
-chmod 0644 "$DESKTOP_FILE"
-
-if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database "$APPLICATIONS_DIR" >/dev/null 2>&1 || true
+if [[ "$INSTALL_MODE" == "stage" ]]; then
+    step "Runtime staged"
+    printf '%sTarget:%s %s\n' "$DIM" "$RESET" "$VENV"
+    exit 0
 fi
 
-if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
-    gtk4-update-icon-cache -f -t "$DATA_HOME/icons/hicolor" >/dev/null 2>&1 || true
-fi
-
-if $IS_GNOME; then
-    step "Installing Mochi's GNOME helper"
-    if command -v gnome-extensions >/dev/null 2>&1; then
-        GNOME_HELPER_INSTALLABLE=true
-        GNOME_HELPER_ATTEMPTED=true
-        if [[ -x "$ROOT/scripts/install-typing-extension.sh" ]]; then
-            "$ROOT/scripts/install-typing-extension.sh"
-        else
-            bash "$ROOT/scripts/install-typing-extension.sh"
-        fi
-
-        # Give an extension that enabled immediately a moment to claim its D-Bus name.
-        sleep 0.25
-    else
-        warn "GNOME extension tools were not found; skipping Mochi's optional awareness helper."
-        warn "Mochi can still run, but GNOME-specific contextual reactions and global shortcuts will be limited."
-    fi
-else
-    step "Skipping GNOME helper"
-    warn "Non-GNOME desktop detected; installing Mochi without the optional GNOME awareness helper."
-fi
-
-step "Installation complete"
-printf '%sLaunch:%s      %s\n' "$CYAN" "$RESET" "$LAUNCHER"
-printf '%sApplication:%s GNOME app grid → Mochi\n' "$CYAN" "$RESET"
-printf '%sUninstall:%s   %s\n' "$CYAN" "$RESET" "$UNINSTALL_LAUNCHER"
-
-if helper_is_active; then
-    show_ready_notice
-elif $IS_GNOME && $GNOME_HELPER_INSTALLABLE && $GNOME_HELPER_ATTEMPTED; then
-    show_gnome_reload_notice
-else
-    printf '\n'
-    warn "GNOME desktop-awareness helper is unavailable on this desktop."
-    printf 'Mochi will run with reduced contextual awareness and without GNOME global shortcuts.\n'
-fi
-
-printf '\n'
+install_integrations
+write_install_metadata
+show_install_complete
+exit 0

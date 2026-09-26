@@ -116,6 +116,51 @@ class ConfigStore:
         self._save(data)
         self._logger.debug("Edge roam: %s", bool(enabled))
 
+
+    def load_update_checks_enabled(self) -> bool:
+        try:
+            enabled = self._load()["update_checks_enabled"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return True
+        return enabled if isinstance(enabled, bool) else True
+
+    def save_update_checks_enabled(self, enabled: bool) -> None:
+        data = self._load_or_empty()
+        data["update_checks_enabled"] = bool(enabled)
+        self._save(data)
+
+    def load_last_update_check(self) -> float | None:
+        try:
+            value = self._load()["last_update_check"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(value)
+
+    def save_last_update_check(self, timestamp: float) -> None:
+        data = self._load_or_empty()
+        data["last_update_check"] = float(timestamp)
+        self._save(data)
+
+    def load_dismissed_update_commit(self) -> str | None:
+        try:
+            value = self._load()["dismissed_update_commit"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+        if not isinstance(value, str):
+            return None
+        value = value.strip()
+        return value or None
+
+    def save_dismissed_update_commit(self, commit: str | None) -> None:
+        data = self._load_or_empty()
+        if commit is None or not str(commit).strip():
+            data.pop("dismissed_update_commit", None)
+        else:
+            data["dismissed_update_commit"] = str(commit).strip()
+        self._save(data)
+
     def load_bond_state(self) -> BondState:
         """Return Mochi's persisted, non-decaying bond progress."""
         try:
