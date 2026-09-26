@@ -1,6 +1,6 @@
 """Menu construction and menu-action orchestration for Mochi's buddy widget.
 
-This mixin intentionally owns user/developer menu UI only. Core animation,
+This controller intentionally owns user/developer menu UI only. Core animation,
 dragging, activity detection, and behavior state remain outside this module.
 """
 
@@ -563,10 +563,6 @@ class BuddyMenuController:
 
         GLib.timeout_add(16, animate)
 
-    def _quit_from_context_menu(self, _button: Gtk.Button) -> None:
-        """Close the user menu first, then quit Mochi on the next idle turn."""
-        self._buddy._close_context_menu_then(self._buddy._quit_application)
-
     def _toggle_sleep(self, _button: Gtk.Button) -> None:
         def toggle() -> None:
             if self._buddy.state.current is MochiState.SLEEPING:
@@ -602,7 +598,7 @@ class BuddyMenuController:
     def _reset_position(self, _button: Gtk.Button) -> None:
         def reset_position() -> None:
             self._buddy._config.reset_position()
-            default = WindowPlacement.DEFAULT_POSITION
+            default = self._buddy._placement.DEFAULT_POSITION
             self._buddy._placement.move_to(default.x, default.y)
 
         self._buddy._close_developer_menu_then(reset_position)
@@ -642,6 +638,10 @@ class BuddyMenuController:
         if application is not None:
             application.quit()
 
-    def _quit_from_context_menu(self, _button: Gtk.Button) -> None:
+    def _quit(self, _button: Gtk.Button | None = None) -> None:
+        """Close the developer menu first, then quit on the next idle turn."""
+        self._buddy._close_developer_menu_then(self._buddy._quit_application)
+
+    def _quit_from_context_menu(self, _button: Gtk.Button | None = None) -> None:
         """Close the user menu first, then quit Mochi on the next idle turn."""
         self._buddy._close_context_menu_then(self._buddy._quit_application)
