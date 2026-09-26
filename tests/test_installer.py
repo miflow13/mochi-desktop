@@ -346,7 +346,7 @@ def test_installer_preserves_transactional_private_venv_replacement() -> None:
     assert "trap rollback_private_venv EXIT" in text
     assert '"$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"' in text
     assert 'if ! ensure_python_build_tools "$VENV/bin/python"; then' in text
-    assert 'if ! "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then' in text
+    assert 'if ! PYTHONNOUSERSITE=1 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then' in text
 
     backup_move = 'mv "$VENV" "$BACKUP_VENV"'
     create_venv = '"$SYSTEM_PYTHON" -m venv --system-site-packages "$VENV"'
@@ -360,7 +360,7 @@ def test_installer_preserves_transactional_private_venv_replacement() -> None:
     backup_index = text.index(backup_move)
     create_index = text.index(create_venv)
     install_index = text.index(
-        'if ! "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then'
+        'if ! PYTHONNOUSERSITE=1 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then'
     )
 
     assert backup_index < create_index < install_index
