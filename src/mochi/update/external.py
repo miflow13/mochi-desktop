@@ -19,12 +19,12 @@ _PRE_SWAP_STAGES = frozenset(
     (
         UpdateStage.DOWNLOADING,
         UpdateStage.VERIFYING,
-        UpdateStage.INSTALLING,
     )
 )
 _CRITICAL_STAGES = frozenset(
     (
         UpdateStage.SWAPPING,
+        UpdateStage.INSTALLING,
         UpdateStage.REFRESHING,
         UpdateStage.RESTARTING,
     )
