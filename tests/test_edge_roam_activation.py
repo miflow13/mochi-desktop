@@ -9,7 +9,9 @@ import unittest
 from unittest.mock import Mock
 
 from mochi.config import Position
+from mochi.presence.click_dialogue import PresenceBuddy, PresenceX11Buddy
 from mochi.presence.edge_roam_controls import EdgeRoamMixin
+from mochi.presence.music_dance import MusicDanceMixin
 from mochi.state import MochiState
 
 
@@ -73,6 +75,8 @@ class _BaseBuddy:
         self._cancel_walk = Mock()
         self._play_animation = Mock()
         self.resumed_other_ambient = False
+        self.context_menu_close_requested = False
+        self.pending_context_action = None
 
     def _transition_to(self, next_state: MochiState) -> bool:
         if next_state is MochiState.WALKING and self.state.current is not MochiState.IDLE:
@@ -89,6 +93,10 @@ class _BaseBuddy:
     def _maybe_resume_ambient_activity(self) -> bool:
         self.resumed_other_ambient = True
         return False
+
+    def _close_context_menu_then(self, action) -> None:
+        self.context_menu_close_requested = True
+        self.pending_context_action = action
 
     def _on_context_menu_closed(self, _popover) -> None:
         self._context_menu_open = False
@@ -143,6 +151,40 @@ class EdgeRoamActivationTests(unittest.TestCase):
                 self.assertTrue(buddy._edge_roam)
                 self.assertIs(buddy.state.current, busy_state)
                 self.assertTrue(buddy._edge_roam_start_pending)
+
+    def test_contextual_owner_is_preserved_until_it_yields_to_idle(self) -> None:
+        for contextual_state in (
+            MochiState.COMPUTER,
+            MochiState.TYPING,
+            MochiState.WATCHING,
+            MochiState.DANCING,
+            MochiState.SEARCHING,
+            MochiState.IDLE_EMOTE,
+        ):
+            with self.subTest(contextual_state=contextual_state):
+                buddy = _make_buddy(
+                    state=contextual_state,
+                    context_menu_open=True,
+                )
+
+                buddy._toggle_edge_roam(None)
+
+                self.assertIs(buddy.state.current, contextual_state)
+                self.assertTrue(buddy._edge_roam_start_pending)
+                self.assertTrue(buddy.context_menu_close_requested)
+
+                buddy._on_context_menu_closed(None)
+
+                self.assertIs(buddy.state.current, contextual_state)
+                self.assertTrue(buddy._edge_roam_start_pending)
+
+                # The owning contextual lifecycle eventually yields to IDLE.
+                # Only then may the existing pending edge-roam request claim walking.
+                buddy.state.current = MochiState.IDLE
+                self.assertTrue(buddy._maybe_resume_ambient_activity())
+                self.assertIs(buddy.state.current, MochiState.WALKING)
+                self.assertFalse(buddy._edge_roam_start_pending)
+                self.assertEqual(buddy._walk_motion.target[1], 8)
 
     def test_pending_activation_starts_once_mochi_returns_to_idle(self) -> None:
         buddy = _make_buddy(state=MochiState.HEART)
@@ -218,7 +260,7 @@ class EdgeRoamActivationTests(unittest.TestCase):
         self.assertIsNotNone(motion)
         self.assertEqual(motion.origin[1], 8)
 
-    def test_context_menu_open_defers_activation(self) -> None:
+    def test_context_menu_toggle_closes_before_starting_nearest_edge_walk(self) -> None:
         buddy = _make_buddy(state=MochiState.IDLE, context_menu_open=True)
 
         buddy._toggle_edge_roam(None)
@@ -226,6 +268,8 @@ class EdgeRoamActivationTests(unittest.TestCase):
         self.assertTrue(buddy._edge_roam)
         self.assertTrue(buddy._edge_roam_start_pending)
         self.assertIsNot(buddy.state.current, MochiState.WALKING)
+        self.assertTrue(buddy.context_menu_close_requested)
+        self.assertIsNotNone(buddy.pending_context_action)
 
         # Menu closes through the real hook; the pending activation should
         # now proceed without any polling timer.
@@ -233,6 +277,7 @@ class EdgeRoamActivationTests(unittest.TestCase):
 
         self.assertIs(buddy.state.current, MochiState.WALKING)
         self.assertFalse(buddy._edge_roam_start_pending)
+        self.assertEqual(buddy._walk_motion.target[1], 8)
 
     def test_developer_menu_close_also_consumes_pending_activation(self) -> None:
         buddy = _make_buddy(state=MochiState.IDLE, context_menu_open=True)
@@ -243,6 +288,18 @@ class EdgeRoamActivationTests(unittest.TestCase):
 
         self.assertIs(buddy.state.current, MochiState.WALKING)
         self.assertFalse(buddy._edge_roam_start_pending)
+
+
+    def test_production_mro_checks_pending_edge_roam_before_contextual_resume(self) -> None:
+        for buddy_type in (PresenceBuddy, PresenceX11Buddy):
+            with self.subTest(buddy_type=buddy_type.__name__):
+                mro = buddy_type.__mro__
+                self.assertLess(
+                    mro.index(EdgeRoamMixin),
+                    mro.index(MusicDanceMixin),
+                    "Edge Roam must get first chance at an IDLE handoff before "
+                    "terminal/music/file ambient owners reclaim the state",
+                )
 
     def test_disabled_edge_roam_never_starts_from_ambient_resume(self) -> None:
         buddy = _make_buddy(state=MochiState.IDLE, edge_roam=False)

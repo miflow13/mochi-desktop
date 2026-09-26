@@ -22,6 +22,7 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ### Changed
 
+- Enabling **Edge roam** now closes the context menu and immediately starts Mochi toward the nearest screen edge when he is free to walk.
 - Slowed Mochi's default breathing loop from **3.9s to 4.95s** so his resting motion is gentler and less visually distracting in peripheral vision.
 - Every unlocked Emote Catalogue animation now automatically participates in Mochi's autonomous idle emote pool. The overall emote chance stays fixed as the catalogue grows, so new emotes add variety without making Mochi increasingly noisy.
 - Nameplate is now ephemeral: it appears while Mochi is hovered, remains briefly after speech, then fades away to reduce persistent desktop clutter. Temporary care/interaction feedback may still surface it when needed.

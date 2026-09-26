@@ -89,7 +89,10 @@ class EdgeRoamMixin:
             # request pending; it is consumed the next time Mochi naturally
             # returns to ambient IDLE via _maybe_resume_ambient_activity.
             self._edge_roam_start_pending = True
-            self._try_start_pending_edge_roam()
+            if self._context_menu_open:
+                self._close_context_menu_then(self._try_start_pending_edge_roam)
+            else:
+                self._try_start_pending_edge_roam()
         else:
             self._edge_roam_start_pending = False
 
