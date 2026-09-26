@@ -444,7 +444,7 @@ if ! ensure_python_build_tools "$VENV/bin/python"; then
     exit 1
 fi
 
-if ! "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then
+if ! PYTHONNOUSERSITE=1 "$VENV/bin/python" -m pip install --no-deps --no-build-isolation "$ROOT"; then
     warn "Failed to install Mochi into the new environment."
     exit 1
 fi
