@@ -119,10 +119,12 @@ if [[ "$1" == "-m" && "$2" == "venv" ]]; then
     cp "$0" "$4/bin/python"
     chmod +x "$4/bin/python"
     printf '#!%s/bin/python\nexit 0\n' "$4" > "$4/bin/mochi"
+    printf '#!%s/bin/python\nexit 0\n' "$4" > "$4/bin/mochi-update"
     printf '#!%s/bin/python\nexit 0\n' "$4" > "$4/bin/pip"
     printf 'export VIRTUAL_ENV=%s\n' "$4" > "$4/bin/activate"
     printf 'command = python3 -m venv %s\n' "$4" > "$4/pyvenv.cfg"
     chmod +x "$4/bin/mochi"
+    chmod +x "$4/bin/mochi-update"
     chmod +x "$4/bin/pip"
     exit 0
 fi
@@ -137,7 +139,9 @@ if [[ "$1" == "-m" && "$2" == "pip" && "$3" == "install" && "$*" == *"--no-deps 
     fi
     venv_bin="$(dirname "$0")"
     printf '#!%s\nexit 0\n' "$0" > "$venv_bin/mochi"
+    printf '#!%s\nexit 0\n' "$0" > "$venv_bin/mochi-update"
     chmod +x "$venv_bin/mochi"
+    chmod +x "$venv_bin/mochi-update"
     exit 0
 fi
 
@@ -196,6 +200,9 @@ def _run_installer(
         )
         (venv / "bin").mkdir()
         _write_executable(venv / "bin" / "mochi", "#!/bin/bash\nexit 0\n")
+        _write_executable(
+            venv / "bin" / "mochi-update", "#!/bin/bash\nexit 0\n"
+        )
 
     env = os.environ.copy()
     env.update(
@@ -414,6 +421,26 @@ def test_project_install_failure_restores_or_removes_environment(
     assert not tuple(app_home.glob("venv.backup.*"))
     assert not tuple(app_home.glob("venv.new.*"))
 
+
+
+
+def test_installer_exposes_update_launcher(tmp_path: Path) -> None:
+    result, _log_dir = _run_installer(tmp_path, current_desktop="niri")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    home = tmp_path / "home"
+    launcher = home / ".local" / "bin" / "mochi-update"
+    target = (
+        home
+        / ".local"
+        / "share"
+        / "mochi-desktop"
+        / "venv"
+        / "bin"
+        / "mochi-update"
+    )
+    assert launcher.exists()
+    assert str(target) in launcher.read_text(encoding="utf-8")
 
 
 def test_normal_install_writes_installed_build_metadata(tmp_path: Path) -> None:
