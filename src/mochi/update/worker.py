@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable
 from urllib.request import Request, urlopen
 
-from .checker import OFFICIAL_REPOSITORY
+from .constants import OFFICIAL_REPOSITORY
 from .model import InstalledBuild, UpdateTarget
 from .storage import InstallMetadataStore
 
