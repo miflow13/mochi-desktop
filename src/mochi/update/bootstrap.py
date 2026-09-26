@@ -53,13 +53,15 @@ def _runner_source() -> str:
 
 import json
 from pathlib import Path
+import shutil
 
 from mochi.update.external import run_external_update
 from mochi.update.model import UpdateMetadata, UpdateTarget
 from mochi.update.worker import UpdateWorker
 
 
-request_path = Path(__file__).with_name("request.json")
+workspace = Path(__file__).resolve().parent
+request_path = workspace / "request.json"
 request = json.loads(request_path.read_text(encoding="utf-8"))
 target = UpdateTarget(
     commit=request["commit"],
@@ -70,26 +72,28 @@ target = UpdateTarget(
     ),
 )
 
-if request.get("gui"):
-    raise SystemExit(
-        run_external_update(
+try:
+    if request.get("gui"):
+        result = run_external_update(
             target,
             wait_pid=request.get("wait_pid"),
         )
-    )
+    else:
+        worker = UpdateWorker()
+        result = worker.run(
+            target,
+            wait_pid=request.get("wait_pid"),
+            on_progress=lambda progress: print(
+                f"{progress.stage.value}: {progress.message}",
+                flush=True,
+            ),
+        )
+finally:
+    shutil.rmtree(workspace, ignore_errors=True)
 
-worker = UpdateWorker()
-raise SystemExit(
-    worker.run(
-        target,
-        wait_pid=request.get("wait_pid"),
-        on_progress=lambda progress: print(
-            f"{progress.stage.value}: {progress.message}",
-            flush=True,
-        ),
-    )
-)
+raise SystemExit(result)
 """
+
 
 
 def bootstrap_updater(
