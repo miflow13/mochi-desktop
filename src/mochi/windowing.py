@@ -117,6 +117,68 @@ class WindowPlacement:
             move_window(self.window, x, y)
         return self.position
 
+    def move_unclamped(self, x: int, y: int) -> Position:
+        """Move exactly to a requested position for controlled cinematic motion.
+
+        Normal movement must continue to use :meth:`move_to`, which preserves
+        Mochi's monitor bounds. This escape hatch exists so promo capture can
+        begin with the buddy fully outside the target monitor and walk inward.
+        """
+        self.position = Position(round(x), round(y))
+        x, y = self.position.x, self.position.y
+        if getattr(self, "layer_shell_enabled", False) and Gtk4LayerShell is not None:
+            Gtk4LayerShell.set_margin(self.window, Gtk4LayerShell.Edge.LEFT, x)
+            Gtk4LayerShell.set_margin(self.window, Gtk4LayerShell.Edge.BOTTOM, y)
+        else:
+            move_window(self.window, x, y)
+        return self.position
+
+    def left_entrance_positions(
+        self,
+        destination_ratio: float = 0.18,
+    ) -> tuple[Position, Position]:
+        """Return an off-screen-left origin and an in-frame destination."""
+        current = self.clamp_position(self.position.x, self.position.y)
+        monitor = self._monitor_for_position(current.x, current.y)
+        width, _height = self.window.get_default_size()
+        ratio = max(0.05, min(float(destination_ratio), 0.90))
+
+        if monitor is None:
+            target = current
+            origin = Position(
+                current.x - width - self.EDGE_PADDING_PX,
+                current.y,
+            )
+            return origin, target
+
+        geometry = monitor.get_geometry()
+        if self.layer_shell_enabled:
+            target_x = round(
+                max(
+                    self.EDGE_PADDING_PX,
+                    (geometry.width - width) * ratio,
+                )
+            )
+            origin_x = -width - self.EDGE_PADDING_PX
+        else:
+            scale = self._x11_coordinate_scale()
+            target_x = round(
+                (
+                    geometry.x
+                    + max(
+                        self.EDGE_PADDING_PX,
+                        (geometry.width - width) * ratio,
+                    )
+                )
+                * scale
+            )
+            origin_x = round(
+                (geometry.x - width - self.EDGE_PADDING_PX) * scale
+            )
+
+        target = self.clamp_position(target_x, current.y)
+        return Position(origin_x, target.y), target
+
     def drag_to_pointer(self, anchor_x: float, anchor_y: float) -> Position:
         """Move the X11/XWayland window under the pointer without compositor drag.
 
