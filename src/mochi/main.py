@@ -26,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="forget Mochi's saved position before starting",
     )
     parser.add_argument(
+        "--trailer-entrance",
+        action="store_true",
+        help="walk into frame from the left after launch for promo capture",
+    )
+    parser.add_argument(
         "--update-ready-file",
         type=Path,
         default=None,
@@ -94,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     application = MochiApplication(
         config=config,
         preview_animations=args.preview_animations,
+        trailer_entrance=args.trailer_entrance,
         update_ready_file=args.update_ready_file,
     )
     return application.run([sys.argv[0]])
