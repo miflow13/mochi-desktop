@@ -234,6 +234,50 @@ class WindowPlacementMonitorTests(unittest.TestCase):
         self.assertEqual((position.x, position.y), (2800, 274))
         move_window.assert_called_once_with(test_window, 2800, 274)
 
+    def test_trailer_entrance_targets_primary_monitor_not_saved_monitor(self) -> None:
+        primary = monitor(0, 0, 1920, 1080)
+        secondary = monitor(1920, 0, 2560, 1440)
+        monitors = MonitorList(primary, secondary)
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors, 100, 100)
+        placement.position = SimpleNamespace(x=2200, y=300)
+        placement.layer_shell_enabled = False
+        placement._primary_monitor = lambda: primary
+
+        origin, target = WindowPlacement.left_entrance_positions(placement)
+
+        self.assertEqual((origin.x, origin.y), (-108, 300))
+        self.assertEqual((target.x, target.y), (328, 300))
+
+    def test_trailer_entrance_respects_nonzero_primary_monitor_origin(self) -> None:
+        secondary = monitor(0, 0, 1920, 1080)
+        primary = monitor(1920, 0, 2560, 1440)
+        monitors = MonitorList(secondary, primary)
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors, 100, 100)
+        placement.position = SimpleNamespace(x=400, y=250)
+        placement.layer_shell_enabled = False
+        placement._primary_monitor = lambda: primary
+
+        origin, target = WindowPlacement.left_entrance_positions(placement)
+
+        self.assertEqual((origin.x, origin.y), (1812, 250))
+        self.assertEqual((target.x, target.y), (2363, 250))
+        self.assertGreaterEqual(target.x, 1920)
+
+    def test_primary_monitor_fallback_uses_desktop_origin_not_saved_position(self) -> None:
+        origin_monitor = monitor(0, 0, 1920, 1080)
+        other_monitor = monitor(1920, 0, 2560, 1440)
+        monitors = MonitorList(origin_monitor, other_monitor)
+        placement = object.__new__(WindowPlacement)
+        placement.window = window(monitors)
+        placement.layer_shell_enabled = False
+
+        with patch("mochi.windowing.GdkX11", None):
+            selected = WindowPlacement._primary_monitor(placement)
+
+        self.assertIs(selected, origin_monitor)
+
     def test_gap_position_uses_the_nearest_monitor(self) -> None:
         monitors = MonitorList(
             monitor(0, 0, 1000, 800),
