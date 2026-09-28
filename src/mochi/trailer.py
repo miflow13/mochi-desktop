@@ -47,6 +47,12 @@ class TrailerEntranceController:
     def _start(self) -> bool:
         self._source_id = None
         if self._buddy.state.current is not MochiState.IDLE:
+            # Launching from a terminal can briefly trigger the typing/search
+            # presence monitors. Clear only cancellable ambient reactions so
+            # the promo entrance stays deterministic without overriding sleep,
+            # drag, feeding, or other high-priority ownership.
+            self._buddy._cancel_active_emote()
+        if self._buddy.state.current is not MochiState.IDLE:
             return GLib.SOURCE_REMOVE
 
         origin, target = self._placement.left_entrance_positions()
