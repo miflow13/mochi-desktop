@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import time
 
-import gi
-
-gi.require_version("GLib", "2.0")
-from gi.repository import GLib  # noqa: E402
+from gi.repository import GLib
 
 from mochi.behavior import WalkMotion, choose_walk_animation
 from mochi.state import MochiState
