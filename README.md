@@ -2,7 +2,7 @@
 
 # mochi 🌱
 
-**v0.3 · Growing Together**
+**v0.4 · Pocket & Polish**
 
 ### A tiny Linux desktop buddy that grows with you.
 
@@ -278,7 +278,7 @@ cd mochi-desktop
 ./install.sh
 ```
 
-`main` currently tracks the v0.3 alpha line. The installer installs the source
+`main` currently tracks the v0.4 alpha line. The installer installs the source
 from the commit or branch you currently have checked out.
 
 If the installer says it installed Mochi's optional GNOME awareness helper,
