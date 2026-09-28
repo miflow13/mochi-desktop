@@ -1,9 +1,9 @@
 {
-  "version": "0.3.0a1",
+  "version": "0.4.0a1",
   "channel": "main",
   "highlights": [
-    "Mochi can tell you when a new update is available.",
-    "Updates install through a safer staged restart flow.",
-    "A failed update keeps your current Mochi recoverable."
+    "Drag files, folders, links, text, and images onto Mochi with the new Pocket.",
+    "Mochi can now update himself through a safer staged restart and rollback flow.",
+    "The canonical Mochi Artist Kit is open for community-made animations."
   ]
 }
