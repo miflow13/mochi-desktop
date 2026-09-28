@@ -6,13 +6,27 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ## Unreleased
 
+No unreleased user-facing changes yet.
+
+## 0.4.0-alpha.1 — Pocket & Polish
+
+v0.4 focuses on making Mochi more useful, easier to update, and easier for the
+community to contribute to without losing the small, local desktop-companion
+feel.
+
 ### Added
 
 - Added **Mochi Pocket**, a local-first ten-item shelf for files, directories,
   text, HTTP(S) links, and dropped images. Supported drags now make Mochi loop
-  an open-mouth preview before release, then close his mouth only after the
-  item is safely persisted. Pocket contents can be opened, viewed, or removed
+  an open-mouth preview with hover feedback before release, then close his mouth
+  only after the item is safely persisted. Pocket contents can be opened, viewed,
+  revealed in their containing folder, removed individually, or cleared together
   from the new `Pocket · N` context-menu window.
+- Added the **Mochi Artist Kit**, including the canonical character reference,
+  production sprites, canvas/dimension rules, animation conventions, and a
+  contribution template for community-made Mochi animations.
+- Added more autonomous companion behavior, including occasional naps that
+  cooperate with Mochi's existing interaction and state lifecycle.
 - Added a polished **Mochi Update Service** for installed alpha builds. Mochi can
   quietly detect newer `main` commits, announce an available update once, show
   a compact GTK **What's new** window using real Mochi pixel art, and update
@@ -37,10 +51,14 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ### Changed
 
+- Broadened installer/runtime portability so GNOME-only integration is optional
+  and non-GNOME Linux desktops can install without GNOME extension tooling.
 - Enabling **Edge roam** now closes the context menu and immediately starts Mochi toward the nearest screen edge when he is free to walk.
 - Slowed Mochi's default breathing loop from **3.9s to 4.95s** so his resting motion is gentler and less visually distracting in peripheral vision.
 - Every unlocked Emote Catalogue animation now automatically participates in Mochi's autonomous idle emote pool. The overall emote chance stays fixed as the catalogue grows, so new emotes add variety without making Mochi increasingly noisy.
 - Nameplate is now ephemeral: it appears while Mochi is hovered, remains briefly after speech, then fades away to reduce persistent desktop clutter. Temporary care/interaction feedback may still surface it when needed.
+- Package/runtime version metadata is `0.4.0a1` (Python packaging form of
+  `0.4.0-alpha.1`).
 
 ## 0.3.0-alpha.1 — Growing Together
 
