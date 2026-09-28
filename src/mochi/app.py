@@ -30,21 +30,28 @@ class MochiApplication(Gtk.Application):
         self,
         config: ConfigStore,
         preview_animations: bool = False,
+        trailer_entrance: bool = False,
         update_ready_file: Path | None = None,
     ) -> None:
         super().__init__(
             application_id=(
                 "io.github.mochi_desktop.Mochi.Preview"
                 if preview_animations
-                else "io.github.mochi_desktop.Mochi"
+                else (
+                    "io.github.mochi_desktop.Mochi.Trailer"
+                    if trailer_entrance
+                    else "io.github.mochi_desktop.Mochi"
+                )
             ),
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
         self.config = config
         self.preview_animations = preview_animations
+        self.trailer_entrance = trailer_entrance
         self.update_ready_file = update_ready_file
         self._logger = logging.getLogger(__name__)
         self._buddy: PresenceBuddy | PresenceX11Buddy | None = None
+        self._trailer_entrance_controller = None
         self.sound = SoundManager(
             volume=config.load_volume(),
             muted=config.load_muted(),
@@ -238,12 +245,23 @@ class MochiApplication(Gtk.Application):
         )
 
         window.present()
+        if self.trailer_entrance:
+            from mochi.trailer import TrailerEntranceController
+
+            self._trailer_entrance_controller = TrailerEntranceController(
+                buddy,
+                placement,
+            )
+            self._trailer_entrance_controller.schedule()
         if self.update_ready_file is not None:
             signal_update_ready(self.update_ready_file)
         if not self.preview_animations:
             self.sound.play(SoundEvent.SPAWN)
 
     def do_shutdown(self) -> None:
+        if self._trailer_entrance_controller is not None:
+            self._trailer_entrance_controller.cancel()
+            self._trailer_entrance_controller = None
         if self._buddy is not None:
             self._buddy.shutdown_presence()
             self._buddy = None
