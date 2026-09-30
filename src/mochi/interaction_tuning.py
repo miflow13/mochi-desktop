@@ -20,8 +20,9 @@ DRAG_DIRECTION_MIN_DELTA_PX = 2.0
 DRAG_STATE_DWELL_MS = 25
 
 # Animation timing is in milliseconds per frame and intentionally overrides
-# authored manifest FPS at runtime. Pickup is much quicker than suspended drag.
-PICKUP_FRAME_DURATION_MS = 20
+# authored manifest FPS at runtime. One pickup frame per normal 16 ms tick
+# keeps all six authored frames visible and hands off to dragging in 96 ms.
+PICKUP_FRAME_DURATION_MS = 16
 DRAG_FRAME_DURATION_MS = 167
 DRAG_SETTLE_DIRECTIONAL_MS = 70
 DRAG_SETTLE_NEUTRAL_MS = 140

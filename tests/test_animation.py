@@ -1,6 +1,7 @@
 import unittest
 
 from mochi.animation import Animation, AnimationFrame, AnimationPlayer
+from mochi.interaction_tuning import PICKUP_FRAME_DURATION_MS
 from mochi.state import MochiState
 
 
@@ -82,6 +83,26 @@ class AnimationPlayerTests(unittest.TestCase):
         self.assertFalse(player.tick(179))
         self.assertTrue(player.tick(1))
         self.assertEqual(player.frame_duration_ms, 100)
+
+    def test_pickup_handoff_uses_16ms_ticks_and_finishes_after_six(self) -> None:
+        self.assertEqual(PICKUP_FRAME_DURATION_MS, 16)
+        pickup = Animation(
+            "pickup",
+            tuple(AnimationFrame(f"frame-{index}") for index in range(6)),
+            PICKUP_FRAME_DURATION_MS,
+        )
+        finished: list[str] = []
+        player = AnimationPlayer(lambda completed: finished.append(completed.name))
+        player.play(pickup)
+
+        for tick in range(1, 6):
+            with self.subTest(tick=tick):
+                self.assertTrue(player.tick(16))
+                self.assertIsNotNone(player.animation)
+
+        self.assertTrue(player.tick(16))
+        self.assertIsNone(player.animation)
+        self.assertEqual(finished, ["pickup"])
 
     def test_seek_progress_controls_looping_animation(self) -> None:
         animation = Animation(
