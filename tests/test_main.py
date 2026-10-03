@@ -1,6 +1,14 @@
 import unittest
 
-from mochi.main import configure_display_backend
+from mochi.main import build_parser, configure_display_backend
+
+
+class CliTests(unittest.TestCase):
+    def test_trailer_entrance_flag_is_opt_in(self) -> None:
+        parser = build_parser()
+
+        self.assertFalse(parser.parse_args([]).trailer_entrance)
+        self.assertTrue(parser.parse_args(["--trailer-entrance"]).trailer_entrance)
 
 
 class DisplayBackendTests(unittest.TestCase):

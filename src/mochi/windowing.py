@@ -16,6 +16,12 @@ try:
 except (ImportError, ValueError):
     GdkWayland = None
 
+try:
+    gi.require_version("GdkX11", "4.0")
+    from gi.repository import GdkX11  # type: ignore[attr-defined]  # noqa: E402
+except (ImportError, ValueError):
+    GdkX11 = None
+
 from mochi.config import Position
 from mochi.x11 import (
     get_pointer_position,
@@ -117,6 +123,105 @@ class WindowPlacement:
             move_window(self.window, x, y)
         return self.position
 
+    def move_unclamped(self, x: int, y: int) -> Position:
+        """Move exactly to a requested position for controlled cinematic motion.
+
+        Normal movement must continue to use :meth:`move_to`, which preserves
+        Mochi's monitor bounds. This escape hatch exists so promo capture can
+        begin with the buddy fully outside the target monitor and walk inward.
+        """
+        self.position = Position(round(x), round(y))
+        x, y = self.position.x, self.position.y
+        if getattr(self, "layer_shell_enabled", False) and Gtk4LayerShell is not None:
+            Gtk4LayerShell.set_margin(self.window, Gtk4LayerShell.Edge.LEFT, x)
+            Gtk4LayerShell.set_margin(self.window, Gtk4LayerShell.Edge.BOTTOM, y)
+        else:
+            move_window(self.window, x, y)
+        return self.position
+
+    def left_entrance_positions(
+        self,
+        destination_ratio: float = 0.18,
+    ) -> tuple[Position, Position]:
+        """Return a left-edge entrance on the desktop's primary monitor."""
+        current = self.clamp_position(self.position.x, self.position.y)
+        monitor = self._primary_monitor()
+        width, _height = self.window.get_default_size()
+        ratio = max(0.05, min(float(destination_ratio), 0.90))
+
+        if monitor is None:
+            target = current
+            origin = Position(
+                current.x - width - self.EDGE_PADDING_PX,
+                current.y,
+            )
+            return origin, target
+
+        geometry = monitor.get_geometry()
+        if self.layer_shell_enabled:
+            if Gtk4LayerShell is not None:
+                set_monitor = getattr(Gtk4LayerShell, "set_monitor", None)
+                if callable(set_monitor):
+                    set_monitor(self.window, monitor)
+            target_x = round(
+                max(
+                    self.EDGE_PADDING_PX,
+                    (geometry.width - width) * ratio,
+                )
+            )
+            origin_x = -width - self.EDGE_PADDING_PX
+        else:
+            scale = self._x11_coordinate_scale()
+            target_x = round(
+                (
+                    geometry.x
+                    + max(
+                        self.EDGE_PADDING_PX,
+                        (geometry.width - width) * ratio,
+                    )
+                )
+                * scale
+            )
+            origin_x = round(
+                (geometry.x - width - self.EDGE_PADDING_PX) * scale
+            )
+
+        target = self._clamp_to_monitor(target_x, current.y, monitor)
+        return Position(origin_x, target.y), target
+
+    def _primary_monitor(self) -> Gdk.Monitor | None:
+        """Return the configured primary monitor, with a safe GTK4 fallback."""
+        display = self.window.get_display()
+
+        # GTK4 removed the backend-neutral primary-monitor API, but the X11
+        # backend still exposes it. Mochi uses XWayland on GNOME, so this is the
+        # authoritative path for the primary/main display in the normal target
+        # environment.
+        if GdkX11 is not None and isinstance(display, GdkX11.X11Display):
+            get_primary_monitor = getattr(display, "get_primary_monitor", None)
+            if callable(get_primary_monitor):
+                monitor = get_primary_monitor()
+                if monitor is not None:
+                    return monitor
+
+        monitors = display.get_monitors()
+        if not monitors.get_n_items():
+            return None
+
+        # On backends without a primary-monitor API, the compositor's logical
+        # desktop origin is the best stable proxy for the main display. This is
+        # intentionally independent of Mochi's saved/current position.
+        first = monitors.get_item(0)
+        for index in range(monitors.get_n_items()):
+            monitor = monitors.get_item(index)
+            geometry = monitor.get_geometry()
+            if (
+                geometry.x <= 0 < geometry.x + geometry.width
+                and geometry.y <= 0 < geometry.y + geometry.height
+            ):
+                return monitor
+        return first
+
     def drag_to_pointer(self, anchor_x: float, anchor_y: float) -> Position:
         """Move the X11/XWayland window under the pointer without compositor drag.
 
@@ -146,18 +251,25 @@ class WindowPlacement:
 
     def clamp_position(self, x: int, y: int) -> Position:
         monitor = self._monitor_for_position(x, y)
-        edge_padding = self.EDGE_PADDING_PX
-        bottom_padding = self.BOTTOM_PADDING_PX
-
         if monitor is None:
             return Position(round(x), round(y))
+        return self._clamp_to_monitor(x, y, monitor)
 
+    def _clamp_to_monitor(
+        self,
+        x: int,
+        y: int,
+        monitor: Gdk.Monitor,
+    ) -> Position:
+        """Clamp a position against one specific monitor's safe bounds."""
+        edge_padding = self.EDGE_PADDING_PX
+        bottom_padding = self.BOTTOM_PADDING_PX
         geometry = monitor.get_geometry()
         width, height = self.window.get_default_size()
 
         if self.layer_shell_enabled:
             # Layer-shell margins are relative to the selected output, rather
-            # than the global GDK monitor coordinate space.  Adding geometry.x
+            # than the global GDK monitor coordinate space. Adding geometry.x
             # here sends a surface on a secondary (or negative-origin) monitor
             # far beyond that output's edge.
             min_x = edge_padding
