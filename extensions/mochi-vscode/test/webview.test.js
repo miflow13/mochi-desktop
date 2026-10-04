@@ -10,3 +10,12 @@ test('webview uses constrained local resources and CSP without inline executable
  assert.equal(view.options.localResourceRoots.length,1);assert.equal(view.options.localResourceRoots[0].toString(),'file:///mochi/media');
  assert.match(html,/aria-label="Pet Mochi"/);assert.match(html,/role="status"/);
 });
+test('browser harness resolves every script and stylesheet inside the extension media directory',()=>{
+ const {browserApi}=require('./helpers/browser-api');
+ const view={cspSource:'https://mochi.test',asWebviewUri:u=>u};
+ const html=render(view,{toString:()=> 'https://mochi.test'},browserApi);
+ for(const match of html.matchAll(/(?:src|href)="(https:[^"]+)"/g)){
+  const url=new URL(match[1]);assert.ok(url.pathname.startsWith('/media/'),url.pathname);
+  assert.ok(fs.existsSync(path.join(__dirname,'..',url.pathname)));
+ }
+});

@@ -4,7 +4,7 @@ Implemented on `feat/mochi-vscode-v1`. Desktop runtime source and original artwo
 
 ## Verified in this workspace
 - `npm run build`: prepares 16 animations / 95 original PNG files; checks canonical dimensions, metadata, and runtime timing overrides.
-- `npm test`: 21 tests pass, including real PNG decoding/Canvas rendering, alpha hit testing, directional gestures and cancellation, sleep/wake, reduced motion controls, hidden timer cleanup, privacy/opt-in, state persistence and duplicated readiness.
+- `npm test`: 22 tests pass, including real PNG decoding/Canvas rendering, alpha hit testing, directional gestures and cancellation, sleep/wake, reduced motion controls, hidden timer cleanup, privacy/opt-in, state persistence and duplicated readiness.
 - `npm run check`: all JavaScript syntax checks pass.
 - `npm run package`: official vsce produces a VSIX with 107 files, approximately 521 KB.
 - VSIX audit: every packaged PNG is byte-identical to its canonical desktop asset; no tests or npm dependencies are packaged.
@@ -22,3 +22,5 @@ See `extensions/mochi-vscode/MANUAL-QA.md`. Do not treat the unchecked live-host
 - Plain JavaScript with JSDoc-friendly module boundaries avoids a compilation/bundling layer for v1. The code has no runtime npm dependencies.
 - Canonical generated assets are built from the repository source, rather than committing a second artwork tree.
 - Typing reactions default off and carry only an activity event, not document content or filenames.
+
+CI additionally reproduced a browser-harness resource URL error (the adapter discarded the nested media root). A failing resource-resolution test pins the fix; the adapter now preserves the base URI. Browser CI is rerunning.

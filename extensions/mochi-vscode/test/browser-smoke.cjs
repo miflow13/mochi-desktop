@@ -5,7 +5,7 @@ const extension=path.resolve(__dirname,'..');
  const browser=await chromium.launch({headless:true, executablePath:process.env.MOCHI_CHROMIUM_PATH});
  try{
  const page=await browser.newPage({viewport:{width:360,height:680},deviceScaleFactor:2});const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const api={Uri:{joinPath:(_, ...parts)=>({toString:()=> 'https://mochi.test/'+parts.join('/')})}};
+ const {browserApi:api}=require('./helpers/browser-api');
  const webview={cspSource:'https://mochi.test',asWebviewUri:u=>u};
  const html=renderWebview(webview,{toString:()=> 'https://mochi.test'},api);
  await page.addInitScript(()=>{window.messages=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.messages.push(m)});});
