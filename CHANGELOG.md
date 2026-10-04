@@ -6,6 +6,13 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ## Unreleased
 
+### Added
+
+- A **Talk to Mochi** button appears under Mochi when you hover him (beside him
+  when he sits at the bottom of the screen). It shows a little waveform and opens
+  a "coming soon" note: voice chat is planned, and Mochi does not use the
+  microphone or listen yet.
+
 ### Changed
 
 - Installed Mochi now updates from **published GitHub Releases** instead of

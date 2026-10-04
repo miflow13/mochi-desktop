@@ -22,6 +22,7 @@ from .integration import (
 )
 from .music_dance import MusicDanceMixin
 from .nameplate_controls import NameplateMixin
+from .voice_controls import VoiceControlMixin
 from .phrases import bond_dialogue_lines
 from .terminal_cowork import TerminalCoworkMixin
 from .update_controls import UpdateControlsMixin
@@ -193,6 +194,7 @@ class PresenceBuddy(
     FeedMochiMixin,
     PocketBuddyMixin,
     NameplateMixin,
+    VoiceControlMixin,
     BasePresenceBuddy,
 ):
     """Layer-shell buddy with terminal coworking, AmbiSense, music, and dialogue."""
@@ -213,6 +215,7 @@ class PresenceX11Buddy(
     FeedMochiMixin,
     PocketBuddyMixin,
     NameplateMixin,
+    VoiceControlMixin,
     BasePresenceX11Buddy,
 ):
     """X11 buddy with terminal coworking, AmbiSense, music, and dialogue."""
