@@ -1,8 +1,9 @@
 """The "Talk to Mochi" control: a placeholder for the planned voice feature.
 
 A small circular button with a five-bar waveform that appears when the
-pointer comes close to the area under Mochi. Activating it opens an honest "coming soon" panel. Nothing here touches
-a microphone, records, transcribes, or talks to any service.
+pointer comes close to the area under Mochi. Activating it opens an honest
+"coming soon" panel. Nothing here touches a microphone, records, transcribes,
+or talks to any service.
 
 Structure follows Mochi's existing overlays: a small undecorated transient
 window moved in X11/XWayland root coordinates (like the nameplate and speech
@@ -66,7 +67,7 @@ FADE_IN_SECONDS = 0.12
 FADE_OUT_SECONDS = 0.14
 COLOR_SECONDS = 0.12
 PRESSED_SCALE = 0.96
-FRAME_MS = 33  # ~30 fps is plenty for a 48 px effect
+FRAME_MS = 33  # ~30 fps is plenty for a 28 px effect
 
 IDLE_FILL = (0xFF, 0xF8, 0xF0)
 HOVER_FILL = (0xFF, 0xEB, 0xDD)
@@ -119,7 +120,9 @@ class VoiceControl:
         self._hovered = False
         self._focused = False
         self._engaged = False  # the user pressed or keyed the control itself
+        self._window_active = False
         self._pressed = False
+        self._panel_open_at_press = False
         self._key_down: int | None = None
         self._hover_started: float | None = None
         self._settle_from: tuple[float, ...] | None = None
@@ -246,6 +249,7 @@ class VoiceControl:
         self._destroyed = True
         self._stop_frames()
         self._panel.popdown()
+        self._panel.window.destroy()  # popdown() only hides it
         self.window.destroy()
 
     # Visibility and motion ---------------------------------------------
@@ -270,8 +274,14 @@ class VoiceControl:
         self._update_fill()
 
     def _sync_focus(self) -> None:
-        if not self.window.is_active():
+        active = self.window.is_active()
+        if self._window_active and not active:
+            # Focus went elsewhere: disengage, and drop a pending press, whose
+            # release would go to the other app and never reach us.
             self._engaged = False
+            self._key_down = None
+            self._set_pressed(False)
+        self._window_active = active
         focused = self._engaged and self.button.has_focus() and self.window.is_active()
         if focused == self._focused:
             return
@@ -289,21 +299,28 @@ class VoiceControl:
         return settings is None or bool(settings.props.gtk_enable_animations)
 
     def _ensure_frames(self) -> None:
+        """Render now, and keep a frame timer only while something moves."""
         if self._destroyed:
             return
-        if self._frame_source_id is None:
-            self._frame_source_id = GLib.timeout_add(FRAME_MS, self._frame)
-        self._frame()
+        if self._render():
+            if self._frame_source_id is None:
+                self._frame_source_id = GLib.timeout_add(FRAME_MS, self._on_frame)
+        else:
+            self._stop_frames()
 
     def _stop_frames(self) -> None:
         if self._frame_source_id is not None:
             GLib.source_remove(self._frame_source_id)
             self._frame_source_id = None
 
-    def _frame(self) -> bool:
-        if self._destroyed:
-            self._frame_source_id = None
-            return GLib.SOURCE_REMOVE
+    def _on_frame(self) -> bool:
+        if not self._destroyed and self._render():
+            return GLib.SOURCE_CONTINUE
+        self._frame_source_id = None
+        return GLib.SOURCE_REMOVE
+
+    def _render(self) -> bool:
+        """Apply the current state; True while another frame is needed."""
         now = time.monotonic()
         animate = self._animations_enabled()
         visible = self._visibility.visible(now=now)
@@ -369,10 +386,7 @@ class VoiceControl:
             self._heights = heights
             self.button.queue_draw()
 
-        if busy or (not visible and self.window.get_visible()):
-            return GLib.SOURCE_CONTINUE
-        self._frame_source_id = None
-        return GLib.SOURCE_REMOVE
+        return busy or (not visible and self.window.get_visible())
 
     def _update_fill(self) -> None:
         if self._panel.get_visible():
@@ -471,8 +485,11 @@ class VoiceControl:
         work_area = self._work_area(sprite)
         if work_area is None:
             return None
+        # The label sits under the drawing area, i.e. below the circle's margin.
         label_height = max(self.label.get_height(), self.label.get_preferred_size()[1].height)
-        return place_control(sprite, work_area, reserve_below=label_height, side=self._side)
+        return place_control(
+            sprite, work_area, reserve_below=MARGIN_PX + label_height, side=self._side
+        )
 
     def _control_area(self, owner_x: float, owner_y: float) -> Rect | None:
         """Where the button and its label sit (or would), in logical root px."""
@@ -541,13 +558,20 @@ class VoiceControl:
     def _on_pressed(self, _gesture, _presses: int, x: float, y: float) -> None:
         if inside_button(*self._to_button(x, y)):
             self._engaged = True
+            self._panel_open_at_press = self._panel.get_visible()
             self._set_pressed(True)
 
     def _on_released(self, _gesture, _presses: int, x: float, y: float) -> None:
         was_pressed = self._pressed
         self._set_pressed(False)
-        if was_pressed and inside_button(*self._to_button(x, y)):
-            self._on_activate()
+        if not (was_pressed and inside_button(*self._to_button(x, y))):
+            return
+        if self._panel_open_at_press and not self._panel.get_visible():
+            # Pressing moved focus off the open panel, which dismissed it
+            # before this release: the click's "close" already happened.
+            self._close_panel(restore_focus=True)
+            return
+        self._on_activate()
 
     def _to_button(self, x: float, y: float) -> tuple[float, float]:
         # The area is center-aligned, so its width is always its content width;
@@ -652,6 +676,9 @@ class VoiceControl:
         if self._panel.get_visible():
             self._panel.popdown()
         if restore_focus and self.window.get_visible():
+            # The panel had focus, which disengaged the control; the user is
+            # being handed back to it, so keep it shown while it is focused.
+            self._engaged = True
             self.button.grab_focus()
             self.window.present()
 

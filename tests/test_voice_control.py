@@ -154,3 +154,109 @@ def test_proximity_zone_is_relative_to_mochi_and_starts_under_him(control) -> No
     # Relative to Mochi's window: it starts just under him (12 px gap minus the
     # 24 px padding) and does not reach his middle.
     assert height / 2 < zone.y <= height
+
+
+def test_returning_focus_from_the_panel_keeps_the_control_shown(control) -> None:
+    control._panel._dismiss_on_focus_loss = False
+    control.set_pointer_near(True)
+    _pump(0.1)
+    control.toggle_placeholder()
+    assert _pump_until(lambda: control._panel.window.is_active())
+    control.set_pointer_near(False)  # only the panel keeps it shown now
+
+    control._on_panel_key(None, Gdk.KEY_Escape, 0, 0)  # focus back to the control
+    _pump(0.9)  # longer than the grace period and fade-out
+
+    assert control._focused
+    assert control.window.get_visible()
+
+
+def test_a_press_that_dismissed_the_panel_does_not_reopen_it(control) -> None:
+    control.toggle_placeholder()
+    control._on_pressed(None, 1, CENTER, CENTER)
+    # Focus moved to the control on press, so MenuWindow's outside-click
+    # dismissal closed the panel before the release arrives.
+    control._panel.popdown()
+    control._on_released(None, 1, CENTER, CENTER)
+
+    assert not control._panel.get_visible()
+    assert control.activations == []  # no toggle, which would reopen it
+
+
+def test_a_press_on_the_still_open_panel_activates(control) -> None:
+    control._panel._dismiss_on_focus_loss = False
+    control.toggle_placeholder()
+    control._on_pressed(None, 1, CENTER, CENTER)
+    control._on_released(None, 1, CENTER, CENTER)
+
+    assert control.activations == [1]  # the seam toggles it closed
+
+
+def test_losing_focus_cancels_a_held_key(control) -> None:
+    control.set_pointer_near(True)
+    control.window.present()
+    assert _pump_until(control.window.is_active)
+    control._on_key_pressed(None, Gdk.KEY_space, 0, 0)
+    assert control._pressed
+
+    control._owner.present()  # the user switches away with Space held
+    assert _pump_until(lambda: not control.window.is_active())
+    control._on_key_released(None, Gdk.KEY_space, 0, 0)  # e.g. a stale release
+
+    assert not control._pressed
+    assert control.activations == []
+
+
+def test_only_one_frame_timer_is_ever_live(control, monkeypatch) -> None:
+    from mochi.presence import voice_control
+
+    added: list[int] = []
+    real_timeout_add = GLib.timeout_add
+
+    def recording_timeout_add(*args):
+        source_id = real_timeout_add(*args)
+        added.append(source_id)
+        return source_id
+
+    monkeypatch.setattr(voice_control.GLib, "timeout_add", recording_timeout_add)
+    settings = Gtk.Settings.get_default()
+    animations = settings.props.gtk_enable_animations
+    settings.props.gtk_enable_animations = False
+    try:
+        # Reduced motion: showing needs no further frames, then hovering the
+        # circle waits out the label delay and does.
+        control.set_pet_hovered(True)
+        control._set_hovered(True)
+        context = GLib.MainContext.default()
+        live = [i for i in added if (s := context.find_source_by_id(i)) and not s.is_destroyed()]
+        assert len(live) <= 1
+        assert live == ([control._frame_source_id] if control._frame_source_id else [])
+    finally:
+        settings.props.gtk_enable_animations = animations
+
+
+def test_destroy_also_destroys_the_panel_window(control) -> None:
+    panel_window = control._panel.window
+    control.toggle_placeholder()
+
+    control.destroy()
+
+    assert panel_window not in Gtk.Window.list_toplevels()
+
+
+def test_under_reserves_room_for_the_margin_and_the_label(control, monkeypatch) -> None:
+    from mochi.presence import voice_control
+
+    seen = {}
+    real_place_control = voice_control.place_control
+
+    def capture(sprite, work_area, *, reserve_below, side):
+        seen["reserve_below"] = reserve_below
+        return real_place_control(sprite, work_area, reserve_below=reserve_below, side=side)
+
+    monkeypatch.setattr(voice_control, "place_control", capture)
+    control._placement_for(100.0, 100.0)
+
+    label_height = control.label.get_preferred_size()[1].height
+    assert label_height > 0  # measured before the label is ever shown
+    assert seen["reserve_below"] == MARGIN_PX + label_height

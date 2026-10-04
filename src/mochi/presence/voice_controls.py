@@ -5,8 +5,10 @@ walking Mochi piggyback on `_tick()`; cleanup happens in `shutdown_presence()`.
 The control appears when the pointer comes close to the area under Mochi. Mochi
 runs on XWayland and cannot see the pointer outside its own windows, so the
 optional GNOME helper watches a zone for it (see ``pointer_proximity``). Without
-a helper that supports this, hovering Mochi himself shows the control instead. The control owns its own short-lived frame
-timer, which runs only while it is fading, animating, or in its grace period.
+a helper that supports this, hovering Mochi himself shows the control instead.
+The control owns its own short-lived frame timer, which runs only while it is
+fading, animating, or in its grace period. X11/XWayland only: on the
+layer-shell path the control is not created.
 """
 
 from __future__ import annotations
@@ -32,7 +34,9 @@ class VoiceControlMixin:
         self._voice_control_suppressed = False
         self._voice_proximity_countdown = 0
         super().__init__(*args, **kwargs)
-        if self._preview_mode:
+        # Positioning uses X11 root coordinates; a layer-shell (native Wayland)
+        # buddy has none, so the control would map detached from Mochi.
+        if self._preview_mode or getattr(self._placement, "layer_shell_enabled", False):
             return
         self._voice_control = VoiceControl(
             owner=self._window,
