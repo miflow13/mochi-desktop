@@ -6,6 +6,15 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ## Unreleased
 
+### Added
+
+- A small **Talk to Mochi** button appears when your pointer comes close to the
+  area under Mochi (beside him when he sits at the bottom of the screen). It
+  shows a little waveform and opens a "coming soon" note: voice chat is planned,
+  and Mochi does not use the microphone or listen yet. Detecting the pointer
+  near Mochi needs the GNOME helper extension (update it and log out and back in
+  once); without it, the button appears when you hover Mochi.
+
 ### Changed
 
 - Terminal coworking has new artwork: Mochi takes out a little laptop, types
