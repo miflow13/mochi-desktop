@@ -100,14 +100,26 @@ def test_hover_animation_stops_when_hidden(control) -> None:
     assert control._frame_source_id is None
 
 
+def _pump_until(condition, timeout: float = 1.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        _pump(0.02)
+    return condition()
+
+
 def test_open_panel_stops_the_hover_animation(control) -> None:
+    # Xvfb has no window manager to activate the panel, so MenuWindow's
+    # outside-click dismissal would close it; that behavior is not under test.
+    control._panel._dismiss_on_focus_loss = False
     control.set_pet_hovered(True)
     control._set_hovered(True)
     _pump(0.1)
     control.toggle_placeholder()
-    _pump(0.2)
 
-    assert control._frame_source_id is None
+    assert _pump_until(lambda: control._frame_source_id is None)
+    assert control._panel.get_visible()
 
 
 def test_destroy_removes_the_frame_timer(control) -> None:
