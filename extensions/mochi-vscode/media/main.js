@@ -65,7 +65,7 @@
   else if(name==='reset'){model.stopTyping(now());model.state.position={x:.5,y:.8};}
   save();paint();start();
  }
- const coordinate=event=>{const b=canvas.getBoundingClientRect();return{x:event.clientX-b.left,y:event.clientY-b.top};};
+ const coordinate=event=>{const b=canvas.getBoundingClientRect();return{x:(event.clientX-b.left)*width/b.width,y:(event.clientY-b.top)*height/b.height};};
  canvas.addEventListener('pointerdown',event=>{
   if(event.button!==0||!event.isPrimary||!model||press)return;
   const point=coordinate(event);

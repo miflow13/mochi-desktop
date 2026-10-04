@@ -28,10 +28,10 @@ const extension=path.resolve(__dirname,'..');
  // Real alpha pixels locate Mochi independently of transparent cell padding.
  const point=await page.evaluate(()=>{
   const c=document.querySelector('#pet'),ctx=c.getContext('2d'),d=ctx.getImageData(0,0,c.width,c.height),r=c.getBoundingClientRect();
-  for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(d.data[(y*c.width+x)*4+3]>200)return{x:r.x+x*r.width/c.width,y:r.y+y*r.height/c.height};
+  for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(d.data[(y*c.width+x)*4+3]>200)return{x:r.x+(x+.5)*r.width/c.width,y:r.y+(y+.5)*r.height/c.height};
   throw Error('No sprite pixels rendered');
  });
- await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x-35,point.y-20,{steps:8});await page.mouse.move(point.x+35,point.y-25,{steps:8});await page.mouse.up();
+ await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x-35,point.y-20,{steps:8});await page.waitForFunction(()=>document.querySelector('#pet').classList.contains('held'));await page.mouse.move(point.x+35,point.y-25,{steps:8});await page.mouse.up();
  await page.waitForFunction(()=>document.querySelector('#status').textContent==='Just hanging out.');
  assert.ok(await page.evaluate(()=>window.messages.some(m=>m.type==='state'&&m.state.position.x!==.5)),'drag persists changed placement');
  await page.locator('#reset-button').click();

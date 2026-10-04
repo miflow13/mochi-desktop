@@ -13,7 +13,7 @@ async function fixture(options={}){
  for(const name of ['app','pet','stage','status','sleep-button','pet-button','reset-button'])elements[name]=new Element();
  const surface=createCanvas(328,300),pet=elements.pet;let capture=null;
  for(const name of ['width','height'])Object.defineProperty(pet,name,{get:()=>surface[name],set:value=>{surface[name]=value;}});
- pet.getContext=()=>surface.getContext('2d');pet.getBoundingClientRect=()=>({left:0,top:0,width:328,height:300});
+ pet.getContext=()=>surface.getContext('2d');pet.getBoundingClientRect=()=>({left:0,top:0,width:options.cssWidth||328,height:options.cssHeight||300});
  pet.hasPointerCapture=id=>capture===id;pet.setPointerCapture=id=>{capture=id;};pet.releasePointerCapture=()=>{capture=null;};
  elements.stage.getBoundingClientRect=()=>({width:328,height:300});
  elements.app.dataset={manifest:JSON.stringify(manifest),assets:path.join(extension,'media/mochi')};
@@ -57,4 +57,11 @@ test('reset position interrupts active typing before returning to idle',async()=
 
 test('early visibility does not announce readiness before the PNG set finishes loading',async()=>{
  const f=await fixture({earlyVisibility:true});assert.equal(f.earlyReady,false);assert.ok(f.messages.some(m=>m.type==='ready'));
+});
+
+test('pointer hit testing maps CSS-scaled canvas coordinates to rendered pixels',async()=>{
+ const f=await fixture({cssWidth:164,cssHeight:150});f.init();const p=f.point(),pet=f.elements.pet;
+ pet.emit('pointerdown',{button:0,isPrimary:true,pointerId:2,clientX:(p.x+.5)/2,clientY:(p.y+.5)/2});
+ pet.emit('pointermove',{pointerId:2,clientX:(p.x+.5)/2+15,clientY:(p.y+.5)/2});f.advance(150);
+ assert.equal(f.status(),'Wheee!');pet.emit('pointercancel');
 });

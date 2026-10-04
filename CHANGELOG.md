@@ -176,4 +176,3 @@ Feature summary for the earlier alpha line.
 ## 0.1 — Exists
 
 Initial desktop-companion foundation: core windowing, sprite animation, movement, interactions, and the first persistent character behaviors.
-
