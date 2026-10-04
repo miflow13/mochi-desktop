@@ -1,0 +1,18 @@
+:root {color-scheme:light dark;font-family:var(--vscode-font-family,system-ui,sans-serif);color:var(--vscode-foreground,#e8e4df);background:var(--vscode-sideBar-background,#202322);}
+* {box-sizing:border-box;}
+body {margin:0;padding:16px;}
+main {max-width:560px;margin:0 auto;}
+h1 {margin:0;font-size:20px;font-weight:600;letter-spacing:-.4px;}
+header p {margin:8px 0 16px;color:var(--vscode-descriptionForeground,#b1b8b3);font-size:12px;line-height:1.5;}
+#stage {position:relative;width:100%;height:clamp(180px,52vh,420px);border:1px solid var(--vscode-widget-border,#404a43);border-radius:16px;background:var(--vscode-editor-background,#191e1b);overflow:hidden;}
+canvas {display:block;width:100%;height:100%;touch-action:none;image-rendering:pixelated;cursor:grab;}
+canvas.held {cursor:grabbing;}
+canvas:focus-visible {outline:2px solid var(--vscode-focusBorder,#97c99b);outline-offset:-4px;border-radius:14px;}
+.controls {display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+button {border:1px solid var(--vscode-button-border,transparent);border-radius:7px;padding:7px 11px;min-height:32px;background:var(--vscode-button-secondaryBackground,#35453b);color:var(--vscode-button-secondaryForeground,#edf4ee);font:inherit;font-size:12px;cursor:pointer;}
+button:hover {background:var(--vscode-button-secondaryHoverBackground,#42594a);}
+button:focus-visible {outline:2px solid var(--vscode-focusBorder,#97c99b);outline-offset:2px;}
+button:disabled {opacity:.6;cursor:default;}
+#status {font-size:12px;line-height:1.5;margin:16px 0 5px;min-height:18px;}
+#hint {font-size:11px;line-height:1.6;margin:0;color:var(--vscode-descriptionForeground,#b1b8b3);}
+@media (forced-colors:active) {#stage,button {border:1px solid CanvasText;}}

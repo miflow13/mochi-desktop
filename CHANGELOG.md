@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Mochi VS Code
+
+- Add a standalone VS Code sidebar companion with canonical desktop animations, petting, directional dragging, sleep/wake, persistent placement, reduced motion, and optional privacy-preserving typing reactions.
+- Add extension tests, asset validation and a VSIX packaging workflow.
+
+
 Notable user-facing changes to Mochi are tracked here.
 
 Mochi is still in early public alpha, so behavior, configuration, and compatibility details may change between prereleases.
@@ -170,3 +176,4 @@ Feature summary for the earlier alpha line.
 ## 0.1 — Exists
 
 Initial desktop-companion foundation: core windowing, sprite animation, movement, interactions, and the first persistent character behaviors.
+

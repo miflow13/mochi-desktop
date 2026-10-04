@@ -1,0 +1,35 @@
+name: Mochi VS Code
+on:
+  push:
+    branches: [main, feat/mochi-vscode-v1]
+    paths: ['extensions/mochi-vscode/**', 'assets/mochi/**', 'src/mochi/sprites.py', 'src/mochi/interaction_tuning.py', '.github/workflows/vscode-extension.yml']
+  pull_request:
+    paths: ['extensions/mochi-vscode/**', 'assets/mochi/**', 'src/mochi/sprites.py', 'src/mochi/interaction_tuning.py', '.github/workflows/vscode-extension.yml']
+permissions:
+  contents: read
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: extensions/mochi-vscode
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/mochi-vscode/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm test
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mochi-vscode-v1
+          path: extensions/mochi-vscode/*.vsix
+          if-no-files-found: error

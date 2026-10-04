@@ -1,0 +1,112 @@
+{
+  "name": "mochi-vscode",
+  "displayName": "Mochi",
+  "description": "A little pixel companion for your editor, using Mochi Desktop's original animations.",
+  "version": "1.0.0",
+  "publisher": "miflow13",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/miflow13/mochi-desktop.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "mochi",
+    "pet",
+    "companion",
+    "pixel art"
+  ],
+  "main": "./src/extension.js",
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onView:mochi.companion"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": {
+      "supported": true
+    }
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mochi",
+          "title": "Mochi",
+          "icon": "media/mochi-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "mochi": [
+        {
+          "type": "webview",
+          "id": "mochi.companion",
+          "name": "Mochi"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "mochi.show",
+        "title": "Mochi: Show"
+      },
+      {
+        "command": "mochi.pet",
+        "title": "Mochi: Pet"
+      },
+      {
+        "command": "mochi.sleep",
+        "title": "Mochi: Sleep / Wake"
+      },
+      {
+        "command": "mochi.resetPosition",
+        "title": "Mochi: Reset Position"
+      }
+    ],
+    "configuration": {
+      "title": "Mochi",
+      "properties": {
+        "mochi.size": {
+          "type": "number",
+          "default": 160,
+          "minimum": 96,
+          "maximum": 256,
+          "description": "Mochi's sprite canvas size in logical pixels."
+        },
+        "mochi.typingReactions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Let Mochi type alongside you. Only activity timing is used; document content is never sent."
+        },
+        "mochi.reducedMotion": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use still poses instead of animated sprites. System reduced-motion preferences also apply."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build-assets.js",
+    "test": "node --test test/*.test.js",
+    "check": "node scripts/check.js",
+    "vscode:prepublish": "npm run build && npm run check",
+    "package": "vsce package --no-dependencies",
+    "test:browser": "node test/browser-smoke.cjs"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "0.1.80",
+    "@vscode/vsce": "4.0.0",
+    "playwright": "1.62.1"
+  }
+}
