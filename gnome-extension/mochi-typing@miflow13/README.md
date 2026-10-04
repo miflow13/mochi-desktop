@@ -11,6 +11,11 @@ It currently provides:
 - `YouTubeFocusedStarted` / `YouTubeFocusedStopped` — a privacy-reduced focused-YouTube boolean used by watch-along behavior.
 - `AppCategoryChanged` — a coarse category only: `vscode`, `editor`, `terminal`, `browser`, `media`, `pixel_art`, or `unknown`.
 - `EmoteCatalogueRequested` — zero-payload request from the user-facing catalogue shortcut.
+- `PointerNearChanged` — a yes/no answer to "is the pointer near the area under Mochi?" for the "Talk to Mochi" control.
+  Mochi sends a zone relative to its own window with `SetProximityZone` (cleared with `ClearProximityZone`); the
+  extension compares it with the pointer inside GNOME Shell, about ten times a second and only while a zone is set,
+  and sends back only the boolean. Mochi needs this because, as an XWayland window on a Wayland session, it cannot
+  see the pointer outside its own windows. Without this extension Mochi falls back to showing the control on hover.
 
 Presence uses Mutter's server-global idle monitor. Typing inspects only the broad input-device type needed to distinguish keyboard activity. File browsing and app category are classified inside GNOME Shell from application identifiers and reduced to semantic state before reaching Mochi. General app-category detection never sends application IDs or window titles. The extension never stores or transmits key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, typed text, pointer coordinates, file names, folder names, paths, or application content.
 

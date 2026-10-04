@@ -1,7 +1,7 @@
 """The "Talk to Mochi" control: a placeholder for the planned voice feature.
 
-A 48 px circular button with a five-bar waveform that appears beside Mochi on
-hover. Activating it opens an honest "coming soon" panel. Nothing here touches
+A small circular button with a five-bar waveform that appears when the
+pointer comes close to the area under Mochi. Activating it opens an honest "coming soon" panel. Nothing here touches
 a microphone, records, transcribes, or talks to any service.
 
 Structure follows Mochi's existing overlays: a small undecorated transient
@@ -32,17 +32,17 @@ from gi.repository import Gdk, GLib, Graphene, Gtk  # noqa: E402
 from mochi.menu_window import MenuWindow
 from mochi.sprites import ANIMATIONS
 from mochi.voice_control_model import (
-    BAR_CENTERS_X,
-    BAR_WIDTH,
     BUTTON_RADIUS,
     BUTTON_SIZE,
     IDLE_HEIGHTS,
     SETTLE_MS,
     Rect,
     VisibilityTracker,
+    bar_geometry,
     bar_heights_at,
     inside_button,
     place_control,
+    inflate,
     place_panel,
     settle_heights,
 )
@@ -60,7 +60,7 @@ DESCRIPTION_TEXT = "Voice chat is coming soon."
 PANEL_BODY_TEXT = "Voice chat is coming soon. Mochi can’t hear you yet."
 
 # Room around the circle for the 3 px gap + 2 px focus ring and the shadow.
-MARGIN_PX = 14
+MARGIN_PX = 8
 LABEL_DELAY_SECONDS = 0.45
 FADE_IN_SECONDS = 0.12
 FADE_OUT_SECONDS = 0.14
@@ -82,9 +82,9 @@ window.mochi-voice-window { background: transparent; }
     background: #FFF8F0;
     color: #513A45;
     border: 1px solid #D8C5BA;
-    border-radius: 8px;
-    padding: 6px 8px;
-    font-size: 13px;
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 11px;
     font-weight: 500;
 }
 .mochi-voice-panel { background: #FFF8F0; border-radius: 16px; padding: 16px; }
@@ -205,8 +205,21 @@ class VoiceControl:
 
     # Public API used by VoiceControlMixin -------------------------------
 
+    def set_pointer_near(self, near: bool) -> None:
+        """The GNOME helper saw the pointer enter or leave the proximity zone."""
+        self._set_source("proximity", near)
+
     def set_pet_hovered(self, hovered: bool) -> None:
+        """Fallback trigger when no helper can report pointer proximity."""
         self._set_source("pet_hover", hovered)
+
+    def proximity_zone(self, owner_x: float, owner_y: float) -> Rect | None:
+        """The zone to watch, relative to Mochi's window origin (logical px)."""
+        area = self._control_area(owner_x, owner_y)
+        if area is None:
+            return None
+        zone = inflate(area)
+        return Rect(zone.x - owner_x, zone.y - owner_y, zone.width, zone.height)
 
     def set_suppressed(self, suppressed: bool) -> None:
         """Hide during drags and menus; come back if interaction remains."""
@@ -392,8 +405,8 @@ class VoiceControl:
             context.translate(-center_x, -center_y)
 
         # Soft shadow: a few widening translucent rings, offset 3 px down.
-        for spread, alpha in ((6, 0.03), (4, 0.04), (2, 0.05), (0, 0.04)):
-            context.arc(center_x, center_y + 3, BUTTON_RADIUS + spread, 0, 2 * math.pi)
+        for spread, alpha in ((3, 0.03), (2, 0.04), (1, 0.05), (0, 0.04)):
+            context.arc(center_x, center_y + 2, BUTTON_RADIUS + spread, 0, 2 * math.pi)
             context.set_source_rgba(*_rgb(SHADOW), alpha)
             context.fill()
 
@@ -406,8 +419,8 @@ class VoiceControl:
 
         origin_x = center_x - BUTTON_RADIUS
         context.set_source_rgb(*_rgb(INK))
-        for bar_x, bar_height in zip(BAR_CENTERS_X, self._heights):
-            _rounded_bar(context, origin_x + bar_x, center_y, BAR_WIDTH, bar_height)
+        for bar_x, bar_width, bar_height in bar_geometry(self._heights):
+            _rounded_bar(context, origin_x + bar_x, center_y, bar_width, bar_height)
         context.restore()
 
         if self._focused and self.window.get_focus_visible():
@@ -452,24 +465,39 @@ class VoiceControl:
 
     # Placement -------------------------------------------------------------
 
+    def _placement_for(self, owner_x: float, owner_y: float):
+        visible_x, visible_y, visible_w, visible_h = self._sprite_bounds()
+        sprite = Rect(owner_x + visible_x, owner_y + visible_y, visible_w, visible_h)
+        work_area = self._work_area(sprite)
+        if work_area is None:
+            return None
+        label_height = max(self.label.get_height(), self.label.get_preferred_size()[1].height)
+        return place_control(sprite, work_area, reserve_below=label_height, side=self._side)
+
+    def _control_area(self, owner_x: float, owner_y: float) -> Rect | None:
+        """Where the button and its label sit (or would), in logical root px."""
+        placement = self._placement_for(owner_x, owner_y)
+        if placement is None:
+            return None
+        label_size = self.label.get_preferred_size()[1]
+        width = max(BUTTON_SIZE, label_size.width)
+        return Rect(
+            placement.x + BUTTON_SIZE / 2 - width / 2,
+            placement.y,
+            width,
+            BUTTON_SIZE + MARGIN_PX + label_size.height,
+        )
+
     def _reposition(self) -> None:
         owner_position = get_window_position(self._owner)
         if owner_position is None:
             return
         scale = _surface_scale(self._owner)
-        owner_x, owner_y = owner_position[0] / scale, owner_position[1] / scale
-        visible_x, visible_y, visible_w, visible_h = self._sprite_bounds()
-        sprite = Rect(owner_x + visible_x, owner_y + visible_y, visible_w, visible_h)
-        work_area = self._work_area(sprite)
-        if work_area is None:
+        placement = self._placement_for(owner_position[0] / scale, owner_position[1] / scale)
+        if placement is None:
             return
-
-        window_width = max(self.window.get_width(), self.button.get_width(), 1)
-        label_height = max(self.label.get_height(), 0)
-        placement = place_control(
-            sprite, work_area, reserve_below=label_height, side=self._side
-        )
         self._side = placement.side
+        window_width = max(self.window.get_width(), self.button.get_width(), 1)
         x = placement.x - (window_width - BUTTON_SIZE) / 2
         y = placement.y - MARGIN_PX
         move_window(self.window, round(x * scale), round(y * scale))

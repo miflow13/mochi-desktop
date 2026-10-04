@@ -10,13 +10,17 @@ import math
 from dataclasses import dataclass
 
 
-BUTTON_SIZE = 48
+BUTTON_SIZE = 28
 BUTTON_RADIUS = BUTTON_SIZE / 2
 GAP_PX = 12
 INSET_PX = 8
+PROXIMITY_PX = 24
 
+# Waveform geometry is specified on a 48-unit button and drawn scaled.
+DESIGN_SIZE = 48
 BAR_CENTERS_X = (14.0, 19.0, 24.0, 29.0, 34.0)
 BAR_WIDTH = 3.0
+MIN_BAR_WIDTH = 2.0
 IDLE_HEIGHTS = (6.0, 12.0, 20.0, 12.0, 6.0)
 
 HOVER_LOOP_MS = 960
@@ -54,9 +58,31 @@ def settle_heights(current: tuple[float, ...], fraction: float) -> tuple[float, 
     return _mix(current, IDLE_HEIGHTS, _ease(min(max(fraction, 0.0), 1.0)))
 
 
+def bar_geometry(heights: tuple[float, ...]) -> list[tuple[float, float, float]]:
+    """(center x, width, height) of each bar on the BUTTON_SIZE button."""
+    scale = BUTTON_SIZE / DESIGN_SIZE
+    width = max(MIN_BAR_WIDTH, round(BAR_WIDTH * scale))
+    return [(x * scale, float(width), h * scale) for x, h in zip(BAR_CENTERS_X, heights)]
+
+
 def inside_button(x: float, y: float) -> bool:
-    """True when a point in the 48 x 48 box lies on the visible circle."""
+    """True when a point in the button's square box lies on the visible circle."""
     return math.hypot(x - BUTTON_RADIUS, y - BUTTON_RADIUS) <= BUTTON_RADIUS
+
+
+def inflate(rect: "Rect", padding: float = PROXIMITY_PX) -> "Rect":
+    """The proximity zone around the control's area.
+
+    The control sits GAP_PX (12) below Mochi, so 24 px of padding also covers
+    the strip just under him: approaching from Mochi counts as getting close,
+    while hovering Mochi himself does not.
+    """
+    return Rect(
+        rect.x - padding,
+        rect.y - padding,
+        rect.width + 2 * padding,
+        rect.height + 2 * padding,
+    )
 
 
 @dataclass(frozen=True)
@@ -73,6 +99,9 @@ class Rect:
     @property
     def bottom(self) -> float:
         return self.y + self.height
+
+    def contains(self, x: float, y: float) -> bool:
+        return self.x <= x <= self.right and self.y <= y <= self.bottom
 
 
 @dataclass(frozen=True)

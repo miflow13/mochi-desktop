@@ -13,12 +13,13 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from mochi.presence.voice_control import MARGIN_PX, VoiceControl  # noqa: E402
+from mochi.voice_control_model import BUTTON_RADIUS  # noqa: E402
 
 pytestmark = pytest.mark.skipif(
     Gdk.Display.get_default() is None, reason="needs a display (run under xvfb-run)"
 )
 
-CENTER = MARGIN_PX + 24  # the circle's center in the button's coordinates
+CENTER = MARGIN_PX + BUTTON_RADIUS  # the circle's center in the button's coordinates
 
 
 def _pump(seconds: float) -> None:
@@ -45,7 +46,7 @@ def control():
 
 def test_release_inside_activates_once(control) -> None:
     control._on_pressed(None, 1, CENTER, CENTER)
-    control._on_released(None, 1, CENTER + 5, CENTER)
+    control._on_released(None, 1, CENTER + 3, CENTER)
 
     assert control.activations == [1]
 
@@ -87,13 +88,13 @@ def test_placeholder_toggles_and_escape_closes(control) -> None:
 
 
 def test_hover_animation_stops_when_hidden(control) -> None:
-    control.set_pet_hovered(True)
+    control.set_pointer_near(True)
     control._set_hovered(True)
     _pump(0.2)
     assert control._frame_source_id is not None  # waveform is animating
 
     control._set_hovered(False)
-    control.set_pet_hovered(False)
+    control.set_pointer_near(False)
     _pump(0.9)  # 350 ms grace + 140 ms fade + 160 ms settle, with slack
 
     assert not control.window.get_visible()
@@ -113,7 +114,7 @@ def test_open_panel_stops_the_hover_animation(control) -> None:
     # Xvfb has no window manager to activate the panel, so MenuWindow's
     # outside-click dismissal would close it; that behavior is not under test.
     control._panel._dismiss_on_focus_loss = False
-    control.set_pet_hovered(True)
+    control.set_pointer_near(True)
     control._set_hovered(True)
     _pump(0.1)
     control.toggle_placeholder()
@@ -123,10 +124,33 @@ def test_open_panel_stops_the_hover_animation(control) -> None:
 
 
 def test_destroy_removes_the_frame_timer(control) -> None:
-    control.set_pet_hovered(True)
+    control.set_pointer_near(True)
     control._set_hovered(True)
     _pump(0.1)
 
     control.destroy()
 
     assert control._frame_source_id is None
+
+
+def test_proximity_signal_shows_and_hides_the_control(control) -> None:
+    control.set_pointer_near(True)
+    _pump(0.2)
+    assert control.window.get_visible()
+
+    control.set_pointer_near(False)
+    _pump(0.9)
+    assert not control.window.get_visible()
+    assert control._frame_source_id is None
+
+
+def test_proximity_zone_is_relative_to_mochi_and_starts_under_him(control) -> None:
+    _pump(0.2)  # let the owner window get a size
+    height = control._owner.get_height()
+
+    zone = control.proximity_zone(500.0, 300.0)
+
+    assert zone is not None
+    # Relative to Mochi's window: it starts just under him (12 px gap minus the
+    # 24 px padding) and does not reach his middle.
+    assert height / 2 < zone.y <= height

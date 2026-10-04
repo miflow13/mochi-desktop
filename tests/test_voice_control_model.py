@@ -5,14 +5,17 @@ from __future__ import annotations
 import pytest
 
 from mochi.voice_control_model import (
+    BUTTON_RADIUS,
     BUTTON_SIZE,
     HOVER_LOOP_MS,
     IDLE_HEIGHTS,
     Rect,
     VisibilityTracker,
+    bar_geometry,
     bar_heights_at,
     inside_button,
     place_control,
+    inflate,
     place_panel,
     settle_heights,
 )
@@ -51,11 +54,27 @@ def test_settle_starts_at_the_current_pose_and_ends_idle() -> None:
     assert settle_heights(current, 2.0) == pytest.approx(IDLE_HEIGHTS)
 
 
+def test_the_control_is_small() -> None:
+    assert BUTTON_SIZE == 28
+
+
 def test_press_counts_only_inside_the_visible_circle() -> None:
-    assert inside_button(24, 24)
-    assert inside_button(24, 1)
-    assert not inside_button(2, 2)  # transparent corner of the 48 x 48 box
-    assert not inside_button(60, 24)
+    center = BUTTON_RADIUS
+    assert inside_button(center, center)
+    assert inside_button(center, 1)
+    assert not inside_button(1, 1)  # transparent corner of the square box
+    assert not inside_button(BUTTON_SIZE + 6, center)
+
+
+def test_waveform_keeps_the_design_proportions_at_the_smaller_size() -> None:
+    # The spec draws on a 48-unit button; the bars scale with the button and
+    # stay at least 2 px wide so they remain crisp.
+    bars = bar_geometry((6.0, 12.0, 20.0, 12.0, 6.0))
+
+    centers = [x for x, _width, _height in bars]
+    assert centers == pytest.approx([c * BUTTON_SIZE / 48 for c in (14, 19, 24, 29, 34)])
+    assert all(width == 2.0 for _x, width, _height in bars)
+    assert bars[2][2] == pytest.approx(20 * BUTTON_SIZE / 48)
 
 
 WORK = Rect(0, 0, 1920, 1080)
@@ -139,7 +158,7 @@ def test_panel_opens_below_the_button_with_a_10px_gap() -> None:
 
     x, y = place_panel(button, (248, 150), WORK)
 
-    assert (x, y) == (900 + 24 - 124, 600 + 48 + 10)
+    assert (x, y) == (900 + BUTTON_RADIUS - 124, 600 + BUTTON_SIZE + 10)
 
 
 def test_panel_turns_toward_free_space_near_the_bottom_edge() -> None:
@@ -147,7 +166,7 @@ def test_panel_turns_toward_free_space_near_the_bottom_edge() -> None:
 
     x, y = place_panel(button, (248, 150), WORK)
 
-    assert x == 900 + 48 + 10  # right of the button
+    assert x == 900 + BUTTON_SIZE + 10  # right of the button
     assert 8 <= y and y + 150 <= 1080 - 8
 
 
@@ -157,3 +176,24 @@ def test_panel_goes_left_at_the_bottom_right_corner() -> None:
     x, _y = place_panel(button, (248, 150), WORK)
 
     assert x == 1860 - 10 - 248
+
+
+def test_the_proximity_zone_pads_the_control_area() -> None:
+    zone = inflate(Rect(950, 500, 80, 50))  # button + label area under Mochi
+
+    assert zone.contains(990, 520)
+    assert zone.contains(950 - 23, 500 - 23)  # inside the 24 px padding
+    assert not zone.contains(950 - 30, 520)
+    assert not zone.contains(990, 500 + 50 + 30)
+
+
+def test_the_padding_reaches_up_to_mochi_across_the_gap() -> None:
+    sprite = Rect(900, 400, 100, 90)
+    placement = place_control(sprite, WORK)
+    control = Rect(placement.x, placement.y, BUTTON_SIZE, BUTTON_SIZE)
+
+    zone = inflate(control)
+    # Just under Mochi's bottom edge, above the button: already "close".
+    assert zone.contains(950, sprite.bottom + 2)
+    # Over Mochi's middle: not close, so hovering him does not show it.
+    assert not zone.contains(950, sprite.y + sprite.height / 2)

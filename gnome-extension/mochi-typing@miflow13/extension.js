@@ -22,6 +22,9 @@ const APP_CATEGORY_SIGNAL_NAME = 'AppCategoryChanged';
 const DEVELOPER_MENU_SIGNAL_NAME = 'DeveloperMenuRequested';
 const DEVELOPER_MENU_KEYBINDING = 'developer-menu-shortcut';
 const EMOTE_CATALOGUE_SIGNAL_NAME = 'EmoteCatalogueRequested';
+const POINTER_NEAR_SIGNAL_NAME = 'PointerNearChanged';
+const PROXIMITY_POLL_MS = 100;
+const MOCHI_APP_IDS = ['io.github.mochi_desktop.Mochi', 'io.github.mochi_desktop.Mochi.Preview'];
 const EMOTE_CATALOGUE_KEYBINDING = 'emote-catalogue-shortcut';
 
 // These are application identifiers only. Window titles, folder names, file
@@ -133,6 +136,9 @@ export default class MochiTypingActivityExtension extends Extension {
     enable() {
         this._connection = Gio.DBus.session;
         this._nameReady = false;
+        this._proximityZone = null;
+        this._proximitySourceId = 0;
+        this._pointerNear = false;
         this._pollSourceId = 0;
         this._lastInputEventAtMs = null;
         this._lastInputWasKeyboard = false;
@@ -205,6 +211,14 @@ export default class MochiTypingActivityExtension extends Extension {
         // obtain one privacy-reduced snapshot without waiting for a transition.
         this._dbusObject = Gio.DBusExportedObject.wrapJSObject(
             `<node><interface name="${INTERFACE_NAME}">
+                <method name="SetProximityZone">
+                    <arg type="i" direction="in" name="x"/>
+                    <arg type="i" direction="in" name="y"/>
+                    <arg type="i" direction="in" name="width"/>
+                    <arg type="i" direction="in" name="height"/>
+                    <arg type="i" direction="in" name="ownerWidth"/>
+                </method>
+                <method name="ClearProximityZone"/>
                 <method name="GetState">
                     <arg type="b" direction="out" name="idle"/>
                     <arg type="b" direction="out" name="fileBrowsing"/>
@@ -254,6 +268,79 @@ export default class MochiTypingActivityExtension extends Extension {
         );
 
         this._armPresenceIdleWatch();
+    }
+
+    // Pointer proximity for Mochi's "Talk to Mochi" control. Mochi runs on
+    // XWayland and cannot see the pointer outside its own windows, so it sends
+    // a zone relative to its buddy window and receives only a boolean back.
+    // Pointer coordinates never leave GNOME Shell.
+    SetProximityZone(x, y, width, height, ownerWidth) {
+        this._proximityZone = {x, y, width, height, ownerWidth: Math.max(1, ownerWidth)};
+        if (!this._proximitySourceId) {
+            this._proximitySourceId = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT,
+                PROXIMITY_POLL_MS,
+                () => {
+                    this._sampleProximity();
+                    return GLib.SOURCE_CONTINUE;
+                },
+            );
+        }
+        this._sampleProximity();
+    }
+
+    ClearProximityZone() {
+        this._proximityZone = null;
+        if (this._proximitySourceId) {
+            GLib.Source.remove(this._proximitySourceId);
+            this._proximitySourceId = 0;
+        }
+        this._setPointerNear(false);
+    }
+
+    _mochiBuddyWindow() {
+        // The buddy is Mochi's only dock-type window; bubbles and menus are not.
+        return global.get_window_actors()
+            .map(actor => actor.meta_window)
+            .find(window =>
+                MOCHI_APP_IDS.includes(window.get_gtk_application_id()) &&
+                window.get_window_type() === Meta.WindowType.DOCK) ?? null;
+    }
+
+    _sampleProximity() {
+        const zone = this._proximityZone;
+        const buddy = zone ? this._mochiBuddyWindow() : null;
+        if (!zone || !buddy) {
+            this._setPointerNear(false);
+            return;
+        }
+        // Mochi measures in its own window's units; scale to stage coordinates
+        // so this stays correct with XWayland scaling.
+        const frame = buddy.get_frame_rect();
+        const scale = frame.width / zone.ownerWidth;
+        const [pointerX, pointerY] = global.get_pointer();
+        const left = frame.x + zone.x * scale;
+        const top = frame.y + zone.y * scale;
+        this._setPointerNear(
+            pointerX >= left && pointerX <= left + zone.width * scale &&
+            pointerY >= top && pointerY <= top + zone.height * scale,
+        );
+    }
+
+    _setPointerNear(near) {
+        if (near === Boolean(this._pointerNear))
+            return;
+        this._pointerNear = near;
+        if (!this._nameReady || this._connection === null)
+            return;
+        try {
+            this._connection.emit_signal(
+                null, OBJECT_PATH, INTERFACE_NAME, POINTER_NEAR_SIGNAL_NAME,
+                new GLib.Variant('(b)', [near]),
+            );
+        } catch (_error) {
+            // Best-effort; Mochi falls back to hover when nothing arrives.
+        }
     }
 
     GetState() {
@@ -542,6 +629,7 @@ export default class MochiTypingActivityExtension extends Extension {
     }
 
     disable() {
+        this.ClearProximityZone();
         Main.wm.removeKeybinding(DEVELOPER_MENU_KEYBINDING);
         Main.wm.removeKeybinding(EMOTE_CATALOGUE_KEYBINDING);
         this._settings = null;
