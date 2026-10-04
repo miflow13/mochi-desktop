@@ -24,6 +24,17 @@ Use this checklist for interaction/state changes and before release checkpoints.
 - [ ] Level-up/unlock presentation returns to the appropriate behavior state
 - [ ] Shutdown clears long-running sources and does not leave persisted state stale
 
+## Pickup / Drag / XWayland
+
+- [ ] Idle → pickup → immediate release recovers cleanly
+- [ ] Pickup → held → release reaches put-down / idle correctly
+- [ ] Put-down → immediate re-grab works
+- [ ] Rapid left / right reversals update the drag pose immediately
+- [ ] Left and right drag poses remain visually distinct
+- [ ] Fast drag → release → right-click still works
+- [ ] Desktop-edge clamping remains solid without spring-back or drift
+- [ ] Visible speech bubbles stay attached to Mochi during fast XWayland dragging
+
 ## Animation / Assets
 
 - [ ] Canonical artwork remains active
@@ -75,6 +86,17 @@ Use this checklist for interaction/state changes and before release checkpoints.
 - [ ] Completed feed chains into heart once
 - [ ] Interrupted/stale feed completion does not award progress or fire completion behavior
 - [ ] Feed → heart → idle leaves click/right-click/drag usable
+
+## Fedora Mode
+
+- [ ] Secret gesture enters Fedora Mode only from an allowed state
+- [ ] `fedora_intro` completes into the held `fedora_loop`
+- [ ] Toggling off during the intro still completes through `fedora_outro`
+- [ ] Pickup / drag may temporarily interrupt the art, then resume the loop while active
+- [ ] Ending Fedora Mode after a direct interaction still reaches the outro and `IDLE`
+- [ ] Sleep does not silently override active / exiting Fedora Mode
+- [ ] Feed is rejected while Fedora Mode owns presentation
+- [ ] Fedora Mode shutdown clears active / exiting flags without orphaned behavior
 
 ## Pocket
 
@@ -138,6 +160,16 @@ Use this checklist for interaction/state changes and before release checkpoints.
 - [ ] Pause/stop/session transitions leave audio in the intended state
 - [ ] Missing/unavailable audio backend fails safely
 - [ ] Shutdown stops the long-running soundscape channel
+
+## Contextual Presence / Media
+
+- [ ] Terminal / VS Code context enters once and does not replay on duplicate signals
+- [ ] Terminal coworking plays intro → loop → outro; leaving during the intro finishes opening, then closes
+- [ ] Switching terminal ↔ VS Code updates presentation without stale coworking state
+- [ ] Browser focus alone does not manufacture a false YouTube / watching state
+- [ ] Music and watchable-video detection remain distinct
+- [ ] Pause / stop / focus loss clears stale watching or dancing presentation
+- [ ] Direct interaction can interrupt contextual presentation and ambient recovery is deterministic
 
 ## AmbiSense Helper Lifecycle (#58)
 

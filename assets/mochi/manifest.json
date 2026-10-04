@@ -529,9 +529,14 @@
         "terminal/terminal_03.png",
         "terminal/terminal_04.png",
         "terminal/terminal_05.png",
-        "terminal/terminal_06.png"
+        "terminal/terminal_06.png",
+        "terminal/terminal_07.png",
+        "terminal/terminal_08.png",
+        "terminal/terminal_09.png",
+        "terminal/terminal_10.png",
+        "terminal/terminal_11.png"
       ],
-      "frame_count": 6,
+      "frame_count": 11,
       "fps": 8.333333333333334,
       "loop": true
     },

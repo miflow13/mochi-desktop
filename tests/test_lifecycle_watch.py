@@ -120,6 +120,26 @@ def test_held_presentation_is_not_a_player_stall(watch, clock) -> None:
     assert watch.check() == []
 
 
+def test_animation_starting_after_a_held_pose_gets_a_fresh_budget(
+    watch, clock
+) -> None:
+    # A held presentation never advances, so its time must not count against
+    # the moving animation that follows it.
+    _healthy_second(watch, clock)
+    for _ in range(100):
+        clock.advance(0.1)
+        watch.tick(advanced=False, motion_budget_ms=None)
+
+    clock.advance(0.1)
+    watch.tick(advanced=False, motion_budget_ms=100)  # first tick of the new one
+    assert watch.check() == []
+
+    for _ in range(25):  # but it still has to move eventually
+        clock.advance(0.1)
+        watch.tick(advanced=False, motion_budget_ms=100)
+    assert watch.check() == ["player"]
+
+
 def test_missing_ticks_is_a_tick_stall(watch, clock) -> None:
     _healthy_second(watch, clock)
     clock.advance(3.0)

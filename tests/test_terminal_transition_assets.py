@@ -38,8 +38,8 @@ def test_terminal_coworking_manifest_has_authored_transitions() -> None:
         "loop": False,
     }
     assert loop == {
-        "frames": [f"terminal/terminal_{index:02d}.png" for index in range(1, 7)],
-        "frame_count": 6,
+        "frames": [f"terminal/terminal_{index:02d}.png" for index in range(1, 12)],
+        "frame_count": 11,
         "fps": 8.333333333333334,
         "loop": True,
     }
@@ -74,3 +74,14 @@ def test_terminal_outro_puts_the_laptop_away_by_reversing_the_intro() -> None:
     assert [_pixels(path) for path in outro[1:]] == [
         _pixels(path) for path in reversed(intro[:6])
     ]
+
+
+def test_terminal_loop_picks_up_one_step_after_the_intro_ends() -> None:
+    animations = _animations()
+    intro_end = _pixels(animations["terminal_intro"]["frames"][-1])
+    loop = [_pixels(path) for path in animations["terminal_loop"]["frames"]]
+
+    # The loop's last frame is the intro's last pose, so intro -> loop is the
+    # same step as the loop's own wrap-around: no pop and no doubled frame.
+    assert loop[-1] == intro_end
+    assert loop[0] != intro_end
