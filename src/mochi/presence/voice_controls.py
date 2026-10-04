@@ -32,7 +32,7 @@ class VoiceControlMixin:
         self._voice_control_suppressed = False
         self._voice_proximity_countdown = 0
         super().__init__(*args, **kwargs)
-        if self._preview_mode:
+        if self._preview_mode or self._placement.layer_shell_enabled:
             return
         self._voice_control = VoiceControl(
             owner=self._window,
