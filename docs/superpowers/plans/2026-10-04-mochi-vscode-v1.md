@@ -45,7 +45,7 @@
 ### Task 3: Packaging and review
 **Files:** README.md, MANUAL-QA.md, .vscodeignore, .github/workflows/vscode-extension.yml, extension LICENSE, docs/spec/plan, CHANGELOG.md.
 **Interfaces:** npm run build derives assets; npm run check checks JS syntax; npm run package calls vsce package --no-dependencies; workflow uploads VSIX after tests/build/package.
-- [x] Build/check/package and all 21 extension tests pass. Full browser and live Extension Host verification remain pending as documented in the verification record.
+- [x] Build/check/package and all 23 extension tests pass. Real Chromium verification passes in CI. Live Extension Host verification remains pending as documented in the verification record.
 - [x] Package with official vsce, inspect archive for entrypoint and all referenced assets, exclude tests/source authoring material.
 - [x] Request fresh branch review; address material findings with failing regression tests first.
 - [x] Commit only extension source, CI and documentation to approved GitHub branch; do not merge or publish.
