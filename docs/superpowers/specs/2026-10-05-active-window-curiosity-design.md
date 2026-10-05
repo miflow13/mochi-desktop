@@ -4,7 +4,7 @@
 
 **Builds on:** PR #133 (`feat/active-window-curiosity`), which this work supersedes
 
-**Status:** design approved; implementation plan not yet written
+**Status:** design approved and stress-tested (2026-10-05); implementation plan not yet written
 
 ## Purpose
 
@@ -42,17 +42,28 @@ There is one pending timer, and the latest trigger wins. A window pulse cancels 
 
 ### Reaction ladder
 
-When a trigger survives its gate, Mochi takes the first reaction that is allowed. Nothing is queued or retried.
+The cooldowns below are base values; they grow during busy sessions (see Habituation). When a trigger survives its gate, Mochi takes the first reaction that is allowed. Nothing is queued or retried.
 
 1. **Investigate beat.** Allowed when Mochi is in his plain standing-idle visual (`_is_idle_visual_active()`), curiosity is allowed (see Suppression), at least 120 s have passed since the last beat, and at least 20 s have passed since the last reaction of either kind. Mochi plays `investigate`, a single pass of `searching` lasting about 2.4 s, then resumes idle at the saved frame and elapsed time.
-2. **Overlay cue.** Allowed when curiosity is allowed, Mochi's state is one of `IDLE`, `BLINKING`, `WALKING`, `TYPING`, `COMPUTER`, and at least 20 s have passed since the last reaction of either kind. It shows a thought bubble containing a small Cairo-drawn magnifying glass for 1.8 s, plus a lean of up to 4 px toward the monitor center. Behavior state and animation stay untouched.
+2. **Overlay cue.** Allowed when curiosity is allowed, Mochi's state is one of `IDLE`, `BLINKING`, `WALKING`, `TYPING`, `COMPUTER`, and at least 20 s have passed since the last reaction of either kind. It shows a thought bubble containing a small Cairo-drawn magnifying glass for 1.8 s, plus a lean of up to 4 px toward the monitor center (lean only when Mochi is smaller than 80 px). Behavior state and animation stay untouched.
 3. **Drop.**
 
 The 20 s gap is shared: every reaction, beat or cue, resets it, so no two reactions ever land within 20 s of each other. The beat additionally has its own 120 s cooldown.
 
+### Habituation
+
+Like a real pet, Mochi gets used to busy browsing. `streak` counts reactions (beats and cues) since the last reset. The cooldowns are:
+
+- shared reaction gap = `min(20 s × 1.5^streak, 120 s)`
+- beat cooldown = `min(120 s × 1.5^streak, 600 s)`
+
+A trigger is *eligible* when it survives its debounce or settle gate **and** is not suppressed (see Suppression). Suppressed triggers are dropped without touching habituation. When an eligible trigger arrives at least 300 s after the previous eligible trigger, `streak` resets to 0 before the decision. Every eligible trigger updates the last-trigger time, whether or not it produces a reaction. The cooldown calculation is one pure function of `(streak, base, cap)`, so it is trivially testable.
+
+Effect: he is visibly curious when browsing starts, settles in over a long session (at most one cue per 2 min and one beat per 10 min), and is curious again after a 5-minute break.
+
 ### Suppression
 
-No trigger is scheduled or acted on, and an active cue is cleared, while any of these hold:
+A trigger that fires its gate while any of these hold is dropped, with no reaction and no habituation update. An active cue is cleared on the next tick while any of them hold:
 
 - preview mode or presence shutdown
 - user idle / sleeping
@@ -81,16 +92,29 @@ On `notify::title` for the tracked window:
 
 1. Read the title and normalize it: trim, then strip one leading unread badge matching `^\(\d+\+?\)\s*`, e.g. `(3) ` or `(99+) `.
 2. Compute `GLib.compute_checksum_for_string(GLib.ChecksumType.SHA256, normalized, -1)`.
-3. If the digest differs from the stored one, store it and emit `BrowserTabChanged` through the existing zero-payload `_emitSignal()` helper.
+3. If the digest equals the stored one, stop.
+4. Store the new digest. This keeps the baseline current even when nothing is emitted.
+5. **Input gate:** emit only if `this._idleMonitor.get_idletime()` is below `TAB_INPUT_WINDOW_MS = 2000`, meaning keyboard or pointer input happened within the last 2 s. Tab switches and link clicks always follow input. Badge updates, title blinkers and autoplay retitles happen with hands off, so they are dropped. The input gate is the primary filter and the badge strip is cheap extra protection.
+6. Emit `BrowserTabChanged` through the existing zero-payload `_emitSignal()` helper.
 
 On `disable()`: disconnect the title handler, and clear the tracked window and digest.
 
+**Keep all of this inside `extension.js`.** Use two small top-level helpers, `normalizeTabTitle(title)` and `shouldEmitTabPulse(idleMs)`, with no new module file. `scripts/install-typing-extension.sh:53` copies only `metadata.json`, `extension.js` and `README.md` by name. A separate JS module would be silently left out of the install, its `import` would fail, and every AmbiSense signal would stop, not just curiosity.
+
 Privacy properties:
 
-- The raw title is never logged, stored, or sent. Only a one-way digest of the normalized title stays in GNOME Shell memory, and only for the focused browser window.
+- The title never leaves GNOME Shell, and it is never logged or stored by the extension. For change detection the extension keeps only a one-way SHA-256 digest of the normalized title, and only for the focused browser window. This is defense in depth, not a hard boundary: GNOME Shell already holds every raw window title, and a digest of a known title can be matched by guessing. What it guarantees is that a future debug log or state dump of the extension cannot leak a title.
+- Signals are accepted only from the helper's unique bus name (`helper_connection.py` subscribes with `owner`), so another session process cannot inject `BrowserTabChanged` while the extension owns the name. This is the same trust model as every existing AmbiSense signal.
 - Titles of non-browser windows are never observed.
 - `BrowserTabChanged` carries no payload. It reveals only *when* the user changed tab or page.
 - Like every AmbiSense signal, these pulses go over the session bus, so other processes in the user's session could observe their timing. This is documented next to the signal.
+
+### Rejected alternatives for tab detection
+
+- **Browser WebExtension (`tabs.onActivated`).** Exact tab events, but it needs separate Firefox and Chromium extensions with store review, a native-messaging bridge to Mochi, and it sees URLs and tab titles. That is a far larger privacy and maintenance surface than a content-free pulse.
+- **AT-SPI tab-strip events.** Mochi already uses AT-SPI for typing, but tab events would expose tab names and document text inside Mochi's own process, breaking the "Mochi only sees categories" boundary. Chromium also emits them only with accessibility enabled.
+
+The title pulse adds no installs, keeps content inside GNOME Shell, and with the input gate is accurate enough for a cosmetic, rate-limited reaction.
 
 ### Mochi (`src/mochi/presence/signals.py`, `integration.py`)
 
@@ -154,10 +178,15 @@ Constants block (the one place to tune):
 |---|---|
 | `CURIOSITY_DEBOUNCE_MS` | 180 |
 | `CURIOSITY_TAB_SETTLE_MS` | 1500 |
-| `CURIOSITY_BEAT_COOLDOWN_SECONDS` | 120.0 |
-| `CURIOSITY_CUE_COOLDOWN_SECONDS` | 20.0 |
+| `CURIOSITY_BEAT_COOLDOWN_SECONDS` | 120.0 (base) |
+| `CURIOSITY_BEAT_COOLDOWN_CAP_SECONDS` | 600.0 |
+| `CURIOSITY_CUE_COOLDOWN_SECONDS` | 20.0 (base; also the shared reaction gap) |
+| `CURIOSITY_CUE_COOLDOWN_CAP_SECONDS` | 120.0 |
+| `CURIOSITY_HABITUATION_FACTOR` | 1.5 |
+| `CURIOSITY_HABITUATION_RESET_SECONDS` | 300.0 |
 | `CURIOSITY_CUE_DURATION_SECONDS` | 1.8 |
-| `CURIOSITY_LEAN_PX` | 4.0 |
+| `CURIOSITY_LEAN_PX` | 4.0 (rounded to whole device pixels at draw time) |
+| `CURIOSITY_BUBBLE_MIN_SIZE_PX` | 80 |
 | `CURIOSITY_BEAT_ANIMATION` | `"investigate"` |
 
 Changes from PR #133:
@@ -166,8 +195,12 @@ Changes from PR #133:
 - Replace `_curiosity_category: str | None` with `_curiosity_cue_active: bool`. Keep the category only for the debug log.
 - Add `_on_presence_browser_tab_changed()`, which (re)starts the shared pending source with the settle delay.
 - `_on_presence_app_focus_changed(category)` validates the category, then (re)starts the shared source with the debounce delay.
-- `_react_to_curiosity()` implements the reaction ladder and records `time.monotonic()` timestamps for `_curiosity_last_beat_at` and `_curiosity_last_reaction_at`.
+- `_react_to_curiosity()` applies the habituation reset, then the reaction ladder. It records `_curiosity_now()` timestamps for `_curiosity_last_trigger_at`, `_curiosity_last_beat_at` and `_curiosity_last_reaction_at`, and increments `_curiosity_streak` on each reaction.
+- `_curiosity_now()` is the **single clock** for all curiosity timing (cooldowns, habituation, cue progress): `time.clock_gettime(time.CLOCK_BOOTTIME)`, falling back to `time.monotonic()` if `CLOCK_BOOTTIME` is unavailable. `CLOCK_MONOTONIC` stops counting during suspend, so overnight a high habituation streak would never reset and cooldowns would stretch across the sleep. `CLOCK_BOOTTIME` counts suspended time. Tests patch this one method.
+- `_habituated_cooldown(base, cap, streak) -> float` is a static pure function: `min(base * FACTOR ** streak, cap)`.
 - Keep `_curiosity_allowed`, `_curiosity_alpha`, `_curiosity_lean_factor`, `_curiosity_direction` (with its fall-back-to-right `try`), the `_draw` wrap, `_tick` expiry and continuation, `_on_pressed` cancellation, and `shutdown_presence` cleanup.
+- **Pixel-snapped lean.** `_draw` rounds both lean offsets to whole device pixels before `context.translate`. `SpriteAtlas.draw` already rounds sprite placement (`sprites.py:158-164`) and samples with `FILTER_NEAREST`, and a fractional outer translate would make source pixels render at uneven widths, so the art shimmers during the ease. The lean therefore steps in whole pixels.
+- **Small-size cue.** Below `CURIOSITY_BUBBLE_MIN_SIZE_PX = 80` (`min(width, height)`), skip the bubble and keep only the lean. At 64 px the glyph would be about 8 px and unreadable.
 
 ### `src/mochi/presence/click_dialogue.py`
 
@@ -183,7 +216,8 @@ Insert `ActiveWindowCuriosityMixin` immediately before `IdleLookMixin` in both `
 | Tab change while watching YouTube | `WATCHING` is not allowed, so the pulse is dropped |
 | Window pulse during a pending tab settle | Pending source replaced by the window debounce |
 | Placement private API changed or monitor lookup fails | `_curiosity_direction` returns `+1` |
-| Wall-clock change | All timing uses `time.monotonic()` |
+| Wall-clock change | `CLOCK_BOOTTIME` is not affected by wall-clock changes |
+| Laptop suspend / resume | `CLOCK_BOOTTIME` includes suspended time, so cooldowns elapse and a long sleep resets habituation |
 | Extension disabled mid-session | Pulses stop; nothing pending survives shutdown |
 
 ## Testing
@@ -197,8 +231,13 @@ Run with `python3 -m pytest -q`. CI (`xvfb-run`, with GTK) is the authoritative 
    - inside the cue cooldown gives a drop;
    - `TYPING` gives a cue;
    - suppressed gives nothing;
-   - a beat resets the shared 20 s gap;
-   - an idle trigger within 20 s of a cue gives a drop, not a beat.
+   - a beat resets the shared reaction gap;
+   - an idle trigger inside the shared gap after a cue gives a drop, not a beat;
+   - a suppressed trigger does not update the habituation streak or the last-trigger time;
+   - habituation: `_habituated_cooldown` grows by 1.5× per streak step and clamps at the cap;
+   - habituation: after several reactions the next one needs the longer gap;
+   - habituation: a surviving trigger 300 s or more after the previous one resets the streak;
+   - clock: `_curiosity_now()` uses `CLOCK_BOOTTIME` when available and falls back to `time.monotonic()` when it is not.
 3. **Settle and debounce:**
    - N tab pulses inside 1.5 s produce one scheduled reaction;
    - a window pulse replaces a pending tab settle;
@@ -215,9 +254,17 @@ Run with `python3 -m pytest -q`. CI (`xvfb-run`, with GTK) is the authoritative 
    - the title handler is connected only for browser-classified windows;
    - `compute_checksum_for_string` with SHA256 is used;
    - the badge-strip pattern is present;
+   - the emit is guarded by `get_idletime()` compared against `TAB_INPUT_WINDOW_MS`, and the digest is stored before that guard;
    - `BrowserTabChanged` is emitted through `_emitSignal`, with no title variable passed;
-   - the handler is disconnected in `disable()`.
-7. **Draw:** a cue render differs from the baseline; an expired cue clears without changing behavior state.
+   - the handler is disconnected in `disable()`;
+   - **installer guard:** every `*.js` file under `gnome-extension/mochi-typing@miflow13/` is named in `scripts/install-typing-extension.sh`'s copy step. This prevents the silent-omission trap for any future split of the extension.
+
+   Extension *behavior* (real Mutter title notifications, idle times, D-Bus delivery) is verified by the owner's Fedora QA. No JS test runner is added.
+7. **Draw:**
+   - a cue render differs from the baseline;
+   - an expired cue clears without changing behavior state;
+   - the lean translate receives integer offsets at several progress values;
+   - at 64 px no bubble pixels are drawn above the sprite region, while at 112 px they are.
 
 ## Documentation
 
@@ -226,19 +273,59 @@ Run with `python3 -m pytest -q`. CI (`xvfb-run`, with GTK) is the authoritative 
 - `docs/ambisense.md`: the same signal and privacy notes.
 - `REGRESSION_WATCHLIST.md` → Contextual Presence:
   - [ ] Flicking through browser tabs produces one curiosity reaction after settling, not one per tab
-  - [ ] An unread-badge title change (`(3)` → `(4)`) does not trigger curiosity
+  - [ ] Title changes with hands off the keyboard and mouse (unread badges, chat title blinkers, YouTube autoplay) do not trigger curiosity
   - [ ] Investigate beat returns to idle without a visible frame jump
   - [ ] Dragging Mochi mid-investigate recovers cleanly
   - [ ] Quiet mode / ambient reactions off suppress all curiosity
+  - [ ] Curiosity lean stays crisp (no pixel shimmer) and the bubble is legible at 112 px and 256 px; 64 px shows lean only
 
 ## Delivery
 
-- Branch: `claude/optimistic-volta-9jc07e`. Merge `origin/feat/active-window-curiosity` into it, preserving PR #133's commits, and resolve the `CHANGELOG.md` conflict. Then implement this design on top.
+- Branch: `claude/optimistic-volta-9jc07e`. Merge `origin/feat/active-window-curiosity` into it, preserving PR #133's commits. Make it a **standalone merge commit**: resolve the `CHANGELOG.md` conflict by keeping `main`'s entries, and include no feature changes.
+- **Green baseline before new behavior.** Run the full suite on the merge commit before implementing this design. First try installing the CI GTK4 packages in the working container and running under `xvfb-run`; if that is not possible, the first CI run on the PR is the baseline. Drift check (2026-10-05): every symbol PR #133 relies on still exists on `main`: `PresentationState`/`state.presentation`, `_on_pressed(*args)`, `_press`/`_user_idle`/`_preview_mode`, and the tuning `quiet_mode`/`ambient_reactions_enabled`. The only textual conflict is `CHANGELOG.md`.
 - Open a new draft PR. The owner closes #133 as superseded.
 - Live verification on Fedora / GNOME / Wayland (XWayland) by the owner before merge.
 
 ## Risks
 
-- **Title churn the badge filter misses.** Some sites rewrite titles on a timer, such as chat apps or "● Recording". This is mitigated by the 1.5 s settle and the 20 s / 120 s cooldowns, and the constants are tunable in one place. Per-pattern filtering is deferred unless live testing shows a need.
+- **Title churn without user input** (Gmail's `Inbox (12)`, chat title blinkers, YouTube autoplay). The input gate drops it at the source; the badge strip, the 1.5 s settle and the cooldowns are extra layers.
+- **Slow page loads.** A click whose page takes more than 2 s to retitle is not noticed. This is accepted; `TAB_INPUT_WINDOW_MS` is one constant if live testing shows misses.
 - **Mutter `notify::title` semantics.** Duplicate notifications for identical titles are harmless, because the digest comparison drops them.
 - **`_curiosity_direction` relies on private placement helpers** (`_monitor_for_position`, `_x11_coordinate_scale`). This is guarded by the existing `try` fallback.
+
+## Stress Test Results: Active Window Curiosity
+
+### Resolved Decisions
+
+- **Title churn without input:** resolved by adding the input gate. Tab pulses are emitted only when keyboard or pointer input happened within 2 s (Mutter idle monitor), which drops badge, blinker and autoplay retitles at the source.
+- **Security and privacy:** no regression. Signals are subscribed by the helper's unique bus name (`helper_connection.py:55-61`), the new signal carries no payload, and the title regex runs in linear time. The SHA-256 digest is kept as defense in depth, and its privacy claim was reworded honestly.
+- **Heavy-use frequency:** resolved with habituation. Cooldowns grow 1.5× per reaction up to 2 min (cue) and 10 min (beat), and reset after 5 min without triggers.
+- **Alternative tab detection:** a browser WebExtension and AT-SPI were both rejected and recorded in the spec with reasons.
+- **Rendering:** the lean is pixel-snapped to avoid nearest-neighbor shimmer, and the bubble is skipped below 80 px.
+- **Extension testability:** the logic stays in `extension.js`, because the installer copies files by name, and an installer guard test was added.
+- **Merge drift:** checked; every PR #133 dependency still exists on `main`. Plan: a standalone merge commit, then a green full-suite baseline before new behavior.
+- **Suspend (found during reflexion):** all curiosity timing goes through `_curiosity_now()` on `CLOCK_BOOTTIME`.
+- **Resolved from code without a decision:** Ctrl+Tab does not enter `TYPING` (`typing_activity.py:21` needs 5 events within 1.25 s), so keyboard tab switching can still produce the beat. `investigate` reuses `searching` frames, which are already packaged (`pyproject.toml:62`).
+
+### Changes Made
+
+- Extension: input gate (`TAB_INPUT_WINDOW_MS = 2000`); digest stored before the gate; helpers kept inside `extension.js`.
+- Behavior: habituation section and constants.
+- Architecture: `_habituated_cooldown`, `_curiosity_now` (`CLOCK_BOOTTIME`), pixel-snapped lean, `CURIOSITY_BUBBLE_MIN_SIZE_PX = 80`.
+- Privacy wording now describes the digest accurately and documents sender filtering.
+- Rejected-alternatives section added.
+- Tests added: input-gate ordering, installer guard, habituation (×3), clock fallback, integer lean, small-size bubble.
+- Watchlist: hands-off title changes, crispness and legibility at 64/112/256 px.
+- Delivery: standalone merge commit, green baseline first.
+
+### Deferred / Parking Lot
+
+- Respecting GNOME's `enable-animations` (reduced motion) app-wide. The cue is decorative with no flashing, and quiet mode is today's opt-out.
+- Per-site title filters, only if live QA shows the input gate letting churn through.
+- Whether `TAB_INPUT_WINDOW_MS` misses slow page loads; tune after Fedora testing.
+- Broader installer robustness (copying `*.js` instead of named files) is out of scope; the guard test covers the risk.
+
+### Confidence Assessment
+
+- Overall: **High** for the Mochi-side design (it reuses the tested idle-look lifecycle and adds no behavior state); **Medium** for the extension's tab detection, because real Mutter `notify::title` timing and browser title behavior can only be verified live on Fedora.
+- Areas of concern: input-gate tuning against real browsing; visual feel of the beat and cue, which needs owner QA.
