@@ -680,3 +680,29 @@ def test_network_reacts_only_when_connected_state_changes():
 
     assert lost == [True]
     assert restored == [True]
+
+
+def test_browser_tab_signal_invokes_tab_callback_without_changing_category():
+    from mochi.presence.signals import AppCategorySignalAdapter
+
+    tabs = []
+    adapter = AppCategorySignalAdapter(
+        on_category_changed=lambda _category: None,
+        on_tab_changed=lambda: tabs.append(True),
+    )
+    adapter.category = "browser"
+
+    adapter._on_tab_signal(None, None, None, None, None, None)
+
+    assert tabs == [True]
+    assert adapter.category == "browser"
+
+
+def test_browser_tab_signal_without_callback_is_ignored():
+    from mochi.presence.signals import AppCategorySignalAdapter
+
+    adapter = AppCategorySignalAdapter(on_category_changed=lambda _category: None)
+
+    adapter._on_tab_signal(None, None, None, None, None, None)
+
+    assert adapter.category == "unknown"
