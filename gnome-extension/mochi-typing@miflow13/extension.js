@@ -358,22 +358,21 @@ export default class MochiTypingActivityExtension extends Extension {
     _trackBrowserTabTitle(window, category) {
         // Only browser titles are observed; every other app stays unwatched.
         const target = category === 'browser' ? window : null;
-        // Leaving media (a YouTube tab) for another tab in the SAME window is
-        // a tab change. Any other window becoming the target is a window
-        // switch, which AppFocusChanged already covers.
-        const resuming = target !== null && target === this._tabPausedWindow;
-        // A pause lasts only while that same window stays focused as media.
-        if (window !== this._tabPausedWindow || category !== 'media')
-            this._tabPausedWindow = null;
-        if (target === this._tabWindow)
+        // Any focused media window (e.g. a YouTube tab) is paused, whether it
+        // was tracked first or focus landed on it directly. Only its reference
+        // is kept: a media window's title is never read for tab tracking.
+        const paused = category === 'media' ? window : null;
+        if (target === this._tabWindow && paused === this._tabPausedWindow)
             return;
 
-        // The tracked browser window turned into media. Keep only its
-        // reference: a media window's title is never read for tab tracking.
-        const pausing = category === 'media' && window !== null && window === this._tabWindow;
+        // Leaving media for another tab in the SAME window is a tab change.
+        // Any other window becoming the target is a window switch, which
+        // AppFocusChanged already covers. Read this before untracking clears
+        // the pause; a pause lasts only while that window stays media.
+        const resuming = target !== null && target === this._tabPausedWindow;
         this._untrackBrowserTabTitle();
-        if (pausing) {
-            this._tabPausedWindow = window;
+        if (paused !== null) {
+            this._tabPausedWindow = paused;
             return;
         }
         if (target === null)

@@ -93,6 +93,16 @@ def test_tab_title_change_stores_digest_before_input_gate_and_emits_no_payload()
     emitted = handler.index("this._emitSignal(BROWSER_TAB_SIGNAL_NAME);")
     assert unchanged < stored < gated < emitted
     assert "get_idletime()" in handler
+    # The gate must guard the emit, not merely precede it: a failed gate
+    # returns, and the only emit is the last statement after it.
+    assert handler.rstrip().endswith(
+        "        if (!shouldEmitTabPulse(Number(this._idleMonitor.get_idletime())))\n"
+        "            return;\n"
+        "\n"
+        "        this._emitSignal(BROWSER_TAB_SIGNAL_NAME);\n"
+        "    }"
+    )
+    assert handler.count("_emitSignal(") == 1
 
 
 def test_unreadable_tab_baseline_is_adopted_without_a_pulse() -> None:
@@ -151,24 +161,32 @@ def test_tab_title_tracking_is_browser_only_and_cleaned_up() -> None:
 def test_leaving_media_for_a_tab_in_the_same_window_pulses_behind_the_input_gate() -> None:
     track = _method_body(_extension_source(), "_trackBrowserTabTitle(window, category) {")
 
-    # browser -> media (a YouTube tab) -> browser in the SAME window is a tab
-    # change. Any other window becoming the target is a window switch.
+    # media (a YouTube tab) -> browser in the SAME window is a tab change.
+    # Any other window becoming the target is a window switch.
+    # Heartbeats with an unchanged target AND pause change nothing.
+    unchanged = track.index(
+        "if (target === this._tabWindow && paused === this._tabPausedWindow)\n"
+        "            return;"
+    )
+    # Read the pause before untracking clears it.
     resuming = track.index(
         "const resuming = target !== null && target === this._tabPausedWindow;"
     )
-    forgotten = track.index(
-        "if (window !== this._tabPausedWindow || category !== 'media')\n"
-        "            this._tabPausedWindow = null;"
-    )
-    unchanged = track.index("if (target === this._tabWindow)\n            return;")
+    released = track.index("this._untrackBrowserTabTitle();")
     baseline = track.index("this._tabTitleDigest = this._tabTitleDigestFor(target);")
-    guarded = track.index(
-        "if (!resuming || this._tabTitleDigest === null || this._idleMonitor === null)\n"
-        "            return;"
+    # The gate must guard the emit, not merely precede it: only a resume with
+    # a readable baseline reaches the gate, and the only emit sits inside it.
+    assert track.rstrip().endswith(
+        "        if (!resuming || this._tabTitleDigest === null || this._idleMonitor === null)\n"
+        "            return;\n"
+        "        if (shouldEmitTabPulse(Number(this._idleMonitor.get_idletime())))\n"
+        "            this._emitSignal(BROWSER_TAB_SIGNAL_NAME);\n"
+        "    }"
     )
-    gated = track.index("shouldEmitTabPulse(Number(this._idleMonitor.get_idletime()))")
-    emitted = track.index("this._emitSignal(BROWSER_TAB_SIGNAL_NAME);")
-    assert resuming < forgotten < unchanged < baseline < guarded < gated < emitted
+    gated = track.index("if (!resuming || this._tabTitleDigest === null")
+    assert unchanged < released
+    assert resuming < released < baseline < gated
+    assert track.count("_emitSignal(") == 1
 
 
 def test_media_pause_keeps_only_a_window_reference_and_is_released() -> None:
@@ -179,23 +197,23 @@ def test_media_pause_keeps_only_a_window_reference_and_is_released() -> None:
     disable = source[source.index("    disable() {"):]
 
     assert "this._tabPausedWindow = null;" in enable
-    # Only the tracked browser window can pause, and pausing returns before
-    # any title is read: a media window's title is never digested here.
-    assert (
-        "const pausing = category === 'media' && window !== null && "
-        "window === this._tabWindow;"
-    ) in track
-    paused = track.index(
-        "if (pausing) {\n"
-        "            this._tabPausedWindow = window;\n"
+    # ANY focused media window pauses, whether or not it was tracked as a
+    # browser first: focus can land straight on a YouTube tab. Pausing
+    # returns before any title is read, so a media window's title is never
+    # digested here.
+    assert "const paused = category === 'media' ? window : null;" in track
+    pause = track.index(
+        "        this._untrackBrowserTabTitle();\n"
+        "        if (paused !== null) {\n"
+        "            this._tabPausedWindow = paused;\n"
         "            return;\n"
         "        }"
     )
-    assert paused < track.index("this._tabTitleDigestFor(target)")
+    assert pause < track.index("this._tabTitleDigestFor(target)")
     assert track.count("_tabTitleDigestFor(") == 1
     assert set(re.findall(r"this\._tabPausedWindow = ([^;]+);", source)) == {
         "null",
-        "window",
+        "paused",
     }
     # disable() releases the paused reference through the untrack helper.
     assert "this._tabPausedWindow = null;" in untrack
