@@ -163,6 +163,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._tabWindow = null;
         this._tabTitleChangedId = 0;
         this._tabTitleDigest = null;
+        this._tabPausedWindow = null;
         this._settings = this.getSettings();
 
         Main.wm.addKeybinding(
@@ -357,10 +358,24 @@ export default class MochiTypingActivityExtension extends Extension {
     _trackBrowserTabTitle(window, category) {
         // Only browser titles are observed; every other app stays unwatched.
         const target = category === 'browser' ? window : null;
+        // Leaving media (a YouTube tab) for another tab in the SAME window is
+        // a tab change. Any other window becoming the target is a window
+        // switch, which AppFocusChanged already covers.
+        const resuming = target !== null && target === this._tabPausedWindow;
+        // A pause lasts only while that same window stays focused as media.
+        if (window !== this._tabPausedWindow || category !== 'media')
+            this._tabPausedWindow = null;
         if (target === this._tabWindow)
             return;
 
+        // The tracked browser window turned into media. Keep only its
+        // reference: a media window's title is never read for tab tracking.
+        const pausing = category === 'media' && window !== null && window === this._tabWindow;
         this._untrackBrowserTabTitle();
+        if (pausing) {
+            this._tabPausedWindow = window;
+            return;
+        }
         if (target === null)
             return;
 
@@ -371,6 +386,12 @@ export default class MochiTypingActivityExtension extends Extension {
             'notify::title',
             () => this._onBrowserTabTitleChanged(),
         );
+
+        // Same input gate as a title change; an unreadable baseline is not one.
+        if (!resuming || this._tabTitleDigest === null || this._idleMonitor === null)
+            return;
+        if (shouldEmitTabPulse(Number(this._idleMonitor.get_idletime())))
+            this._emitSignal(BROWSER_TAB_SIGNAL_NAME);
     }
 
     _untrackBrowserTabTitle() {
@@ -384,6 +405,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._tabWindow = null;
         this._tabTitleChangedId = 0;
         this._tabTitleDigest = null;
+        this._tabPausedWindow = null;
     }
 
     _tabTitleDigestFor(window) {
@@ -409,8 +431,12 @@ export default class MochiTypingActivityExtension extends Extension {
         const digest = this._tabTitleDigestFor(this._tabWindow);
         if (digest === null || digest === this._tabTitleDigest)
             return;
+        const hadBaseline = this._tabTitleDigest !== null;
         // Store first so hands-off churn still becomes the new baseline.
         this._tabTitleDigest = digest;
+        // An unreadable baseline cannot show a change; this title replaces it.
+        if (!hadBaseline)
+            return;
 
         if (this._idleMonitor === null)
             return;
