@@ -55,6 +55,14 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertEqual(len(dance.frames), 8)
         self.assertTrue(dance.looping)
 
+    def test_investigate_is_a_one_pass_searching_beat(self) -> None:
+        investigate = ANIMATIONS["investigate"]
+        self.assertEqual(investigate.name, "investigate")
+        self.assertFalse(investigate.looping)
+        self.assertEqual(investigate.frames, ANIMATIONS["searching"].frames)
+        # The file-activity loop keeps its own looping definition.
+        self.assertTrue(ANIMATIONS["searching"].looping)
+
     def test_pickup_is_a_six_frame_one_shot(self) -> None:
         pickup = ANIMATIONS["pickup"]
         self.assertEqual(len(pickup.frames), 6)

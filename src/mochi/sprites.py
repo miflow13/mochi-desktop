@@ -119,6 +119,11 @@ ANIMATIONS["table_flip"] = replace(
     ),
 )
 ANIMATIONS["excited"] = replace(ANIMATIONS["bounce"], name="excited")
+# Curiosity's standing-idle beat: one pass of the magnifying-glass art. The
+# file-activity "searching" emote keeps its own looping definition.
+ANIMATIONS["investigate"] = replace(
+    ANIMATIONS["searching"], name="investigate", looping=False
+)
 pocket_grab_frames = ANIMATIONS["pocket_grab"].frames
 ANIMATIONS["pocket_hover"] = replace(
     ANIMATIONS["pocket_grab"],
