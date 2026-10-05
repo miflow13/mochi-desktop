@@ -10,6 +10,8 @@ from gi.repository import GLib
 
 from mochi.state import MochiState, PresentationState
 
+from .signals import AppCategorySignalAdapter
+
 
 def _boottime_seconds(clock=time) -> float:
     """Seconds on a clock that keeps counting while the machine is suspended.
@@ -52,9 +54,9 @@ class ActiveWindowCuriosityMixin:
     CURIOSITY_BUBBLE_MIN_SIZE_PX = 80
     CURIOSITY_BEAT_ANIMATION = "investigate"
 
-    _CURIOSITY_CATEGORIES = frozenset(
-        ("vscode", "editor", "terminal", "browser", "media", "pixel_art", "unknown")
-    )
+    # One source of truth: curiosity reacts to exactly the categories the
+    # AmbiSense adapter accepts, so the two lists cannot drift apart.
+    _CURIOSITY_CATEGORIES = AppCategorySignalAdapter.ALLOWED
     _CURIOSITY_CUE_STATES = frozenset(
         (
             MochiState.IDLE,

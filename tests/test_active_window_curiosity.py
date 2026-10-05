@@ -13,6 +13,7 @@ from mochi.presence import curiosity
 from mochi.presence.click_dialogue import PresenceBuddy, PresenceX11Buddy
 from mochi.presence.curiosity import ActiveWindowCuriosityMixin
 from mochi.presence.idle_look import IdleLookMixin
+from mochi.presence.signals import AppCategorySignalAdapter
 from mochi.state import MochiState, PresentationState, StateMachine
 
 
@@ -159,6 +160,21 @@ def test_unrecognized_focus_category_is_ignored() -> None:
     assert buddy._curiosity_source_id is None
 
 
+@pytest.mark.parametrize("category", sorted(AppCategorySignalAdapter.ALLOWED))
+def test_every_category_the_adapter_accepts_schedules_curiosity(category) -> None:
+    # The allow-list lives in AppCategorySignalAdapter; curiosity must follow it
+    # so a newly accepted category is never silently ignored here.
+    buddy = CuriosityHarness()
+
+    with patch.object(curiosity.GLib, "timeout_add", return_value=3) as timeout_add:
+        buddy._on_presence_app_focus_changed(category)
+
+    timeout_add.assert_called_once_with(
+        buddy.CURIOSITY_DEBOUNCE_MS, buddy._fire_curiosity
+    )
+    assert buddy._curiosity_pending_reason == f"window:{category}"
+
+
 def test_category_reclassification_does_not_trigger_curiosity() -> None:
     # Ported from PR #133: categories can change while focus stays on the same
     # window (e.g. late identity), and only the focus/tab pulses mean attention moved.
@@ -214,6 +230,21 @@ def test_nothing_is_scheduled_while_shutting_down() -> None:
     timeout_add.assert_not_called()
 
 
+def test_nothing_is_scheduled_in_preview_mode() -> None:
+    buddy = CuriosityHarness()
+    buddy._preview_mode = True
+
+    with patch.object(curiosity.GLib, "timeout_add") as timeout_add:
+        buddy._on_presence_browser_tab_changed()
+        buddy._on_presence_app_focus_changed("terminal")
+
+    assert buddy.tab_events == 1
+    assert buddy.focus_events == ["terminal"]
+    timeout_add.assert_not_called()
+    assert buddy._curiosity_source_id is None
+    assert buddy._curiosity_pending_reason is None
+
+
 def test_firing_runs_the_pending_reaction_once(clock) -> None:
     buddy = CuriosityHarness()
     buddy._curiosity_source_id = 9
@@ -224,6 +255,16 @@ def test_firing_runs_the_pending_reaction_once(clock) -> None:
     assert buddy.beats == ["investigate"]
     assert buddy._curiosity_source_id is None
     assert buddy._curiosity_pending_reason is None
+
+    # A repeated fire must not replay the reaction. Move far past every cooldown
+    # first, so only a leftover pending reason (not pacing) could make it react.
+    clock.now += 10_000.0
+    buddy.queue_draw.reset_mock()
+    assert buddy._fire_curiosity() == curiosity.GLib.SOURCE_REMOVE
+
+    assert buddy.beats == ["investigate"]
+    assert buddy._curiosity_cue_active is False
+    buddy.queue_draw.assert_not_called()
 
 
 # -- Reaction ladder ----------------------------------------------------------
@@ -309,12 +350,22 @@ def test_long_quiet_period_resets_habituation(clock) -> None:
 
 def test_suppressed_trigger_does_not_touch_habituation(clock) -> None:
     buddy = CuriosityHarness()
-    buddy._ambient_presence_engine.tuning.quiet_mode = True
+    _busy(buddy)
+    assert buddy._react_to_curiosity("tab") == "cue"
+    clock.now += 30.0
+    assert buddy._react_to_curiosity("tab") == "cue"
+    seeded_at = clock.now
+    assert buddy._curiosity_streak == 2
+    assert buddy._curiosity_last_trigger_at == seeded_at
 
+    # Past the reset window, an eligible trigger would zero the streak and stamp
+    # a new last-trigger time. A suppressed one must leave both exactly as they were.
+    buddy._ambient_presence_engine.tuning.quiet_mode = True
+    clock.now += buddy.CURIOSITY_HABITUATION_RESET_SECONDS + 1.0
     assert buddy._react_to_curiosity("tab") == "drop"
 
-    assert buddy._curiosity_last_trigger_at == -math.inf
-    assert buddy._curiosity_streak == 0
+    assert buddy._curiosity_streak == 2
+    assert buddy._curiosity_last_trigger_at == seeded_at
     assert buddy.beats == []
 
 
