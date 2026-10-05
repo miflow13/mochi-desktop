@@ -52,12 +52,12 @@ the user's work.
 Browser tab awareness is timing-only. While the focused window is a browser,
 the GNOME helper watches its title change inside GNOME Shell, keeps a one-way
 digest in memory to tell whether it changed, and sends Mochi a pulse with no
-data. The title never leaves GNOME Shell, and the pulse goes out only within two
-seconds of real keyboard or pointer input, so unread counters and autoplay do
-not count. While a browser window is on YouTube, tab tracking pauses and reads
-no title; the existing YouTube check, which reduces a title to a yes or no, is
-unchanged. Like other AmbiSense signals, the pulse's timing is visible on the
-session bus.
+data. The title never leaves GNOME Shell, and the pulse goes out only within
+two seconds of real keyboard or pointer input, so unread counters and autoplay
+do not count. While a browser window is on YouTube, tab tracking pauses and
+reads no title; the existing YouTube check, which reduces a title to a yes or
+no, is unchanged. Like the helper's other signals, the pulse's timing is
+visible on the session bus.
 
 AmbiSense is a local rule-based behavior engine, not an LLM or cloud AI
 service.

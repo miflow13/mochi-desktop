@@ -11,9 +11,10 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 - Mochi now notices when you switch windows or settle on a new browser tab.
   If he's standing around he takes a quick look through his magnifying glass;
   if he's busy he shows a tiny thought bubble instead, and he settles down
-  during long browsing sessions. Tab awareness comes from the GNOME helper,
-  which tells Mochi only that a tab changed, never its title or address, and
-  starts working after you log out and back in once the update installs.
+  during long browsing sessions. Both come from the GNOME helper, which tells
+  Mochi that you switched, and at most a broad app type such as browser or
+  terminal, never a title or address. They start working after you log out
+  and back in once the update installs.
 
 ### Changed
 

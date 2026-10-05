@@ -518,13 +518,7 @@ A subsystem with timers, cached state, monitors, windows, or many related method
 
 Important current architecture note: FocusSessionMixin is explicitly recognized in the project documentation as composition debt. Do not use its size as a template for future mixins.
 
-ActiveWindowCuriosityMixin is a deliberate mixin rather than a composed
-controller: every entry point it has (`_draw`, `_tick`, `_on_pressed`,
-`shutdown_presence`, and the app-focus and browser-tab presence hooks) is a
-cooperative-chain hook, and it never claims behavior state. It sits directly
-above IdleLookMixin, which owns every standing-idle beat — the timed `look`
-and curiosity's `investigate` — through `_play_idle_beat()`, with
-`_idle_look_active` as the single ownership flag.
+ActiveWindowCuriosityMixin is a deliberate mixin rather than a composed controller: every entry point it has (_draw, _tick, _on_pressed, shutdown_presence, and the app-focus and browser-tab presence hooks) is a cooperative-chain hook, and it never claims behavior state. It sits directly above IdleLookMixin, which owns every standing-idle beat — the timed look and curiosity's investigate — through _play_idle_beat(), with _idle_look_active as the single ownership flag.
 
 ---
 
@@ -980,6 +974,8 @@ The optional helper currently exposes semantic events such as:
 - FileBrowsingStarted / FileBrowsingStopped;
 - YouTubeFocusedStarted / YouTubeFocusedStopped;
 - AppCategoryChanged;
+- AppFocusChanged (the coarse app category, sent when the focused window actually changes);
+- BrowserTabChanged (a zero-payload pulse when the focused browser window's tab or page changes after real input);
 - EmoteCatalogueRequested;
 - developer-menu shortcut request.
 
@@ -1011,6 +1007,8 @@ The helper is intentionally designed not to transmit or store:
 - screen content.
 
 The YouTube focus helper may transiently inspect a focused browser title only to reduce it to a yes/no YouTube semantic state; the title itself is not retained or sent to Mochi.
+
+Browser tab awareness observes title changes only on the focused window while it is classified browser; it keeps only a one-way SHA-256 digest of the title (with any leading unread badge removed) in memory to detect a change, emits BrowserTabChanged only within two seconds of real keyboard or pointer input; the pulse carries no payload, and the title itself is never stored, logged, or sent.
 
 When adding a new detector, reduce raw desktop information to the smallest semantic event before it enters the character runtime.
 
