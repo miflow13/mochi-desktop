@@ -20,6 +20,12 @@ const YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME = 'YouTubeFocusedStarted';
 const YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME = 'YouTubeFocusedStopped';
 const APP_CATEGORY_SIGNAL_NAME = 'AppCategoryChanged';
 const APP_FOCUS_SIGNAL_NAME = 'AppFocusChanged';
+const BROWSER_TAB_SIGNAL_NAME = 'BrowserTabChanged';
+// Tab switches and link clicks follow real input within this window. Unread
+// counters, title blinkers, and autoplay retitles happen hands-off.
+const TAB_INPUT_WINDOW_MS = 2000;
+// "(3) Inbox" and "(99+) Chat": an unread badge is not a new tab or page.
+const TAB_TITLE_BADGE_PATTERN = /^\(\d+\+?\)\s*/;
 const DEVELOPER_MENU_SIGNAL_NAME = 'DeveloperMenuRequested';
 const DEVELOPER_MENU_KEYBINDING = 'developer-menu-shortcut';
 const EMOTE_CATALOGUE_SIGNAL_NAME = 'EmoteCatalogueRequested';
@@ -130,6 +136,14 @@ const BROWSER_TITLE_NAMES = [
     'microsoft edge',
 ];
 
+function normalizeTabTitle(title) {
+    return String(title ?? '').trim().replace(TAB_TITLE_BADGE_PATTERN, '');
+}
+
+function shouldEmitTabPulse(idleMs) {
+    return Number.isFinite(idleMs) && idleMs >= 0 && idleMs < TAB_INPUT_WINDOW_MS;
+}
+
 export default class MochiTypingActivityExtension extends Extension {
     enable() {
         this._connection = Gio.DBus.session;
@@ -146,6 +160,9 @@ export default class MochiTypingActivityExtension extends Extension {
         this._videoFocusHeartbeatId = 0;
         this._focusChangedId = 0;
         this._lastFocusedWindow = global.display.get_focus_window();
+        this._tabWindow = null;
+        this._tabTitleChangedId = 0;
+        this._tabTitleDigest = null;
         this._settings = this.getSettings();
 
         Main.wm.addKeybinding(
@@ -189,6 +206,7 @@ export default class MochiTypingActivityExtension extends Extension {
                 this._updateFileBrowsingState();
                 this._updateYouTubeFocusedState(false);
                 const category = this._updateAppCategory();
+                this._trackBrowserTabTitle(focusedWindow, category);
 
                 // Mutter can notify focus-window more than once while the same
                 // Meta.Window remains focused. Curiosity should represent an
@@ -207,12 +225,17 @@ export default class MochiTypingActivityExtension extends Extension {
         this._updateFileBrowsingState();
         this._updateYouTubeFocusedState(false);
         this._updateAppCategory();
+        this._trackBrowserTabTitle(global.display.get_focus_window(), this._appCategory);
         this._videoFocusHeartbeatId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT,
             VIDEO_FOCUS_HEARTBEAT_MS,
             () => {
                 this._updateYouTubeFocusedState(false);
                 this._updateAppCategory();
+                // Identity can arrive after a window is focused, so re-sync to
+                // pick up a browser that classified late. Idempotent when the
+                // target is unchanged.
+                this._trackBrowserTabTitle(global.display.get_focus_window(), this._appCategory);
                 return GLib.SOURCE_CONTINUE;
             },
         );
@@ -329,6 +352,72 @@ export default class MochiTypingActivityExtension extends Extension {
             // Focus pulses carry only the same coarse semantic category. Never
             // fall back to sending a title or application identifier.
         }
+    }
+
+    _trackBrowserTabTitle(window, category) {
+        // Only browser titles are observed; every other app stays unwatched.
+        const target = category === 'browser' ? window : null;
+        if (target === this._tabWindow)
+            return;
+
+        this._untrackBrowserTabTitle();
+        if (target === null)
+            return;
+
+        this._tabWindow = target;
+        // A newly focused window is a baseline, not a tab change.
+        this._tabTitleDigest = this._tabTitleDigestFor(target);
+        this._tabTitleChangedId = target.connect(
+            'notify::title',
+            () => this._onBrowserTabTitleChanged(),
+        );
+    }
+
+    _untrackBrowserTabTitle() {
+        if (this._tabWindow !== null && this._tabTitleChangedId) {
+            try {
+                this._tabWindow.disconnect(this._tabTitleChangedId);
+            } catch (_error) {
+                // The window may already be unmanaged; nothing left to release.
+            }
+        }
+        this._tabWindow = null;
+        this._tabTitleChangedId = 0;
+        this._tabTitleDigest = null;
+    }
+
+    _tabTitleDigestFor(window) {
+        let title = '';
+        try {
+            title = window.get_title();
+        } catch (_error) {
+            return null;
+        }
+        // Privacy boundary: keep only a one-way digest for change detection.
+        // The title itself is never stored, logged, or sent over D-Bus.
+        return GLib.compute_checksum_for_string(
+            GLib.ChecksumType.SHA256,
+            normalizeTabTitle(title),
+            -1,
+        );
+    }
+
+    _onBrowserTabTitleChanged() {
+        if (this._tabWindow === null)
+            return;
+
+        const digest = this._tabTitleDigestFor(this._tabWindow);
+        if (digest === null || digest === this._tabTitleDigest)
+            return;
+        // Store first so hands-off churn still becomes the new baseline.
+        this._tabTitleDigest = digest;
+
+        if (this._idleMonitor === null)
+            return;
+        if (!shouldEmitTabPulse(Number(this._idleMonitor.get_idletime())))
+            return;
+
+        this._emitSignal(BROWSER_TAB_SIGNAL_NAME);
     }
 
     _updateAppCategory() {
@@ -610,6 +699,7 @@ export default class MochiTypingActivityExtension extends Extension {
             global.display.disconnect(this._focusChangedId);
             this._focusChangedId = 0;
         }
+        this._untrackBrowserTabTitle();
 
         this._idleMonitor = null;
         this._lastInputEventAtMs = null;
