@@ -137,36 +137,45 @@ class ActiveWindowCuriosityMixin:
 
     # -- Decision -------------------------------------------------------------
 
-    def _curiosity_allowed(self) -> bool:
-        if (
-            getattr(self, "_preview_mode", False)
-            or getattr(self, "_presence_shutting_down", False)
-            or getattr(self, "_user_idle", False)
-            or getattr(self, "_context_menu_open", False)
-            or getattr(self, "_press", None) is not None
-            or getattr(self, "_drag_started", False)
+    def _curiosity_suppression(self) -> str | None:
+        """Name the rule that silences curiosity right now, or ``None``."""
+        for attribute, cause in (
+            ("_preview_mode", "preview"),
+            ("_presence_shutting_down", "shutting down"),
+            ("_user_idle", "user idle"),
+            ("_context_menu_open", "context menu"),
+            ("_drag_started", "dragging"),
         ):
-            return False
+            if getattr(self, attribute, False):
+                return cause
+        if getattr(self, "_press", None) is not None:
+            return "pressed"
         # Same quiet-focus rule as other presence reactions
         # (FocusSessionMixin._focus_allows_presence_action). Focus work runs as
         # COMPUTER, a cue-allowed state, so the state checks below miss it.
         for predicate_name in ("_focus_should_work", "_focus_should_think"):
             predicate = getattr(self, predicate_name, None)
             if callable(predicate) and predicate():
-                return False
+                return "focus session"
         state = getattr(self, "state", None)
-        if state is None or state.presentation is not PresentationState.NORMAL:
-            return False
+        if state is None:
+            return "no state"
+        if state.presentation is not PresentationState.NORMAL:
+            return f"presentation {state.presentation.name}"
         if state.current in self._CURIOSITY_SLEEP_STATES:
-            return False
+            return "sleeping"
         engine = getattr(self, "_ambient_presence_engine", None)
         tuning = getattr(engine, "tuning", None)
         if tuning is None:
-            return True
-        return bool(
-            getattr(tuning, "ambient_reactions_enabled", True)
-            and not getattr(tuning, "quiet_mode", False)
-        )
+            return None
+        if not getattr(tuning, "ambient_reactions_enabled", True):
+            return "ambient reactions off"
+        if getattr(tuning, "quiet_mode", False):
+            return "quiet mode"
+        return None
+
+    def _curiosity_allowed(self) -> bool:
+        return self._curiosity_suppression() is None
 
     def _curiosity_cue_allowed(self) -> bool:
         return (
@@ -176,9 +185,10 @@ class ActiveWindowCuriosityMixin:
 
     def _react_to_curiosity(self, reason: str) -> str:
         """Take the first allowed reaction: ``"beat"``, ``"cue"``, or ``"drop"``."""
-        if not self._curiosity_allowed():
+        suppression = self._curiosity_suppression()
+        if suppression is not None:
             # Suppressed triggers never count toward habituation.
-            return "drop"
+            return self._curiosity_drop(reason, f"suppressed: {suppression}")
 
         now = self._curiosity_now()
         if (
@@ -194,8 +204,11 @@ class ActiveWindowCuriosityMixin:
             self.CURIOSITY_CUE_COOLDOWN_CAP_SECONDS,
             streak,
         )
-        if now - self._curiosity_last_reaction_at < reaction_gap:
-            return "drop"
+        waited = now - self._curiosity_last_reaction_at
+        if waited < reaction_gap:
+            return self._curiosity_drop(
+                reason, f"cooldown, {math.ceil(reaction_gap - waited)}s left"
+            )
 
         beat_cooldown = self._habituated_cooldown(
             self.CURIOSITY_BEAT_COOLDOWN_SECONDS,
@@ -213,7 +226,7 @@ class ActiveWindowCuriosityMixin:
             self.queue_draw()
             reaction = "cue"
         else:
-            return "drop"
+            return self._curiosity_drop(reason, f"state {self.state.current.name}")
 
         self._curiosity_last_reaction_at = now
         self._curiosity_streak = streak + 1
@@ -226,6 +239,13 @@ class ActiveWindowCuriosityMixin:
                 self._curiosity_streak,
             )
         return reaction
+
+    def _curiosity_drop(self, reason: str, cause: str) -> str:
+        """Log why a trigger produced nothing, so ``--debug`` explains silence."""
+        logger = getattr(self, "_logger", None)
+        if logger is not None:
+            logger.debug("[curiosity] %s -> drop (%s)", reason, cause)
+        return "drop"
 
     def _clear_curiosity_cue(self) -> None:
         if not self._curiosity_cue_active:

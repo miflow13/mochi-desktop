@@ -654,3 +654,55 @@ def test_production_buddies_keep_curiosity_quiet_during_focus(buddy_type) -> Non
     buddy._focus_session = None
     buddy._focus_setup_pending = True
     assert buddy._curiosity_allowed() is False
+
+
+# -- Diagnostics --------------------------------------------------------------
+
+
+def _debug_messages(buddy: CuriosityHarness) -> list[str]:
+    return [
+        call.args[0] % call.args[1:] for call in buddy._logger.debug.call_args_list
+    ]
+
+
+@pytest.mark.parametrize(
+    ("setup", "expected"),
+    [
+        (lambda b: setattr(b._ambient_presence_engine.tuning, "quiet_mode", True), "quiet mode"),
+        (lambda b: setattr(b._ambient_presence_engine.tuning, "ambient_reactions_enabled", False), "ambient reactions off"),
+        (lambda b: setattr(b, "_user_idle", True), "user idle"),
+        (lambda b: setattr(b, "_context_menu_open", True), "context menu"),
+        (lambda b: setattr(b, "_drag_started", True), "dragging"),
+        (lambda b: setattr(b, "_focus_should_work", lambda: True), "focus session"),
+        (lambda b: setattr(b.state, "presentation", PresentationState.LEVEL_UP), "presentation LEVEL_UP"),
+        (lambda b: _busy(b, MochiState.SLEEPING), "sleeping"),
+    ],
+)
+def test_suppressed_drop_logs_its_cause(clock, setup, expected) -> None:
+    buddy = CuriosityHarness()
+    setup(buddy)
+
+    assert buddy._react_to_curiosity("tab") == "drop"
+
+    assert f"[curiosity] tab -> drop (suppressed: {expected})" in _debug_messages(buddy)
+
+
+def test_cooldown_drop_logs_remaining_wait(clock) -> None:
+    buddy = CuriosityHarness()
+    assert buddy._react_to_curiosity("window:browser") == "beat"
+    buddy._logger.debug.reset_mock()
+
+    clock.now += 5.0
+    assert buddy._react_to_curiosity("tab") == "drop"
+
+    # streak 1 -> 30 s gap, 5 s elapsed -> 25 s left
+    assert "[curiosity] tab -> drop (cooldown, 25s left)" in _debug_messages(buddy)
+
+
+def test_state_drop_logs_the_blocking_state(clock) -> None:
+    buddy = CuriosityHarness()
+    _busy(buddy, MochiState.WATCHING)
+
+    assert buddy._react_to_curiosity("tab") == "drop"
+
+    assert "[curiosity] tab -> drop (state WATCHING)" in _debug_messages(buddy)
