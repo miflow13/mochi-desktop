@@ -11,11 +11,14 @@ It currently provides:
 - `YouTubeFocusedStarted` / `YouTubeFocusedStopped` — a privacy-reduced focused-YouTube boolean used by watch-along behavior.
 - `AppCategoryChanged` — a coarse category only: `vscode`, `editor`, `terminal`, `browser`, `media`, `pixel_art`, or `unknown`.
 - `AppFocusChanged` — emitted on focused-window changes with only that same coarse category, allowing curiosity feedback even when two windows share a category.
+- `BrowserTabChanged` — zero-payload pulse when the focused browser window's title changes (a tab switch or a followed link), or when that same window leaves a YouTube tab for another tab, seen as its existing coarse browser → media → browser category change. Either way it is sent only within two seconds of real keyboard or pointer input; unread-count badges are stripped before titles are compared, and hands-off retitles (title blinkers, autoplay) are ignored.
 - `EmoteCatalogueRequested` — zero-payload request from the user-facing catalogue shortcut.
 
 Presence uses Mutter's server-global idle monitor. Typing inspects only the broad input-device type needed to distinguish keyboard activity. File browsing and app category are classified inside GNOME Shell from application identifiers and reduced to semantic state before reaching Mochi. General app-category detection never sends application IDs or window titles. The extension never stores or transmits key symbols, keycodes, Unicode values, modifiers, shortcuts, passwords, typed text, pointer coordinates, file names, folder names, paths, or application content.
 
 The existing YouTube-focus helper may transiently inspect the focused browser title only to reduce it to a yes/no YouTube state; the title itself is never retained, logged, or transmitted.
+
+Tab awareness observes title changes only on the focused window while it is classified `browser`. When a browser window is on YouTube (classified `media`), tab tracking pauses and reads no title for that window; the YouTube-focus check above is unchanged. To detect a change the extension keeps a one-way SHA-256 digest of the current title (with any leading unread badge such as `(3)` removed) in memory; the title itself is never stored, logged, or sent. The digest is defense in depth rather than a hard boundary, since GNOME Shell already holds window titles, but it means no extension log or state dump can leak one. `BrowserTabChanged` carries no payload and reveals only *when* you changed tab or page; like every signal here, its timing is visible to other processes on your session bus.
 
 ## Local development install
 

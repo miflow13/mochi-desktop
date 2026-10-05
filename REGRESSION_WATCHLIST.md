@@ -170,6 +170,12 @@ Use this checklist for interaction/state changes and before release checkpoints.
 - [ ] Music and watchable-video detection remain distinct
 - [ ] Pause / stop / focus loss clears stale watching or dancing presentation
 - [ ] Direct interaction can interrupt contextual presentation and ambient recovery is deterministic
+- [ ] Flicking through browser tabs produces one curiosity reaction after settling, not one per tab
+- [ ] Title changes with hands off the keyboard and mouse (unread badges, chat title blinkers, YouTube autoplay) do not trigger curiosity
+- [ ] Investigate beat returns to idle without a visible frame jump
+- [ ] Dragging Mochi mid-investigate recovers cleanly
+- [ ] Quiet mode / ambient reactions off suppress all curiosity
+- [ ] Curiosity lean stays crisp (no pixel shimmer) and the bubble is legible at 112 px and 256 px; 64 px shows lean only
 
 ## AmbiSense Helper Lifecycle (#58)
 

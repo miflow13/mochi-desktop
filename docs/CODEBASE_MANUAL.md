@@ -464,19 +464,23 @@ The production PresenceBuddy is assembled through cooperative multiple inheritan
 Current layer order:
 
     ClickDialogueMixin
+    ActiveWindowCuriosityMixin
     IdleLookMixin
+    UpdateControlsMixin
     QuickStartMixin
     FocusSessionMixin
     FedoraModeMixin
     TerminalCoworkMixin
-    MusicDanceMixin
     EdgeRoamMixin
+    MusicDanceMixin
     EmoteCatalogueMixin
     BondMeterMixin
     FeedMochiMixin
+    PocketBuddyMixin
     NameplateMixin
-    PresenceBuddyMixin
-    Buddy
+    BasePresenceBuddy
+
+BasePresenceBuddy comes from presence/integration.py and is itself PresenceBuddyMixin layered over Buddy.
 
 The X11 production buddy uses the same feature layers and ends in the X11-flavored base.
 
@@ -513,6 +517,14 @@ Use a mixin only when the feature is genuinely narrow and intentionally needs to
 A subsystem with timers, cached state, monitors, windows, or many related methods usually deserves a composed controller.
 
 Important current architecture note: FocusSessionMixin is explicitly recognized in the project documentation as composition debt. Do not use its size as a template for future mixins.
+
+ActiveWindowCuriosityMixin is a deliberate mixin rather than a composed
+controller: every entry point it has (`_draw`, `_tick`, `_on_pressed`,
+`shutdown_presence`, and the app-focus and browser-tab presence hooks) is a
+cooperative-chain hook, and it never claims behavior state. It sits directly
+above IdleLookMixin, which owns every standing-idle beat — the timed `look`
+and curiosity's `investigate` — through `_play_idle_beat()`, with
+`_idle_look_active` as the single ownership flag.
 
 ---
 
