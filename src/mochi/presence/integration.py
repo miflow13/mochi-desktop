@@ -674,8 +674,10 @@ class PresenceBuddyMixin:
         self._logger.debug("[presence] context app=%s (baseline)", category)
 
     def _on_presence_app_focus_changed(self, category: str) -> None:
-        """Receive a privacy-reduced focus pulse even when category is unchanged."""
-        self._logger.debug("[presence] focus app=%s", category)
+        """Receive a privacy-reduced focus pulse even when category is unchanged.
+
+        The adapter already logs each pulse; curiosity overrides this hook.
+        """
 
     def _on_presence_browser_tab_changed(self) -> None:
         """Receive a payload-free tab/page pulse; curiosity overrides this hook."""

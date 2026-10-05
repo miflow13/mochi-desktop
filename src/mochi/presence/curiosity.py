@@ -32,9 +32,9 @@ class ActiveWindowCuriosityMixin:
     """Notice attention changes without claiming Mochi's behavior state.
 
     AmbiSense sends a coarse app category when window focus changes and a
-    payload-free pulse when the focused browser settles on new content after
-    user input. Curiosity never reads window titles, application IDs, or
-    screen content.
+    payload-free pulse each time the focused browser changes tab or page after
+    user input; curiosity waits for those pulses to settle. Curiosity never
+    reads window titles, application IDs, or screen content.
 
     Standing-idle Mochi borrows the idle-look lifecycle for one ``investigate``
     beat; otherwise he shows a short overlay cue. Neither path changes
@@ -87,7 +87,10 @@ class ActiveWindowCuriosityMixin:
     @classmethod
     def _habituated_cooldown(cls, base: float, cap: float, streak: int) -> float:
         """Stretch a cooldown for each recent reaction, up to its cap."""
-        return min(base * cls.CURIOSITY_HABITUATION_FACTOR ** max(0, streak), cap)
+        # 1.5 ** 16 is far past both caps; clamping keeps a very long streak
+        # from overflowing the float power.
+        exponent = min(max(0, streak), 16)
+        return min(base * cls.CURIOSITY_HABITUATION_FACTOR ** exponent, cap)
 
     # -- Triggers -------------------------------------------------------------
 
@@ -144,6 +147,13 @@ class ActiveWindowCuriosityMixin:
             or getattr(self, "_drag_started", False)
         ):
             return False
+        # Same quiet-focus rule as other presence reactions
+        # (FocusSessionMixin._focus_allows_presence_action). Focus work runs as
+        # COMPUTER, a cue-allowed state, so the state checks below miss it.
+        for predicate_name in ("_focus_should_work", "_focus_should_think"):
+            predicate = getattr(self, predicate_name, None)
+            if callable(predicate) and predicate():
+                return False
         state = getattr(self, "state", None)
         if state is None or state.presentation is not PresentationState.NORMAL:
             return False

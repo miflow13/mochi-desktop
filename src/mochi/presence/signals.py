@@ -297,15 +297,26 @@ class NetworkSignalAdapter:
 
 
 class AppCategorySignalAdapter:
-    """Receive only a coarse focused-application category from GNOME Shell.
+    """Receive coarse, content-free app signals from GNOME Shell.
 
     The companion extension performs classification inside the compositor and
     sends one of a tiny allow-list of semantic categories. Application IDs,
     window titles, file names, and content never cross this D-Bus boundary.
-    Older extension versions simply never emit this optional signal, leaving
-    the category as ``unknown`` without affecting Mochi.
-    ``BrowserTabChanged`` is a payload-free pulse for a settled browser tab or
-    page change; older extensions never emit it.
+
+    Three optional helper signals arrive here:
+
+    - ``AppCategoryChanged(s)``: the focused window's category changed.
+    - ``AppFocusChanged(s)``: window focus moved, with the same coarse
+      category, even when the category did not change.
+    - ``BrowserTabChanged()``: a payload-free pulse each time the focused
+      browser window's title changes (ignoring a leading unread badge), or
+      that window leaves a YouTube tab, within two seconds of user input. The
+      extension sends one per change and does not wait for the tab to settle;
+      curiosity applies its own settle delay.
+
+    Older extension versions never emit some or all of them. Without
+    ``AppCategoryChanged`` the category stays ``unknown``; the other two simply
+    never fire. Either way Mochi is unaffected.
     """
 
     BUS_NAME = "io.github.mochi_desktop.Mochi.TypingMonitor"
@@ -422,10 +433,12 @@ class AppCategorySignalAdapter:
             self._on_focus_changed(category)
 
     def _on_tab_signal(self, *_signal_args) -> None:
-        """Forward a payload-free pulse: the focused browser settled on new content.
+        """Forward a payload-free pulse: the focused browser changed tab or page.
 
-        The extension sends no title, URL, or identity, and only emits after
-        real user input, so there is nothing to validate beyond delivery.
+        The extension sends one per change, without waiting for a settle. It
+        carries no title, URL, or identity and goes out only within two
+        seconds of real user input, so there is nothing to validate beyond
+        delivery.
         """
         self._logger.debug("[presence] browser tab changed")
         if self._on_tab_changed is not None:

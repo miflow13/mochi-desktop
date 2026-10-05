@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import cairo
 import pytest
 
+from mochi.focus import FocusPlan, FocusSession
 from mochi.presence import curiosity
 from mochi.presence.click_dialogue import PresenceBuddy, PresenceX11Buddy
 from mochi.presence.curiosity import ActiveWindowCuriosityMixin
@@ -131,6 +132,15 @@ def test_habituated_cooldown_grows_and_clamps() -> None:
     assert cooldown(20.0, 120.0, 2) == 45.0
     assert cooldown(20.0, 120.0, 10) == 120.0
     assert cooldown(120.0, 600.0, 4) == 600.0
+
+
+def test_habituated_cooldown_caps_a_huge_streak() -> None:
+    # 1.5 ** 1752 overflows a float. A very long busy session must still get
+    # the cap, not an OverflowError from inside the GLib callback.
+    cooldown = ActiveWindowCuriosityMixin._habituated_cooldown
+
+    assert cooldown(20.0, 120.0, 10_000) == 120.0
+    assert cooldown(120.0, 600.0, 10_000) == 600.0
 
 
 # -- Triggers -----------------------------------------------------------------
@@ -412,6 +422,73 @@ def test_ambient_reactions_off_suppresses(clock) -> None:
     assert buddy._react_to_curiosity("tab") == "drop"
 
 
+class FocusAwareHarness(CuriosityHarness):
+    """Adds the two FocusSessionMixin predicates behind the quiet-focus policy."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.focus_working = False
+        self.focus_thinking = False
+
+    def _focus_should_work(self) -> bool:
+        return self.focus_working
+
+    def _focus_should_think(self) -> bool:
+        return self.focus_thinking
+
+
+def test_focus_work_drops_without_touching_habituation(clock) -> None:
+    # Focus work runs as COMPUTER, a cue-allowed state, so only the focus check
+    # keeps curiosity quiet here.
+    buddy = FocusAwareHarness()
+    _busy(buddy, MochiState.COMPUTER)
+    assert buddy._react_to_curiosity("tab") == "cue"
+    clock.now += 30.0
+    assert buddy._react_to_curiosity("tab") == "cue"
+    seeded_at = clock.now
+    buddy._clear_curiosity_cue()
+    buddy.queue_draw.reset_mock()
+
+    # Past the reset window, an eligible trigger would zero the streak and stamp
+    # a new last-trigger time. A focus-suppressed one must leave both alone.
+    buddy.focus_working = True
+    clock.now += buddy.CURIOSITY_HABITUATION_RESET_SECONDS + 1.0
+    assert buddy._react_to_curiosity("window:browser") == "drop"
+
+    assert buddy._curiosity_streak == 2
+    assert buddy._curiosity_last_trigger_at == seeded_at
+    assert buddy._curiosity_cue_active is False
+    assert buddy.beats == []
+    buddy.queue_draw.assert_not_called()
+
+
+def test_focus_thinking_drops(clock) -> None:
+    # Focus setup or the user menu owns a thinking visual; standing idle
+    # underneath must not turn into an investigate beat.
+    buddy = FocusAwareHarness()
+    buddy.focus_thinking = True
+
+    assert buddy._react_to_curiosity("window:browser") == "drop"
+
+    assert buddy.beats == []
+    assert buddy._curiosity_cue_active is False
+    assert buddy._curiosity_last_trigger_at == -math.inf
+
+
+def test_active_cue_clears_on_tick_once_focus_starts(clock) -> None:
+    buddy = FocusAwareHarness()
+    _busy(buddy)
+    assert buddy._react_to_curiosity("window:terminal") == "cue"
+
+    # Starting Focus moves Mochi to COMPUTER, which alone would keep the cue.
+    buddy.focus_working = True
+    buddy.state.transition_to(MochiState.COMPUTER)
+    clock.now += 0.2
+    assert buddy._tick() is True
+
+    assert buddy._curiosity_cue_active is False
+
+
 def test_watching_drops_through_the_ladder(clock) -> None:
     buddy = CuriosityHarness()
     _busy(buddy, MochiState.WATCHING)
@@ -556,3 +633,24 @@ def test_bubble_only_at_readable_sizes(clock, size, bubble) -> None:
 def test_curiosity_wraps_the_idle_beat_owner(buddy_type) -> None:
     bases = buddy_type.__bases__
     assert bases.index(ActiveWindowCuriosityMixin) + 1 == bases.index(IdleLookMixin)
+
+
+@pytest.mark.parametrize("buddy_type", [PresenceBuddy, PresenceX11Buddy])
+def test_production_buddies_keep_curiosity_quiet_during_focus(buddy_type) -> None:
+    # Curiosity looks the focus predicates up defensively so lightweight
+    # harnesses work. Real buddies must resolve them, or a rename in
+    # FocusSessionMixin would silently let curiosity interrupt Focus.
+    buddy = buddy_type.__new__(buddy_type)
+    buddy.state = StateMachine()
+    buddy._focus_session = None
+    buddy._focus_context_menu_visible = False
+    buddy._focus_setup_pending = False
+    buddy._focus_setup_visible = False
+    assert buddy._curiosity_allowed() is True
+
+    buddy._focus_session = FocusSession(FocusPlan())
+    assert buddy._curiosity_allowed() is False
+
+    buddy._focus_session = None
+    buddy._focus_setup_pending = True
+    assert buddy._curiosity_allowed() is False

@@ -441,6 +441,29 @@ def test_app_focus_signal_emits_even_when_category_is_unchanged():
     assert adapter.category == "browser"
 
 
+def test_app_focus_signal_rejects_categories_outside_the_allow_list():
+    # The allow-list keeps arbitrary strings (an app ID, a title) out of the
+    # logs and out of curiosity's reasons, even from a misbehaving sender.
+    from mochi.presence.signals import AppCategorySignalAdapter
+
+    focus = []
+    logger = Mock()
+    adapter = AppCategorySignalAdapter(
+        on_category_changed=lambda _category: None,
+        on_focus_changed=focus.append,
+        logger=logger,
+    )
+
+    class Params:
+        def unpack(self):
+            return ("org.example.SecretApp",)
+
+    adapter._on_focus_signal(None, None, None, None, None, Params())
+
+    assert focus == []
+    assert "org.example.SecretApp" not in repr(logger.mock_calls)
+
+
 def test_app_category_initial_snapshot_syncs_without_change_event():
     from mochi.presence.signals import AppCategorySignalAdapter
 
@@ -714,3 +737,11 @@ def test_presence_integration_wires_browser_tab_hook_into_adapter():
     source = inspect.getsource(PresenceBuddyMixin.__init__)
 
     assert "on_tab_changed=self._on_presence_browser_tab_changed" in source
+
+
+def test_presence_integration_wires_app_focus_hook_into_adapter():
+    import inspect
+
+    source = inspect.getsource(PresenceBuddyMixin.__init__)
+
+    assert "on_focus_changed=self._on_presence_app_focus_changed" in source
