@@ -1,40 +1,61 @@
-"""Transient visual feedback when Mochi notices a focused app-category change."""
+"""Brief curiosity when Mochi notices a window switch or a settled browser tab."""
 
 from __future__ import annotations
 
 import math
 import time
 
+import cairo
 from gi.repository import GLib
 
 from mochi.state import MochiState, PresentationState
 
 
-class ActiveWindowCuriosityMixin:
-    """Show a lightweight nonverbal curiosity cue without claiming behavior state.
+def _boottime_seconds(clock=time) -> float:
+    """Seconds on a clock that keeps counting while the machine is suspended.
 
-    AmbiSense already receives only coarse focused-app categories. This layer keeps
-    that privacy boundary intact: it never reads a window title, application ID,
-    or screen content. Curiosity is presentation-only, so existing animation/state
-    owners continue running underneath it.
+    ``time.monotonic()`` pauses during suspend, so overnight a long habituation
+    streak would never reset and cooldowns would stretch across the sleep.
+    """
+    clock_id = getattr(clock, "CLOCK_BOOTTIME", None)
+    if clock_id is not None:
+        try:
+            return clock.clock_gettime(clock_id)
+        except OSError:
+            pass
+    return clock.monotonic()
+
+
+class ActiveWindowCuriosityMixin:
+    """Notice attention changes without claiming Mochi's behavior state.
+
+    AmbiSense sends a coarse app category when window focus changes and a
+    payload-free pulse when the focused browser settles on new content after
+    user input. Curiosity never reads window titles, application IDs, or
+    screen content.
+
+    Standing-idle Mochi borrows the idle-look lifecycle for one ``investigate``
+    beat; otherwise he shows a short overlay cue. Neither path changes
+    ``MochiState``. Reactions habituate during busy sessions.
     """
 
     CURIOSITY_DEBOUNCE_MS = 180
-    CURIOSITY_DURATION_SECONDS = 1.8
-    CURIOSITY_MIN_GAP_SECONDS = 2.5
-    CURIOSITY_SAME_CATEGORY_GAP_SECONDS = 30.0
+    CURIOSITY_TAB_SETTLE_MS = 1500
+    CURIOSITY_BEAT_COOLDOWN_SECONDS = 120.0
+    CURIOSITY_BEAT_COOLDOWN_CAP_SECONDS = 600.0
+    CURIOSITY_CUE_COOLDOWN_SECONDS = 20.0
+    CURIOSITY_CUE_COOLDOWN_CAP_SECONDS = 120.0
+    CURIOSITY_HABITUATION_FACTOR = 1.5
+    CURIOSITY_HABITUATION_RESET_SECONDS = 300.0
+    CURIOSITY_CUE_DURATION_SECONDS = 1.8
     CURIOSITY_LEAN_PX = 4.0
+    CURIOSITY_BUBBLE_MIN_SIZE_PX = 80
+    CURIOSITY_BEAT_ANIMATION = "investigate"
 
-    _CURIOSITY_LABELS = {
-        "browser": "web",
-        "vscode": "{ }",
-        "terminal": ">_",
-        "editor": "</>",
-        "media": "♪",
-        "pixel_art": "px",
-        "unknown": "?",
-    }
-    _CURIOSITY_START_STATES = frozenset(
+    _CURIOSITY_CATEGORIES = frozenset(
+        ("vscode", "editor", "terminal", "browser", "media", "pixel_art", "unknown")
+    )
+    _CURIOSITY_CUE_STATES = frozenset(
         (
             MochiState.IDLE,
             MochiState.BLINKING,
@@ -43,30 +64,65 @@ class ActiveWindowCuriosityMixin:
             MochiState.COMPUTER,
         )
     )
-    _CURIOSITY_CONTINUE_STATES = _CURIOSITY_START_STATES
+    _CURIOSITY_SLEEP_STATES = frozenset((MochiState.SLEEPING, MochiState.WAKING))
 
-    def __init__(self, *args, **kwargs) -> None:
-        self._curiosity_category: str | None = None
-        self._curiosity_started_at = 0.0
-        self._curiosity_last_started_at = float("-inf")
-        self._curiosity_last_category: str | None = None
-        self._curiosity_pending_category: str | None = None
-        self._curiosity_source_id: int | None = None
-        super().__init__(*args, **kwargs)
+    # Class-level defaults: every value is immutable, and some tests build
+    # production buddies with ``__new__`` without running mixin initializers.
+    _curiosity_source_id: int | None = None
+    _curiosity_pending_reason: str | None = None
+    _curiosity_cue_active = False
+    _curiosity_cue_started_at = 0.0
+    _curiosity_last_trigger_at = -math.inf
+    _curiosity_last_reaction_at = -math.inf
+    _curiosity_last_beat_at = -math.inf
+    _curiosity_streak = 0
 
-    def _on_presence_app_category_changed(self, category: str) -> None:
-        # App-category changes also happen for contextual reasons while focus
-        # remains on the same window (for example browser/media reclassification).
-        # Curiosity is intentionally driven only by the dedicated focus pulse.
-        super()._on_presence_app_category_changed(category)
+    # -- Clock and pacing ---------------------------------------------------
+
+    def _curiosity_now(self) -> float:
+        return _boottime_seconds()
+
+    @classmethod
+    def _habituated_cooldown(cls, base: float, cap: float, streak: int) -> float:
+        """Stretch a cooldown for each recent reaction, up to its cap."""
+        return min(base * cls.CURIOSITY_HABITUATION_FACTOR ** max(0, streak), cap)
+
+    # -- Triggers -------------------------------------------------------------
 
     def _on_presence_app_focus_changed(self, category: str) -> None:
         super()._on_presence_app_focus_changed(category)
-        self._schedule_curiosity_cue(category)
+        if category in self._CURIOSITY_CATEGORIES:
+            # A quick Alt-Tab pass should not flash a reaction.
+            self._schedule_curiosity(self.CURIOSITY_DEBOUNCE_MS, f"window:{category}")
+
+    def _on_presence_browser_tab_changed(self) -> None:
+        super()._on_presence_browser_tab_changed()
+        # Every pulse restarts the settle, so flicking through tabs produces
+        # one reaction once the user lands.
+        self._schedule_curiosity(self.CURIOSITY_TAB_SETTLE_MS, "tab")
+
+    def _schedule_curiosity(self, delay_ms: int, reason: str) -> None:
+        """Replace any pending trigger; the latest attention change wins."""
+        self._cancel_curiosity_source()
+        if getattr(self, "_presence_shutting_down", False) or getattr(
+            self, "_preview_mode", False
+        ):
+            return
+        self._curiosity_pending_reason = reason
+        self._curiosity_source_id = GLib.timeout_add(delay_ms, self._fire_curiosity)
+
+    def _fire_curiosity(self) -> bool:
+        self._curiosity_source_id = None
+        reason = self._curiosity_pending_reason
+        self._curiosity_pending_reason = None
+        if reason is not None:
+            self._react_to_curiosity(reason)
+        return GLib.SOURCE_REMOVE
 
     def _cancel_curiosity_source(self) -> None:
         source_id = self._curiosity_source_id
         self._curiosity_source_id = None
+        self._curiosity_pending_reason = None
         if source_id is None:
             return
         try:
@@ -74,35 +130,9 @@ class ActiveWindowCuriosityMixin:
         except Exception:
             pass
 
-    def _schedule_curiosity_cue(self, category: str) -> None:
-        """Debounce focus churn so quick Alt-Tab passes do not flash repeatedly."""
-        self._cancel_curiosity_source()
-        self._curiosity_pending_category = None
+    # -- Decision -------------------------------------------------------------
 
-        if category not in self._CURIOSITY_LABELS:
-            return
-
-        self._curiosity_pending_category = category
-        self._curiosity_source_id = GLib.timeout_add(
-            self.CURIOSITY_DEBOUNCE_MS,
-            self._show_scheduled_curiosity,
-        )
-
-    def _show_scheduled_curiosity(self) -> bool:
-        self._curiosity_source_id = None
-        category = self._curiosity_pending_category
-        self._curiosity_pending_category = None
-        if category is not None:
-            self._begin_curiosity_cue(category)
-        return GLib.SOURCE_REMOVE
-
-    def _on_pressed(self, *args) -> None:
-        self._cancel_curiosity_source()
-        self._curiosity_pending_category = None
-        self._clear_curiosity_cue()
-        super()._on_pressed(*args)
-
-    def _curiosity_allowed(self, *, continuing: bool = False) -> bool:
+    def _curiosity_allowed(self) -> bool:
         if (
             getattr(self, "_preview_mode", False)
             or getattr(self, "_presence_shutting_down", False)
@@ -112,20 +142,11 @@ class ActiveWindowCuriosityMixin:
             or getattr(self, "_drag_started", False)
         ):
             return False
-
         state = getattr(self, "state", None)
-        if state is None:
+        if state is None or state.presentation is not PresentationState.NORMAL:
             return False
-        if state.presentation is not PresentationState.NORMAL:
+        if state.current in self._CURIOSITY_SLEEP_STATES:
             return False
-        allowed_states = (
-            self._CURIOSITY_CONTINUE_STATES
-            if continuing
-            else self._CURIOSITY_START_STATES
-        )
-        if state.current not in allowed_states:
-            return False
-
         engine = getattr(self, "_ambient_presence_engine", None)
         tuning = getattr(engine, "tuning", None)
         if tuning is None:
@@ -135,46 +156,107 @@ class ActiveWindowCuriosityMixin:
             and not getattr(tuning, "quiet_mode", False)
         )
 
-    def _begin_curiosity_cue(self, category: str) -> bool:
-        if category not in self._CURIOSITY_LABELS or not self._curiosity_allowed():
-            return False
+    def _curiosity_cue_allowed(self) -> bool:
+        return (
+            self._curiosity_allowed()
+            and self.state.current in self._CURIOSITY_CUE_STATES
+        )
 
-        now = time.monotonic()
-        elapsed = now - self._curiosity_last_started_at
-        if elapsed < self.CURIOSITY_MIN_GAP_SECONDS:
-            return False
+    def _react_to_curiosity(self, reason: str) -> str:
+        """Take the first allowed reaction: ``"beat"``, ``"cue"``, or ``"drop"``."""
+        if not self._curiosity_allowed():
+            # Suppressed triggers never count toward habituation.
+            return "drop"
+
+        now = self._curiosity_now()
         if (
-            category == self._curiosity_last_category
-            and elapsed < self.CURIOSITY_SAME_CATEGORY_GAP_SECONDS
+            now - self._curiosity_last_trigger_at
+            >= self.CURIOSITY_HABITUATION_RESET_SECONDS
         ):
-            return False
+            self._curiosity_streak = 0
+        self._curiosity_last_trigger_at = now
 
-        self._curiosity_category = category
-        self._curiosity_started_at = now
-        self._curiosity_last_started_at = now
-        self._curiosity_last_category = category
-        self.queue_draw()
+        streak = self._curiosity_streak
+        reaction_gap = self._habituated_cooldown(
+            self.CURIOSITY_CUE_COOLDOWN_SECONDS,
+            self.CURIOSITY_CUE_COOLDOWN_CAP_SECONDS,
+            streak,
+        )
+        if now - self._curiosity_last_reaction_at < reaction_gap:
+            return "drop"
+
+        beat_cooldown = self._habituated_cooldown(
+            self.CURIOSITY_BEAT_COOLDOWN_SECONDS,
+            self.CURIOSITY_BEAT_COOLDOWN_CAP_SECONDS,
+            streak,
+        )
+        if now - self._curiosity_last_beat_at >= beat_cooldown and self._play_idle_beat(
+            self.CURIOSITY_BEAT_ANIMATION
+        ):
+            self._curiosity_last_beat_at = now
+            reaction = "beat"
+        elif self._curiosity_cue_allowed():
+            self._curiosity_cue_active = True
+            self._curiosity_cue_started_at = now
+            self.queue_draw()
+            reaction = "cue"
+        else:
+            return "drop"
+
+        self._curiosity_last_reaction_at = now
+        self._curiosity_streak = streak + 1
         logger = getattr(self, "_logger", None)
         if logger is not None:
-            logger.debug("[curiosity] noticed app category=%s", category)
-        return True
+            logger.debug(
+                "[curiosity] %s -> %s (streak=%d)",
+                reason,
+                reaction,
+                self._curiosity_streak,
+            )
+        return reaction
 
     def _clear_curiosity_cue(self) -> None:
-        if self._curiosity_category is None:
+        if not self._curiosity_cue_active:
             return
-        self._curiosity_category = None
+        self._curiosity_cue_active = False
         self.queue_draw()
 
+    # -- Lifecycle hooks ------------------------------------------------------
+
+    def _on_pressed(self, *args) -> None:
+        self._cancel_curiosity_source()
+        self._clear_curiosity_cue()
+        super()._on_pressed(*args)
+
+    def _tick(self) -> bool:
+        result = super()._tick()
+        if not self._curiosity_cue_active:
+            return result
+        if not self._curiosity_cue_allowed() or self._curiosity_progress() is None:
+            self._clear_curiosity_cue()
+            return result
+        self.queue_draw()
+        return result
+
+    def shutdown_presence(self) -> None:
+        self._cancel_curiosity_source()
+        self._curiosity_cue_active = False
+        super().shutdown_presence()
+
+    # -- Rendering --------------------------------------------------------------
+
     def _curiosity_progress(self, now: float | None = None) -> float | None:
-        if self._curiosity_category is None:
+        if not self._curiosity_cue_active:
             return None
         if now is None:
-            now = time.monotonic()
-        elapsed = max(0.0, now - self._curiosity_started_at)
-        duration = self.CURIOSITY_DURATION_SECONDS
-        if elapsed >= duration:
+            now = self._curiosity_now()
+        started_at = self._curiosity_cue_started_at
+        duration = self.CURIOSITY_CUE_DURATION_SECONDS
+        # Compare against the deadline itself: ``now - started_at >= duration``
+        # can round just below ``duration`` when ``now == started_at + duration``.
+        if now >= started_at + duration:
             return None
-        return min(1.0, elapsed / duration)
+        return max(0.0, now - started_at) / duration
 
     @staticmethod
     def _curiosity_alpha(progress: float) -> float:
@@ -195,12 +277,23 @@ class ActiveWindowCuriosityMixin:
         tail = min(1.0, (progress - 0.68) / 0.32)
         return math.cos(tail * (math.pi / 2))
 
+    def _curiosity_lean_offsets(
+        self, progress: float, direction: int, scale: float
+    ) -> tuple[int, int]:
+        """Whole-pixel lean: SpriteAtlas samples nearest-neighbor from rounded
+        placement, so a fractional translate would make the pixel art shimmer."""
+        factor = self._curiosity_lean_factor(progress)
+        return (
+            round(direction * self.CURIOSITY_LEAN_PX * scale * factor),
+            round(-1.0 * scale * factor),
+        )
+
     def _curiosity_direction(self, width: int) -> int:
         """Lean toward screen center without requesting focused-window geometry.
 
-        The current AmbiSense contract intentionally exposes only a coarse app
-        category. Using Mochi's own monitor-relative placement gives the cue a
-        directional feel while preserving that privacy boundary.
+        The AmbiSense contract exposes only a coarse app category. Using
+        Mochi's own monitor-relative placement gives the cue a directional feel
+        while preserving that privacy boundary.
         """
         placement = getattr(self, "_placement", None)
         position = getattr(placement, "position", None)
@@ -225,64 +318,55 @@ class ActiveWindowCuriosityMixin:
 
     def _draw(self, area, context, width: int, height: int) -> None:
         progress = self._curiosity_progress()
-        category = self._curiosity_category
-
-        if progress is None or category is None:
+        if progress is None:
             super()._draw(area, context, width, height)
             return
 
-        alpha = self._curiosity_alpha(progress)
         direction = self._curiosity_direction(width)
         scale = max(0.5, min(width, height) / 112.0)
-        lean_x = (
-            direction
-            * self.CURIOSITY_LEAN_PX
-            * scale
-            * self._curiosity_lean_factor(progress)
-        )
+        lean_x, lean_y = self._curiosity_lean_offsets(progress, direction, scale)
 
         context.save()
-        context.translate(lean_x, -1.0 * scale * self._curiosity_lean_factor(progress))
+        context.translate(lean_x, lean_y)
         super()._draw(area, context, width, height)
         context.restore()
 
-        self._draw_curiosity_bubble(
-            context,
-            width=width,
-            height=height,
-            category=category,
-            direction=direction,
-            alpha=alpha,
-            scale=scale,
-        )
+        # Below this size the glyph is an unreadable blob; the lean alone
+        # still reads as a little "huh?".
+        if min(width, height) >= self.CURIOSITY_BUBBLE_MIN_SIZE_PX:
+            self._draw_curiosity_bubble(
+                context,
+                width=width,
+                direction=direction,
+                alpha=self._curiosity_alpha(progress),
+                scale=scale,
+            )
 
     def _draw_curiosity_bubble(
         self,
         context,
         *,
         width: int,
-        height: int,
-        category: str,
         direction: int,
         alpha: float,
         scale: float,
     ) -> None:
+        """Thought bubble with a tiny magnifying glass that echoes the beat.
+
+        The bubble carries its own light fill and dark outline, so it stays
+        readable on any wallpaper or theme.
+        """
         if alpha <= 0.0:
             return
 
-        label = self._CURIOSITY_LABELS[category]
-        bubble_w = 34.0 * scale
-        bubble_h = 24.0 * scale
-        radius = 7.0 * scale
+        bubble_w = 26.0 * scale
+        bubble_h = 22.0 * scale
         center_x = width * 0.5 + direction * 19.0 * scale
-        x = max(
-            3.0 * scale,
-            min(center_x - bubble_w / 2, width - bubble_w - 3.0 * scale),
-        )
-        y = max(3.0 * scale, 7.0 * scale)
+        x = max(3.0 * scale, min(center_x - bubble_w / 2, width - bubble_w - 3.0 * scale))
+        y = 7.0 * scale
 
         context.save()
-        self._rounded_rect(context, x, y, bubble_w, bubble_h, radius)
+        self._rounded_rect(context, x, y, bubble_w, bubble_h, 7.0 * scale)
         context.set_source_rgba(0.96, 0.98, 0.94, 0.94 * alpha)
         context.fill_preserve()
         context.set_source_rgba(0.12, 0.24, 0.17, 0.78 * alpha)
@@ -295,6 +379,7 @@ class ActiveWindowCuriosityMixin:
             (-2.0 * direction, 4.0, 1.8),
             (-5.0 * direction, 9.0, 1.2),
         ):
+            context.new_sub_path()
             context.arc(
                 tail_x + dx * scale,
                 y + bubble_h + dy * scale,
@@ -308,21 +393,22 @@ class ActiveWindowCuriosityMixin:
             context.set_line_width(max(0.8, scale))
             context.stroke()
 
-        context.select_font_face("Sans")
-        context.set_font_size(max(7.0, 9.5 * scale))
-        extents = context.text_extents(label)
-        try:
-            text_width = extents.width
-            text_height = extents.height
-            x_bearing = extents.x_bearing
-            y_bearing = extents.y_bearing
-        except AttributeError:
-            x_bearing, y_bearing, text_width, text_height = extents[:4]
-        text_x = x + (bubble_w - text_width) / 2 - x_bearing
-        text_y = y + (bubble_h - text_height) / 2 - y_bearing
-        context.move_to(text_x, text_y)
+        # Magnifying glass: a lens ring with a short handle to the lower right.
+        lens_radius = 5.0 * scale
+        lens_x = x + bubble_w / 2 - 1.5 * scale
+        lens_y = y + bubble_h / 2 - 1.5 * scale
         context.set_source_rgba(0.09, 0.18, 0.12, 0.92 * alpha)
-        context.show_text(label)
+        context.set_line_width(max(1.0, 1.8 * scale))
+        context.new_sub_path()
+        context.arc(lens_x, lens_y, lens_radius, 0, math.tau)
+        context.stroke()
+        handle_x = lens_x + lens_radius * math.cos(math.pi / 4)
+        handle_y = lens_y + lens_radius * math.sin(math.pi / 4)
+        context.set_line_width(max(1.0, 2.2 * scale))
+        context.set_line_cap(cairo.LINE_CAP_ROUND)
+        context.move_to(handle_x, handle_y)
+        context.line_to(handle_x + 4.0 * scale, handle_y + 4.0 * scale)
+        context.stroke()
         context.restore()
 
     @staticmethod
@@ -341,25 +427,3 @@ class ActiveWindowCuriosityMixin:
         context.arc(x + radius, y + height - radius, radius, math.pi / 2, math.pi)
         context.arc(x + radius, y + radius, radius, math.pi, 3 * math.pi / 2)
         context.close_path()
-
-    def _tick(self) -> bool:
-        result = super()._tick()
-        if self._curiosity_category is None:
-            return result
-
-        if not self._curiosity_allowed(continuing=True):
-            self._clear_curiosity_cue()
-            return result
-
-        if self._curiosity_progress() is None:
-            self._clear_curiosity_cue()
-            return result
-
-        self.queue_draw()
-        return result
-
-    def shutdown_presence(self) -> None:
-        self._cancel_curiosity_source()
-        self._curiosity_pending_category = None
-        self._curiosity_category = None
-        super().shutdown_presence()
