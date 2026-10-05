@@ -706,3 +706,11 @@ def test_browser_tab_signal_without_callback_is_ignored():
     adapter._on_tab_signal(None, None, None, None, None, None)
 
     assert adapter.category == "unknown"
+
+
+def test_presence_integration_wires_browser_tab_hook_into_adapter():
+    import inspect
+
+    source = inspect.getsource(PresenceBuddyMixin.__init__)
+
+    assert "on_tab_changed=self._on_presence_browser_tab_changed" in source
