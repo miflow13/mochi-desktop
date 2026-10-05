@@ -19,6 +19,7 @@ const FILE_BROWSING_STOPPED_SIGNAL_NAME = 'FileBrowsingStopped';
 const YOUTUBE_FOCUSED_STARTED_SIGNAL_NAME = 'YouTubeFocusedStarted';
 const YOUTUBE_FOCUSED_STOPPED_SIGNAL_NAME = 'YouTubeFocusedStopped';
 const APP_CATEGORY_SIGNAL_NAME = 'AppCategoryChanged';
+const APP_FOCUS_SIGNAL_NAME = 'AppFocusChanged';
 const DEVELOPER_MENU_SIGNAL_NAME = 'DeveloperMenuRequested';
 const DEVELOPER_MENU_KEYBINDING = 'developer-menu-shortcut';
 const EMOTE_CATALOGUE_SIGNAL_NAME = 'EmoteCatalogueRequested';
@@ -144,6 +145,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._appCategory = 'unknown';
         this._videoFocusHeartbeatId = 0;
         this._focusChangedId = 0;
+        this._lastFocusedWindow = global.display.get_focus_window();
         this._settings = this.getSettings();
 
         Main.wm.addKeybinding(
@@ -183,9 +185,23 @@ export default class MochiTypingActivityExtension extends Extension {
         this._focusChangedId = global.display.connect(
             'notify::focus-window',
             () => {
+                const focusedWindow = global.display.get_focus_window();
                 this._updateFileBrowsingState();
                 this._updateYouTubeFocusedState(false);
-                this._updateAppCategory();
+                const category = this._updateAppCategory();
+
+                // Mutter can notify focus-window more than once while the same
+                // Meta.Window remains focused. Curiosity should represent an
+                // actual change of attention, not notification churn.
+                if (focusedWindow === this._lastFocusedWindow)
+                    return;
+
+                // Temporary focus loss (Overview, shell surfaces, transitions)
+                // is not a new desktop target and should not make Mochi curious.
+                if (focusedWindow !== null) {
+                    this._lastFocusedWindow = focusedWindow;
+                    this._emitAppFocus(category);
+                }
             },
         );
         this._updateFileBrowsingState();
@@ -297,12 +313,31 @@ export default class MochiTypingActivityExtension extends Extension {
         }
     }
 
+    _emitAppFocus(category) {
+        if (!this._nameReady || this._connection === null)
+            return;
+
+        try {
+            this._connection.emit_signal(
+                null,
+                OBJECT_PATH,
+                INTERFACE_NAME,
+                APP_FOCUS_SIGNAL_NAME,
+                new GLib.Variant('(s)', [category]),
+            );
+        } catch (_error) {
+            // Focus pulses carry only the same coarse semantic category. Never
+            // fall back to sending a title or application identifier.
+        }
+    }
+
     _updateAppCategory() {
         const category = this._classifyAppCategory(global.display.get_focus_window());
-        if (category === this._appCategory)
-            return;
-        this._appCategory = category;
-        this._emitAppCategory();
+        if (category !== this._appCategory) {
+            this._appCategory = category;
+            this._emitAppCategory();
+        }
+        return category;
     }
 
     _classifyAppCategory(window) {
@@ -583,6 +618,7 @@ export default class MochiTypingActivityExtension extends Extension {
         this._fileBrowsingActive = false;
         this._youtubeFocusedActive = false;
         this._appCategory = 'unknown';
+        this._lastFocusedWindow = null;
         this._nameReady = false;
 
         if (this._dbusObject) {

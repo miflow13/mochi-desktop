@@ -421,6 +421,26 @@ def test_app_category_adapter_accepts_only_coarse_allow_list():
     assert adapter.category == "pixel_art"
 
 
+def test_app_focus_signal_emits_even_when_category_is_unchanged():
+    from mochi.presence.signals import AppCategorySignalAdapter
+
+    focus = []
+    adapter = AppCategorySignalAdapter(
+        on_category_changed=lambda _category: None,
+        on_focus_changed=focus.append,
+    )
+    adapter.category = "browser"
+
+    class Params:
+        def unpack(self):
+            return ("browser",)
+
+    adapter._on_focus_signal(None, None, None, None, None, Params())
+
+    assert focus == ["browser"]
+    assert adapter.category == "browser"
+
+
 def test_app_category_initial_snapshot_syncs_without_change_event():
     from mochi.presence.signals import AppCategorySignalAdapter
 

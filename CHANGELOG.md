@@ -6,6 +6,10 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
 
 ## Unreleased
 
+### Added
+
+- Added a subtle Active Window Curiosity cue that notices privacy-reduced app-focus changes without interrupting Mochi's current behavior.
+
 ### Changed
 
 - Terminal coworking has new artwork: Mochi takes out a little laptop, types

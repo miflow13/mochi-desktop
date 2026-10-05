@@ -310,6 +310,7 @@ class AppCategorySignalAdapter:
     OBJECT_PATH = "/io/github/mochi_desktop/Mochi/TypingMonitor"
     INTERFACE = "io.github.mochi_desktop.Mochi.TypingMonitor"
     SIGNAL_NAME = "AppCategoryChanged"
+    FOCUS_SIGNAL_NAME = "AppFocusChanged"
     ALLOWED = frozenset(("vscode", "editor", "terminal", "browser", "media", "pixel_art", "unknown"))
 
     def __init__(
@@ -317,11 +318,13 @@ class AppCategorySignalAdapter:
         *,
         on_category_changed: Callable[[str], None],
         on_category_snapshot: Callable[[str], None] | None = None,
+        on_focus_changed: Callable[[str], None] | None = None,
         logger: logging.Logger | None = None,
         gio_loader: Callable[[], tuple[object, object]] | None = None,
     ) -> None:
         self._on_category_changed = on_category_changed
         self._on_category_snapshot = on_category_snapshot
+        self._on_focus_changed = on_focus_changed
         self._logger = logger or logging.getLogger(__name__)
         self._gio_loader = gio_loader or self._load_gio
         self._helper = None
@@ -341,7 +344,10 @@ class AppCategorySignalAdapter:
             return True
         self._helper = HelperConnection(
             self._gio_loader,
-            {self.SIGNAL_NAME: self._on_category_signal},
+            {
+                self.SIGNAL_NAME: self._on_category_signal,
+                self.FOCUS_SIGNAL_NAME: self._on_focus_signal,
+            },
             # Helper state is a startup baseline, not a focus transition. In
             # particular, do not enter VS Code/terminal coworking merely
             # because one was focused before Mochi subscribed.
@@ -388,6 +394,26 @@ class AppCategorySignalAdapter:
         except Exception:
             return
         self._set_category(category)
+
+    def _on_focus_signal(
+        self,
+        _connection,
+        _sender_name,
+        _object_path,
+        _interface_name,
+        _signal_name,
+        parameters,
+    ) -> None:
+        try:
+            unpacked = parameters.unpack()
+            category = unpacked[0] if isinstance(unpacked, tuple) else unpacked
+        except Exception:
+            return
+        if category not in self.ALLOWED:
+            return
+        self._logger.debug("[presence] app focus category=%s", category)
+        if self._on_focus_changed is not None:
+            self._on_focus_changed(category)
 
     def _set_category(self, category, *, emit: bool = True) -> None:
         if category not in self.ALLOWED or category == self.category:

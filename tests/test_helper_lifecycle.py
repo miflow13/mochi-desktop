@@ -123,7 +123,9 @@ def test_app_category_owner_replacement_clears_and_resyncs():
     # The first helper snapshot establishes a baseline. A reconnect after
     # losing the helper is a real state change and still reaches consumers.
     assert events == ["unknown", "browser"]
-    assert len(bus.subscriptions) == 1
+    assert len(bus.subscriptions) == 2
+    subscribed_signals = {args[2] for args in bus.subscriptions.values()}
+    assert subscribed_signals == {"AppCategoryChanged", "AppFocusChanged"}
     adapter.stop()
     assert events[-1] == "unknown"
     bus.change_owner(":1.3")
