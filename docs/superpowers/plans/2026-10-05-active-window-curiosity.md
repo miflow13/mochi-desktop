@@ -69,6 +69,7 @@ Behavior state (`MochiState`) is never touched.
 | `gnome-extension/mochi-typing@miflow13/extension.js` | Browser title tracking, input gate, `BrowserTabChanged` | 5 |
 | `tests/test_gnome_shortcuts.py` | Extension source-contract tests + installer guard | 5 |
 | `gnome-extension/mochi-typing@miflow13/README.md`, `docs/ambisense.md`, `REGRESSION_WATCHLIST.md` | Signal, privacy and QA docs | 6 |
+| `docs/CODEBASE_MANUAL.md` | §6 real layer order + why curiosity is a mixin + idle-beat ownership | 6 |
 
 `src/mochi/presence/click_dialogue.py` already gains `ActiveWindowCuriosityMixin` before `IdleLookMixin` from the PR #133 merge in Task 1; Task 4 verifies it.
 
@@ -91,7 +92,7 @@ Behavior state (`MochiState`) is never touched.
 **Acceptance Criteria:**
 - A merge commit whose only manual change is the `CHANGELOG.md` conflict resolution.
 - `CHANGELOG.md` keeps every `main` entry, and Unreleased gains an `### Added` section containing PR #133's line.
-- The full suite passes on the merge commit (expected: 1044 + PR #133's new tests passed, 3 skipped, 0 failed).
+- The full suite passes on the merge commit. A trial merge on 2026-10-05 gave **1059 passed, 3 skipped**: 1044 plus PR #133's 15 tests.
 - `git diff --check` is clean.
 
 - [ ] **Step 1: Fetch and start the merge**
@@ -132,7 +133,7 @@ Expected: `no markers`, then `clean`.
 PYTHONPATH=src xvfb-run -a /usr/bin/python3.12 -m pytest -q -p no:cacheprovider 2>&1 | tail -5
 ```
 
-Expected: all passed, 3 skipped, 0 failed. If anything fails, do **not** fold a fix into the merge. Commit the merge first (Step 4), then fix the drift in a separate commit `fix: adapt active window curiosity to current main`, re-running this command until it is green.
+Expected: `1059 passed, 3 skipped` (verified by a trial merge on 2026-10-05). If anything fails, do **not** fold a fix into the merge. Commit the merge first (Step 4), then fix the drift in a separate commit `fix: adapt active window curiosity to current main`, re-running this command until it is green.
 
 - [ ] **Step 4: Commit the merge**
 
@@ -673,6 +674,7 @@ EOF
 - **Clock:** `_boottime_seconds` uses `CLOCK_BOOTTIME` when present and falls back to `monotonic()` when it is missing or raises `OSError`.
 - **Cooldowns:** `_habituated_cooldown` returns `min(base * 1.5**streak, cap)`.
 - **Triggers:**
+  - a category reclassification on its own never schedules curiosity (ported from PR #133);
   - a window pulse schedules a 180 ms debounce, but only for allowed categories;
   - tab pulses restart one 1.5 s settle;
   - the latest pulse replaces a pending one;
@@ -723,6 +725,7 @@ from mochi.state import MochiState, PresentationState, StateMachine
 
 class _CuriosityBase:
     def __init__(self) -> None:
+        self._presence_app_category = "browser"
         self._preview_mode = False
         self._presence_shutting_down = False
         self._user_idle = False
@@ -748,6 +751,9 @@ class _CuriosityBase:
             return False
         self.beats.append(name)
         return True
+
+    def _on_presence_app_category_changed(self, category: str) -> None:
+        self._presence_app_category = category
 
     def _on_presence_app_focus_changed(self, category: str) -> None:
         self.focus_events.append(category)
@@ -858,6 +864,20 @@ def test_unrecognized_focus_category_is_ignored() -> None:
 
     timeout_add.assert_not_called()
     assert buddy._curiosity_source_id is None
+
+
+def test_category_reclassification_does_not_trigger_curiosity() -> None:
+    # Ported from PR #133: categories can change while focus stays on the same
+    # window (e.g. late identity), and only the focus/tab pulses mean attention moved.
+    buddy = CuriosityHarness()
+
+    with patch.object(curiosity.GLib, "timeout_add") as timeout_add:
+        buddy._on_presence_app_category_changed("terminal")
+
+    assert buddy._presence_app_category == "terminal"
+    assert buddy._curiosity_source_id is None
+    assert buddy._curiosity_pending_reason is None
+    timeout_add.assert_not_called()
 
 
 def test_tab_pulses_restart_one_settle_timer() -> None:
@@ -1689,6 +1709,7 @@ EOF
 
 **Acceptance Criteria:**
 - Only windows classified as `browser` get a `notify::title` handler, and switching focus to another window moves or removes it.
+- The existing 1 s category heartbeat re-syncs tracking, so a browser window whose identity is classified late still gets tracked.
 - On a title change, the digest is compared and stored **before** the input gate, and the emit happens only when `get_idletime() < TAB_INPUT_WINDOW_MS`.
 - `BrowserTabChanged` goes through `_emitSignal` with no payload. No title value reaches `console.*`, a `GLib.Variant` or a stored field.
 - `disable()` untracks the window and clears the digest.
@@ -1755,6 +1776,19 @@ def test_tab_title_tracking_is_browser_only_and_cleaned_up() -> None:
     assert "this._untrackBrowserTabTitle();" in disable
 
 
+def test_category_heartbeat_resyncs_tab_tracking() -> None:
+    source = _extension_source()
+    start = source.index("VIDEO_FOCUS_HEARTBEAT_MS,")
+    heartbeat = source[start:source.index("GLib.SOURCE_CONTINUE", start)]
+
+    # A window can be focused before its identity classifies as a browser.
+    assert "this._updateAppCategory();" in heartbeat
+    assert (
+        "this._trackBrowserTabTitle(global.display.get_focus_window(), this._appCategory);"
+        in heartbeat
+    )
+
+
 def test_install_script_copies_every_extension_module() -> None:
     script = (ROOT / "scripts" / "install-typing-extension.sh").read_text(encoding="utf-8")
     copy_line = next(
@@ -1777,7 +1811,7 @@ def test_install_script_copies_every_extension_module() -> None:
 PYTHONPATH=src xvfb-run -a /usr/bin/python3.12 -m pytest -q -p no:cacheprovider tests/test_gnome_shortcuts.py
 ```
 
-Expected: the four tab tests FAIL with `ValueError: substring not found` or `AssertionError`. The installer guard PASSES already: it protects the future, and `extension.js` is copied today.
+Expected: the five tab tests FAIL with `ValueError: substring not found` or `AssertionError`. The installer guard PASSES already: it protects the future, and `extension.js` is copied today.
 
 - [ ] **Step 3: Add the constants and pure helpers**
 
@@ -1829,7 +1863,13 @@ Directly below the PR #133 line `this._lastFocusedWindow = global.display.get_fo
         this._trackBrowserTabTitle(global.display.get_focus_window(), this._appCategory);
 ```
 
-5c. Add these methods directly after the PR #133 `_emitAppFocus(category) { ... }` method:
+5c. In the heartbeat callback passed to `GLib.timeout_add(GLib.PRIORITY_DEFAULT, VIDEO_FOCUS_HEARTBEAT_MS, () => { ... })`, directly below its `this._updateAppCategory();` line (16-space indent), insert the line below. Identity can arrive after a window is focused, so this picks up a browser that classified late. The call is idempotent: an unchanged target returns immediately.
+
+```js
+                this._trackBrowserTabTitle(global.display.get_focus_window(), this._appCategory);
+```
+
+5d. Add these methods directly after the PR #133 `_emitAppFocus(category) { ... }` method:
 
 ```js
     _trackBrowserTabTitle(window, category) {
@@ -1959,6 +1999,7 @@ EOF
 - Modify: `gnome-extension/mochi-typing@miflow13/README.md`
 - Modify: `docs/ambisense.md`
 - Modify: `REGRESSION_WATCHLIST.md`
+- Modify: `docs/CODEBASE_MANUAL.md` (§6 "The actual runtime object")
 
 **Interfaces:**
 - Consumes: shipped behavior from Tasks 2–5.
@@ -1969,6 +2010,7 @@ EOF
 - The extension README lists `BrowserTabChanged`, and states the digest, the timing-only exposure and the input gate.
 - `docs/ambisense.md` lists tab/page changes under Signals and explains the digest and session-bus timing under Privacy.
 - `REGRESSION_WATCHLIST.md` → Contextual Presence has the six spec QA items.
+- `CODEBASE_MANUAL.md` §6 lists the real layer order. Two short notes explain why curiosity is a mixin (every entry point is a cooperative-chain hook), and that `IdleLookMixin` owns all standing-idle beats.
 - `git diff --check` is clean.
 
 - [ ] **Step 1: Rewrite the CHANGELOG line**
@@ -2044,11 +2086,72 @@ At the end of the `## Contextual Presence / Media` checklist, directly after `- 
 - [ ] Curiosity lean stays crisp (no pixel shimmer) and the bubble is legible at 112 px and 256 px; 64 px shows lean only
 ```
 
-- [ ] **Step 5: Check and commit**
+- [ ] **Step 5: Correct the codebase manual's layer order**
+
+In `docs/CODEBASE_MANUAL.md` §6, replace the stale "Current layer order" block. It is missing `UpdateControlsMixin` and `PocketBuddyMixin` even before this work:
+
+```
+    ClickDialogueMixin
+    IdleLookMixin
+    QuickStartMixin
+    FocusSessionMixin
+    FedoraModeMixin
+    TerminalCoworkMixin
+    MusicDanceMixin
+    EdgeRoamMixin
+    EmoteCatalogueMixin
+    BondMeterMixin
+    FeedMochiMixin
+    NameplateMixin
+    PresenceBuddyMixin
+    Buddy
+```
+
+with the order now in `src/mochi/presence/click_dialogue.py`:
+
+```
+    ClickDialogueMixin
+    ActiveWindowCuriosityMixin
+    IdleLookMixin
+    UpdateControlsMixin
+    QuickStartMixin
+    FocusSessionMixin
+    FedoraModeMixin
+    TerminalCoworkMixin
+    EdgeRoamMixin
+    MusicDanceMixin
+    EmoteCatalogueMixin
+    BondMeterMixin
+    FeedMochiMixin
+    PocketBuddyMixin
+    NameplateMixin
+    PresenceBuddyMixin
+    Buddy
+```
+
+Before editing, confirm the list against the source:
+
+```bash
+sed -n '/^class PresenceBuddy(/,/^):/p' src/mochi/presence/click_dialogue.py
+```
+
+Then, directly after the paragraph that ends `Do not use its size as a template for future mixins.`, add:
+
+```markdown
+ActiveWindowCuriosityMixin is a deliberate mixin rather than a composed
+controller: every entry point it has (`_draw`, `_tick`, `_on_pressed`,
+`shutdown_presence`, and the app-focus and browser-tab presence hooks) is a
+cooperative-chain hook, and it never claims behavior state. It sits directly
+above IdleLookMixin, which owns every standing-idle beat — the timed `look`
+and curiosity's `investigate` — through `_play_idle_beat()`, with
+`_idle_look_active` as the single ownership flag.
+```
+
+- [ ] **Step 6: Check and commit**
 
 ```bash
 git diff --check && echo clean
-git add CHANGELOG.md gnome-extension/mochi-typing@miflow13/README.md docs/ambisense.md REGRESSION_WATCHLIST.md
+git add CHANGELOG.md gnome-extension/mochi-typing@miflow13/README.md docs/ambisense.md REGRESSION_WATCHLIST.md docs/CODEBASE_MANUAL.md
 git commit -F - <<'EOF'
 docs: document tab-aware curiosity, its privacy model, and QA checks
 
@@ -2069,6 +2172,7 @@ EOF
 
 **Acceptance Criteria:**
 - The same checks CI runs pass locally: the full suite under xvfb, `compileall`, `bash -n install.sh` and `git diff --check`.
+- A runtime smoke of the **real app** under Xvfb passes at sizes 64, 112 and 256: tab pulse → settle → `investigate` beat → idle with state `IDLE` throughout; busy tab pulse → cue with state `TYPING`; press clears the cue; clean shutdown with no traceback. A screenshot contact sheet is sent to the owner before the push.
 - The branch is pushed and a draft PR is open, its body following `.github/pull_request_template.md`, with "Fedora/GNOME/Wayland visual QA required" called out.
 - The PR body states that it supersedes #133 and that the owner should close #133.
 
@@ -2096,7 +2200,128 @@ Check specifically:
 - no code path sets `MochiState` from curiosity;
 - every `GLib.timeout_add` in `curiosity.py` has a matching cancel in `_cancel_curiosity_source`.
 
-- [ ] **Step 3: Push**
+- [ ] **Step 3: Runtime smoke of the real app under Xvfb (not committed)**
+
+The unit harnesses use fake bases. This step drives the production `PresenceX11Buddy` chain with real GLib timers and a real `AnimationPlayer`. It was verified feasible on 2026-10-05: the app starts headless with `xvfb-run` plus `dbus-run-session`, and missing system services degrade gracefully. Without a compositor, transparent areas render black; that's expected.
+
+Create `$SP/smoke_curiosity.py`, where `SP=/tmp/claude-0/-home-user-mochi-desktop/f682b1cd-28f8-5b93-8cec-02e00dd6f013/scratchpad`:
+
+```python
+"""Throwaway runtime smoke for active window curiosity. Not committed."""
+
+import os
+import subprocess
+import sys
+
+from gi.repository import Gio, GLib
+
+sys.argv = ["mochi", "--debug"]
+from mochi import main as mochi_main  # noqa: E402
+
+OUT = os.environ["SMOKE_OUT"]
+SIZE = int(os.environ["SMOKE_SIZE"])
+results: list[tuple[str, bool]] = []
+
+
+def check(name: str, ok: bool) -> None:
+    results.append((name, bool(ok)))
+    print(f"SMOKE {'PASS' if ok else 'FAIL'} {name}", flush=True)
+
+
+def buddy():
+    return Gio.Application.get_default()._buddy
+
+
+def shot(name: str) -> None:
+    pos = buddy()._placement.position
+    root = f"{OUT}/{name}-root.png"
+    subprocess.run(["import", "-window", "root", root], check=True)
+    subprocess.run(
+        ["convert", root, "-crop", f"{SIZE}x{SIZE}+{pos.x}+{pos.y}", "+repage",
+         f"{OUT}/{name}-{SIZE}.png"],
+        check=True,
+    )
+
+
+def at(ms: int, step) -> None:
+    GLib.timeout_add(ms, lambda: (step(), False)[1])
+
+
+def tab_pulse_while_idle() -> None:
+    b = buddy()
+    check("starts standing idle", b._is_idle_visual_active())
+    b._on_presence_browser_tab_changed()
+
+
+def mid_beat() -> None:
+    b = buddy()
+    check("settled pulse plays investigate", b._current_animation == "investigate")
+    check("beat keeps state IDLE", b.state.current.name == "IDLE")
+    shot("beat")
+
+
+def after_beat() -> None:
+    b = buddy()
+    check("beat resumes idle", b._current_animation == "idle" and not b._idle_look_active)
+    b._start_typing_emote()
+
+
+def tab_pulse_while_typing() -> None:
+    b = buddy()
+    check("typing started", b.state.current.name == "TYPING")
+    # Skip the habituated 30 s reaction gap; pacing itself is unit-tested.
+    b._curiosity_last_reaction_at = float("-inf")
+    b._on_presence_browser_tab_changed()
+
+
+def mid_cue() -> None:
+    b = buddy()
+    check("busy pulse shows cue", b._curiosity_cue_active)
+    check("cue keeps state TYPING", b.state.current.name == "TYPING")
+    shot("cue")
+
+
+def press() -> None:
+    b = buddy()
+    b._on_pressed(None, 1, SIZE / 2, SIZE / 2)
+    check("press clears cue", not b._curiosity_cue_active)
+
+
+def quit_app() -> None:
+    Gio.Application.get_default().quit()
+
+
+at(3000, tab_pulse_while_idle)
+at(4900, mid_beat)       # 1.5 s settle + ~0.4 s into the 2.4 s beat
+at(7600, after_beat)
+at(9200, tab_pulse_while_typing)
+at(11000, mid_cue)       # 1.5 s settle + ~0.3 s into the 1.8 s cue
+at(11300, press)
+at(12000, quit_app)
+
+status = mochi_main.main()
+check("clean exit", status in (0, None))
+sys.exit(0 if all(ok for _, ok in results) else 1)
+```
+
+Run it at three sizes. Each run gets a fresh config, so nothing touches the real user config:
+
+```bash
+SP=/tmp/claude-0/-home-user-mochi-desktop/f682b1cd-28f8-5b93-8cec-02e00dd6f013/scratchpad
+for size in 64 112 256; do
+  run="$SP/smoke-$size"; rm -rf "$run"; mkdir -p "$run/config/mochi" "$run/data"
+  printf '{"size": %d, "x": 200, "y": 200}\n' "$size" > "$run/config/mochi/config.json"
+  XDG_CONFIG_HOME="$run/config" XDG_DATA_HOME="$run/data" SMOKE_OUT="$run" SMOKE_SIZE="$size" \
+    PYTHONPATH=src timeout 60 xvfb-run -a -s "-screen 0 1280x800x24" \
+    dbus-run-session -- /usr/bin/python3.12 "$SP/smoke_curiosity.py" > "$run/log.txt" 2>&1
+  echo "size $size exit=$?"; grep -E "SMOKE|Traceback" "$run/log.txt"
+done
+montage "$SP"/smoke-*/beat-*.png "$SP"/smoke-*/cue-*.png -tile 3x2 -geometry +12+12 -background '#333' "$SP/curiosity-smoke.png"
+```
+
+Expected: `exit=0` for every size, only `SMOKE PASS` lines, and no `Traceback`. On any failure, debug it with `beads-superpowers:systematic-debugging` and fix it in a normal TDD commit before continuing. Send `$SP/curiosity-smoke.png` to the owner with `SendUserFile`; the top row is the beat at 64/112/256 and the bottom row the cue. Expect no bubble at 64 px.
+
+- [ ] **Step 4: Push**
 
 ```bash
 git push -u origin claude/optimistic-volta-9jc07e
@@ -2104,13 +2329,13 @@ git push -u origin claude/optimistic-volta-9jc07e
 
 On a network failure, retry up to 4 times with backoff of 2 s, 4 s, 8 s and 16 s.
 
-- [ ] **Step 4: Open the draft PR**
+- [ ] **Step 5: Open the draft PR**
 
 Use the GitHub MCP `create_pull_request` tool with `draft: true`, `base: main` and `head: claude/optimistic-volta-9jc07e`. Title it: `feat: tab-aware active window curiosity (supersedes #133)`. The body mirrors `.github/pull_request_template.md`'s headings (Summary, Scope, Verification checklist, Runtime / lifecycle notes, Environment tested) and must state:
 - that it supersedes #133;
 - the privacy model;
 - that Fedora/GNOME/Wayland visual QA is pending, with the six new watchlist items;
-- the local result (`N passed, 3 skipped`).
+- the local result (`N passed, 3 skipped`, taken from Step 1's output) and the Xvfb runtime smoke result.
 
 End the body with:
 
@@ -2119,3 +2344,35 @@ End the body with:
 
 https://claude.ai/code/session_01FM6gLS7KvN4CDGVtmQ9ftG
 ```
+
+---
+
+## Stress Test Results: Implementation Plan
+
+### Resolved Decisions
+
+- **Merge drift (from evidence):** a trial merge of PR #133 into `main` passes (1059 passed, 3 skipped). The `_tick(self) -> bool`, `_draw` and `_on_pressed(*args)` hook signatures are unchanged. Task 1 needs no drift fixes.
+- **Mixin vs. composed controller:** curiosity stays a mixin, because every entry point is a cooperative-chain hook and it never claims behavior state. The stale manual is corrected and the choice explained (Task 6 Step 5).
+- **Late-classified browser windows:** the existing 1 s category heartbeat re-syncs tab tracking, idempotently (Task 5 step 5c plus a test).
+- **Runtime evidence:** an Xvfb smoke drives the real `PresenceX11Buddy` at 64/112/256 px, and a screenshot contact sheet goes to the owner before the push (Task 7 Step 3). Feasibility was verified.
+- **Security:** no new surface beyond the spec. Title handling fails closed and is test-enforced; the smoke uses isolated XDG directories; there are no new dependencies, CI changes or permissions.
+- **Reflexion:** PR #133's "category reclassification never triggers curiosity" test is ported into the Task 4 rewrite so that guarantee keeps a test.
+
+### Changes Made
+
+- Task 1: expected count is now the verified `1059 passed, 3 skipped`.
+- Task 4: harness tracks `_presence_app_category`; the ported reclassification test and its acceptance criterion are added.
+- Task 5: heartbeat re-sync step (5c, with the methods step renumbered to 5d), `test_category_heartbeat_resyncs_tab_tracking`, and an acceptance criterion.
+- Task 6: `docs/CODEBASE_MANUAL.md` §6 layer-order correction plus the mixin and idle-beat ownership note.
+- Task 7: Xvfb runtime smoke step with a contact sheet; push and PR renumbered to Steps 4 and 5; the PR body reports the smoke result.
+
+### Deferred / Parking Lot
+
+- An Xvfb smoke is X11-only. GNOME Wayland/XWayland behavior and the extension's real `notify::title` timing still need the owner's Fedora QA.
+- Releasing `MetaWindow` references on `unmanaged` (instead of on the next focus change) is not done; PR #133's `_lastFocusedWindow` already holds the same kind of reference, and nothing has shown it to matter.
+
+### Confidence Assessment
+
+- Overall: **High** for Tasks 1–4 and 6. The merge is verified, the code is fully specified, and the suite runs locally in 17 s.
+- **Medium** for Task 5's live behavior: the source tests pin down structure, not Mutter timing.
+- Areas of concern: the feel of the cue and beat, which the Task 7 contact sheet surfaces early.
