@@ -54,10 +54,14 @@ the GNOME helper watches its title change inside GNOME Shell, keeps a one-way
 digest in memory to tell whether it changed, and sends Mochi a pulse with no
 data. The title never leaves GNOME Shell, and the pulse goes out only within
 two seconds of real keyboard or pointer input, so unread counters and autoplay
-do not count. While a browser window is on YouTube, tab tracking pauses and
-reads no title; the existing YouTube check, which reduces a title to a yes or
-no, is unchanged. Like the helper's other signals, the pulse's timing is
-visible on the session bus.
+that retitle the page while you're hands-off do not count. Once the helper
+classifies a browser window as YouTube, immediately when focus lands on it and
+otherwise within about a second, tab tracking pauses and reads no further
+title for that window. Until then, a title change on an already-tracked
+window, including the one that takes it to YouTube, is handled like any other.
+The existing YouTube check, which reduces a title to a yes or no, is
+unchanged. Like the helper's other signals, the pulse's timing is visible on
+the session bus.
 
 AmbiSense is a local rule-based behavior engine, not an LLM or cloud AI
 service.

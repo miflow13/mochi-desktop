@@ -4,7 +4,7 @@
 
 **Builds on:** PR #133 (`feat/active-window-curiosity`), which this work supersedes
 
-**Status:** design approved and stress-tested (2026-10-05); implementation plan not yet written
+**Status:** design approved and stress-tested (2026-10-05); implemented from `docs/superpowers/plans/2026-10-05-active-window-curiosity.md`, with the changes listed under [Post-plan amendments](#post-plan-amendments-2026-10-05)
 
 ## Purpose
 
@@ -68,7 +68,8 @@ A trigger that fires its gate while any of these hold is dropped, with no reacti
 - preview mode or presence shutdown
 - user idle / sleeping
 - context menu open, active press, or active drag
-- `PresentationState` other than `NORMAL` (Focus session and similar)
+- `PresentationState` other than `NORMAL` (a level-up or emote-unlock presentation)
+- Focus work or Focus "thinking": `_focus_should_work()` or `_focus_should_think()`, the same predicates that keep other presence reactions quiet during Focus (see Post-plan amendments)
 - AmbiSense tuning has `quiet_mode` on or `ambient_reactions_enabled` off
 
 An active cue started in an allowed state may finish if Mochi moves into another cue-allowed state, such as `IDLE` to `TYPING` when terminal coworking begins. This is PR #133's existing continuation rule.
@@ -98,6 +99,8 @@ On `notify::title` for the tracked window:
 6. Emit `BrowserTabChanged` through the existing zero-payload `_emitSignal()` helper.
 
 On `disable()`: disconnect the title handler, and clear the tracked window and digest.
+
+A focused window classified `media` (a browser on YouTube) is paused rather than tracked, and leaving YouTube for another tab in the same window sends one pulse behind the same input gate; see Post-plan amendments.
 
 **Keep all of this inside `extension.js`.** Use two small top-level helpers, `normalizeTabTitle(title)` and `shouldEmitTabPulse(idleMs)`, with no new module file. `scripts/install-typing-extension.sh:53` copies only `metadata.json`, `extension.js` and `README.md` by name. A separate JS module would be silently left out of the install, its `import` would fail, and every AmbiSense signal would stop, not just curiosity.
 
@@ -329,3 +332,12 @@ Run with `python3 -m pytest -q`. CI (`xvfb-run`, with GTK) is the authoritative 
 
 - Overall: **High** for the Mochi-side design (it reuses the tested idle-look lifecycle and adds no behavior state); **Medium** for the extension's tab detection, because real Mutter `notify::title` timing and browser title behavior can only be verified live on Fedora.
 - Areas of concern: input-gate tuning against real browsing; visual feel of the beat and cue, which needs owner QA.
+
+## Post-plan amendments (2026-10-05)
+
+Changes made during implementation and review, after the plan was written. Where this section and the text above disagree, this section wins.
+
+- **YouTube exit pulse and broadened media pause (extension).** Any focused window the helper classifies `media` (a browser on YouTube) becomes the paused window: only its reference is kept, and its title is never read for tab tracking. When that same window returns to `browser` (the user left YouTube for another tab), the helper takes a fresh baseline digest and emits `BrowserTabChanged` behind the same 2 s input gate. Another window becoming the target is a window switch, which `AppFocusChanged` already covers. The pause starts immediately when focus lands on a window already on YouTube; a tracked window that navigates to YouTube is reclassified on the next 1 s heartbeat, and until then its title changes are handled like any other.
+- **Focus suppression.** Focus is not a `PresentationState`: Focus work runs as `MochiState.COMPUTER`, a cue-allowed state. `_curiosity_allowed()` therefore also returns false while `_focus_should_work()` or `_focus_should_think()` is true, the predicates `FocusSessionMixin._focus_allows_presence_action` uses for other presence reactions. The same check gates the cue's per-tick continuation, so an active cue clears once Focus starts. Breaks and paused sessions follow the normal rules.
+- **Streak exponent clamp.** `_habituated_cooldown` uses `min(max(0, streak), 16)` as the exponent. `1.5 ** 16` is far past both caps, so results are unchanged, but a very long streak can no longer overflow the float power.
+- **Docs precision.** The extension README and `docs/ambisense.md` say exactly when the YouTube pause starts, and that unread counters and autoplay are ignored only when they retitle the page while the user is hands-off. The adapter docstrings describe all three helper signals and no longer call the tab pulse "settled"; the settle belongs to curiosity. Both base hooks in `integration.py` are docstring-only and the adapter logs each pulse once, superseding "a base hook that only logs at debug level" above.

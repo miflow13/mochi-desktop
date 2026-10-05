@@ -1008,7 +1008,7 @@ The helper is intentionally designed not to transmit or store:
 
 The YouTube focus helper may transiently inspect a focused browser title only to reduce it to a yes/no YouTube semantic state; the title itself is not retained or sent to Mochi.
 
-Browser tab awareness observes title changes only on the focused window while it is classified browser; it keeps only a one-way SHA-256 digest of the title (with any leading unread badge removed) in memory to detect a change, emits BrowserTabChanged only within two seconds of real keyboard or pointer input; the pulse carries no payload, and the title itself is never stored, logged, or sent.
+Browser tab awareness observes title changes only on the focused window while it is classified browser; it keeps only a one-way SHA-256 digest of the title (with any leading unread badge removed) in memory to detect a change, and emits BrowserTabChanged only within two seconds of real keyboard or pointer input; the pulse carries no payload, and the title itself is never stored, logged, or sent.
 
 When adding a new detector, reduce raw desktop information to the smallest semantic event before it enters the character runtime.
 

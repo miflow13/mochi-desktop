@@ -1,4 +1,5 @@
-"""Static contract checks for Mochi's GNOME Shell global shortcuts."""
+"""Static contract checks for the GNOME Shell helper: global shortcuts and the
+AmbiSense focus and tab-pulse contracts, including the installer copy list."""
 
 import re
 from pathlib import Path
