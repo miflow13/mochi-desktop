@@ -1,9 +1,9 @@
 {
-  "version": "0.4.0a1",
+  "version": "0.4.1",
   "channel": "main",
   "highlights": [
-    "Update & Restart now brings Mochi back after installing instead of leaving him closed.",
-    "If an update fails, Show Details now explains what went wrong.",
-    "Mochi now updates from published releases; testers can follow main with mochi-update --channel main."
+    "Mochi now notices when you switch windows or browser tabs and takes a quick look through his magnifying glass.",
+    "Fixed Mochi's animation freezing on GNOME, and Update & Restart now brings him back after installing.",
+    "New terminal coworking art: Mochi takes out a little laptop and types sleepily beside you."
   ]
 }

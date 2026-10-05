@@ -4,7 +4,10 @@ Notable user-facing changes to Mochi are tracked here.
 
 Mochi is still in early public alpha, so behavior, configuration, and compatibility details may change between prereleases.
 
-## Unreleased
+## 0.4.1 — Curious & Steady
+
+Mochi notices where your attention goes, and stays animated and updatable
+on GNOME.
 
 ### Added
 
