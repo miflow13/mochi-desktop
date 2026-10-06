@@ -6,7 +6,7 @@
 
 **Design canvas:** https://claude.ai/artifact/EEcdHQWgSR5BWenQzMoRDJ (playable prototype, timeline, tray anatomy)
 
-**Status:** design written for review; implementation not started
+**Status:** design approved (2026-10-06); implemented from `docs/superpowers/plans/2026-10-06-pocket-hover-tray.md`, with the changes listed under [Post-plan amendments](#post-plan-amendments-2026-10-06)
 
 ## Purpose
 
@@ -61,6 +61,7 @@ It arms only when all of these hold:
 - presentation state is `NORMAL` (no level-up or emote-unlock presentation);
 - the context menu is closed, there is no active press or drag on Mochi, and no Pocket drag-in or receive is in progress;
 - the Pocket window is not already visible;
+- Mochi's speech bubble is not on screen (see [Speech and the tray](#speech-and-the-tray));
 - Mochi is not in preview mode and not on the layer-shell path;
 - the pointer has left Mochi since the tray last opened or closed (the re-arm rule below).
 
@@ -129,6 +130,13 @@ The tray never closes while a drag from it is in progress. Unmapping the source 
 
 - **Hover-opened:** the tray must not take keyboard focus, because the user may be typing in another app. Before mapping, the tray sets `_NET_WM_USER_TIME` to 0 through `GdkX11.X11Surface.set_user_time(0)`, which asks an EWMH window manager not to focus it on map. This is a strong hypothesis for Mutter on XWayland, and it is a manual QA item.
 - **Menu-opened:** the tray is presented normally and focus lands on the first row. ↑ and ↓ move between rows, Enter runs the primary action, Tab reaches the quick action, and Esc closes.
+
+### Speech and the tray
+
+The tray and Mochi's speech bubble both live just above (or below) him, so they never share the space:
+
+- **While Mochi is speaking, the dwell does not arm.** Resting the pointer on a talking Mochi is how you read him; the menu path still opens the tray.
+- **While the peek or tray is on screen, ambient speech waits,** exactly as it waits for a press or a drag. `PocketBuddyMixin` extends the new `PresenceBuddyMixin._presence_interaction_active()` seam that feeds `AmbientContext.interaction_active`. The Pocket code never calls the bubble; it only reads `presence_speech_visible()`.
 
 ### The context-menu row
 
@@ -374,3 +382,11 @@ Manual results are reported separately from unit-test results.
 - **Focus steal on map** under Mutter/XWayland if `_NET_WM_USER_TIME=0` is ignored. Fallback, if QA fails: map the tray as a utility window that refuses input focus (`WM_HINTS.input = False`) through a small `x11.py` helper. That needs its own plan amendment.
 - **Cross-protocol drag-out** (XWayland source to Wayland targets) depends on Mutter's XWayland DnD bridge. Drag-in already uses it in the other direction; manual QA item 9 is the evidence.
 - **`EXCITED` reuse** means a drag-in during the 0.6 s offer gets "My paws are full". This is accepted for now.
+
+## Post-plan amendments (2026-10-06)
+
+These came from implementing the plan and driving the real app under Xvfb.
+
+1. **Speech and the tray.** The first smoke run showed the first-run greeting bubble overlapping the peek. This added the rules in [Speech and the tray](#speech-and-the-tray), two `PresenceBuddyMixin` seams (`_presence_interaction_active`, `presence_speech_visible`), and the matching tests.
+2. **Copy image.** `Gdk.ContentProvider.new_for_value(texture)` records the texture's concrete type (`GdkMemoryTexture`), which has no clipboard serializers, so other apps would have had nothing to paste. The value is now typed as `Gdk.Texture`, which offers `image/png` and other formats. The provider tests now assert the MIME types another application can actually receive.
+3. **Peek bar colour.** The theme paints `progress` with a `background-image`, so the tray CSS uses the `background` shorthand to get Mochi mint.

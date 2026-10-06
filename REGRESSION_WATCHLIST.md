@@ -115,6 +115,23 @@ Use this checklist for interaction/state changes and before release checkpoints.
 - [ ] Removing an item never deletes an original dropped file
 - [ ] Closing/reopening both Pocket and its context-menu path remains usable
 - [ ] Restarting Mochi restores the ten most recent persisted items
+- [ ] Passing over Mochi without stopping never shows the peek bar or the tray
+- [ ] Resting on Mochi shows the peek at about 0.6 s and opens the tray at the chosen dwell, with the mouth animation when he is free
+- [ ] Leaving before the dwell ends hides the peek and changes nothing
+- [ ] The hover tray does not take keyboard focus from the app being typed in
+- [ ] Moving from Mochi into the tray keeps it open; leaving both closes it after about half a second
+- [ ] Closing the tray while still resting on Mochi does not reopen it until the pointer leaves
+- [ ] Mochi walking under a resting pointer never opens the tray
+- [ ] Hovering a sleeping Mochi wakes him (existing behavior) and the tray still opens
+- [ ] Resting on Mochi while he is speaking lets you read him; no peek until the bubble is gone
+- [ ] No ambient speech bubble appears over the peek or the open tray
+- [ ] Each kind: click, quick action, and drag into Files, a browser, and a text editor
+- [ ] Copy image pastes into an image-aware app (GIMP, a chat or document)
+- [ ] Dragging a tray item back onto Mochi is refused without a reaction
+- [ ] `Pocket · N` opens the focused tray; arrows, Enter, Tab, and Esc work; clicking elsewhere closes it
+- [ ] `Manage Pocket…` opens the Pocket window; Open by resting on Mochi persists across restarts, and Off disables the dwell
+- [ ] The tray flips below Mochi near the top edge and stays on Mochi's monitor
+- [ ] Native Wayland layer-shell mode keeps `Pocket · N` → Pocket window
 
 ## Emote Catalogue
 

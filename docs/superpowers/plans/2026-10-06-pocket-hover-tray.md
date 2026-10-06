@@ -3556,6 +3556,18 @@ Follow `AGENTS.md` → "Final report" and include:
 - risks considered (focus on map, the XWayland DnD bridge, the `EXCITED` overlap during the offer);
 - follow-ups noticed but not done.
 
+## Post-plan amendments (2026-10-06)
+
+Recorded during implementation. The code blocks above already show the shipped versions of items 2–4.
+
+1. **Task 6 + speech.** Driving the real app under Xvfb showed the first-run greeting overlapping the peek.
+   - `PresenceBuddyMixin` gains `_presence_interaction_active()`, which now feeds `AmbientContext.interaction_active`, and `presence_speech_visible()`, which now feeds `overlay_visible`.
+   - `PocketBuddyMixin` extends the first so ambient speech waits while the peek or tray shows. `_pocket_hover_can_arm()` also requires `not self.presence_speech_visible()`.
+   - Tests: the `talking` case in `test_hover_never_arms_when_something_else_owns_mochi`, `test_ambient_speech_waits_while_the_peek_or_tray_is_showing`, `test_presence_interaction_seam_reflects_press_and_drag`, `test_presence_speech_visible_reflects_the_bubble` and `test_ambient_evaluation_asks_the_interaction_seam`.
+2. **Task 4, Copy image.** The texture is wrapped as `GObject.Value(Gdk.Texture, ...)`, because a bare `GdkMemoryTexture` provider has no serializers. The provider tests assert `union_serialize_mime_types()`.
+3. **Task 4, tests.** `test_destroy_releases_detail_windows_and_sources` asserts removal from `Gtk.Window.get_toplevels()`; the `destroy` signal waits for the last reference. The fixture also destroys its owner windows.
+4. **Task 4, CSS.** The progress fill uses the `background` shorthand.
+
 ## Spec Coverage
 
 | Spec requirement | Task |
@@ -3575,6 +3587,7 @@ Follow `AGENTS.md` → "Final report" and include:
 | No-focus hover map; focused menu open; keys | 4 |
 | `Pocket · N` opens the tray; layer-shell fallback | 6 |
 | Setting: Off / 1.5 / 2 / 3 s, persisted, normalized | 5, 6 |
+| Speech and the tray never overlap | 6 (amendment 1) |
 | Shared launch rule for window and tray | 3 |
 | Teardown order and owned sources | 2, 4, 6 |
 | Docs: CHANGELOG, README, watchlist, manual | 7 |

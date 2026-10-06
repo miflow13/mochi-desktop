@@ -834,6 +834,8 @@ Gtk.EventControllerMotion handles enter, leave, and motion.
 
 Hover behavior must remain independent from click/drag/right-click hit testing.
 
+PocketBuddyMixin extends _on_enter, _on_leave, _on_motion, _on_pressed, and _on_context_pressed to drive PocketHoverDwell (pocket_hover.py). It always calls super(), never changes the hover heart, and arms only on pointer motion, so Mochi walking under a resting pointer never opens the Pocket tray. The arm and offer state tables live in behavior.py (can_arm_pocket_hover, can_start_pocket_offer). The tray and speech never overlap: the dwell does not arm while presence_speech_visible() is true, and PocketBuddyMixin extends PresenceBuddyMixin._presence_interaction_active() so ambient speech waits while the peek or tray is showing.
+
 ## Drag
 
 Gtk.GestureDrag handles:

@@ -18,6 +18,20 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
   tells Mochi one word and an anonymous session hash, never your prompt,
   files, commands, or its replies, and Mochi makes no network requests. See
   [Agent Companion](docs/agent-companion.md) for setup.
+- Rest your pointer on Mochi for two seconds and a small tray pops out of his
+  mouth with everything in his Pocket. Click a row to open it (text copies
+  instead), use the little button beside it to copy a link or show a file in
+  its folder, or drag it straight into another app. Move away and it tucks
+  itself back in. A bar fills while you wait, so passing over him never opens
+  anything, and he won't open it while he's talking, so you can still read
+  him. Change the wait, or turn it off, with **Open by resting on Mochi** in
+  the Pocket window.
+
+### Changed
+
+- **Pocket · N** in the right-click menu now opens the same tray, with
+  keyboard focus (arrow keys, Enter, Esc). **Manage Pocket…** at the bottom of
+  the tray opens the full Pocket window for removing and clearing.
 
 ## 0.4.1 — Stabilization & Portability
 
