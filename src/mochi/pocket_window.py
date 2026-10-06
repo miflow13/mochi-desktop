@@ -14,6 +14,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 from mochi.pocket import PocketItem, PocketItemKind, item_is_available
+from mochi.pocket_actions import folder_uri_for, launch_uri_for
 from mochi.pocket_controller import PocketController
 
 
@@ -320,7 +321,7 @@ class PocketWindow(Gtk.Window):
             self._show_error("That item is no longer available.")
             return False
 
-        uri = item.value if item.kind is PocketItemKind.URL else Path(item.value).as_uri()
+        uri = launch_uri_for(item)
         try:
             self._launcher(uri)
         except (GLib.Error, OSError, ValueError) as error:
@@ -337,7 +338,7 @@ class PocketWindow(Gtk.Window):
             self._show_error("That item is no longer available.")
             return False
 
-        folder_uri = Path(item.value).parent.as_uri()
+        folder_uri = folder_uri_for(item)
         try:
             self._launcher(folder_uri)
         except (GLib.Error, OSError, ValueError) as error:
