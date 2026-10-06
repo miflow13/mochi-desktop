@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Mockup of Mochi's Quick Terminal: a temporary VTE shell opened from the right-click menu.">
+<title>Quick Terminal</title>
+<script>(function(){try{var t=new URLSearchParams(location.search).get('theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
+<style>
+/* ---------- Theme tokens (light) ---------- */
+:root {
+  /* GTK 4.14 Adwaita runtime colours */
+  --bg: #f6f5f4; --bg-rgb: 246 245 244;
+  --fg: #2e3436; --fg-rgb: 46 52 54;
+  --base: #ffffff;
+  --borders: #cdc7c2;
+  /* Mochi */
+  --accent: #79c98b; --accent-rgb: 121 201 139;
+  --accent-ink: #16351f;           /* text on accent (FOCUS_CSS primary button) */
+  --amber: #e5a50a;
+  --coral: #e66a5c;
+  --badge-ink: #2a0d09;
+  --danger: #c01c28;
+  /* Secondary text inside Mochi surfaces. Runtime uses fg@0.58-0.62, which is
+     ~3.4-3.8:1 in light; raised to 0.74 so every label clears 4.5:1. */
+  --fg-2: rgb(var(--fg-rgb) / 0.74);
+  /* Page chrome */
+  --page: #f6f5f4;
+  --panel: #ffffff;
+  --text: #2e3436;
+  --text-2: #5e5c64;
+  --hair: rgb(46 52 54 / 0.12);
+  /* Desktop scene */
+  --desk-a: #dfe7f1; --desk-b: #eef1e6;
+  --desk-glow-1: rgba(255, 255, 255, 0.60);
+  --desk-glow-2: rgba(121, 201, 139, 0.16);
+  --tile-ring: rgb(46 52 54 / 0.14);
+  /* Terminal */
+  --term-bg: #ffffff; --term-fg: #2e3436; --prompt: #26703a;
+  --scrim: rgba(0, 0, 0, 0.14);
+  /* Runtime shadows */
+  --shadow-bubble: 0 5px 16px rgba(0, 0, 0, 0.14);
+  --shadow-card: 0 5px 18px rgba(0, 0, 0, 0.16);
+  --shadow-menu: 0 12px 34px rgba(0, 0, 0, 0.28);
+  --shadow-window: 0 1px 3px rgba(0, 0, 0, 0.12), 0 12px 34px rgba(0, 0, 0, 0.26);
+  --shadow-dialog: 0 2px 6px rgba(0, 0, 0, 0.12), 0 16px 40px rgba(0, 0, 0, 0.30);
+  color-scheme: light;
+}
+
+/* ---------- Theme tokens (dark) ---------- */
+:root[data-theme="dark"] {
+  --bg: #353535; --bg-rgb: 53 53 53;
+  --fg: #eeeeec; --fg-rgb: 238 238 236;
+  --base: #2d2d2d;
+  --borders: #1b1b1b;
+  --danger: #ff7b63;
+  --page: #242424;
+  --panel: #2d2d2d;
+  --text: #eeeeec;
+  --text-2: #c0bfbc;
+  --hair: rgb(238 238 236 / 0.10);
+  --desk-a: #1d2128; --desk-b: #262b24;
+  --desk-glow-1: rgba(255, 255, 255, 0.035);
+  --desk-glow-2: rgba(121, 201, 139, 0.07);
+  --tile-ring: rgb(255 255 255 / 0.09);
+  --term-bg: #1e1e1e; --term-fg: #eeeeec; --prompt: #8fd9a0;
+  --scrim: rgba(0, 0, 0, 0.30);
+  color-scheme: dark;
+ }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --bg: #353535; --bg-rgb: 53 53 53;
+  --fg: #eeeeec; --fg-rgb: 238 238 236;
+  --base: #2d2d2d;
+  --borders: #1b1b1b;
+  --danger: #ff7b63;
+  --page: #242424;
+  --panel: #2d2d2d;
+  --text: #eeeeec;
+  --text-2: #c0bfbc;
+  --hair: rgb(238 238 236 / 0.10);
+  --desk-a: #1d2128; --desk-b: #262b24;
+  --desk-glow-1: rgba(255, 255, 255, 0.035);
+  --desk-glow-2: rgba(121, 201, 139, 0.07);
+  --tile-ring: rgb(255 255 255 / 0.09);
+  --term-bg: #1e1e1e; --term-fg: #eeeeec; --prompt: #8fd9a0;
+  --scrim: rgba(0, 0, 0, 0.30);
+  color-scheme: dark;
+ }
+}
+
+/* ---------- Page ---------- */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--page);
+  color: var(--text);
+  font-family: "Cantarell", "Inter", "Noto Sans", system-ui, sans-serif, "Noto Color Emoji";
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+.page { padding: 40px 48px 32px; margin: 0 auto; }
+.mono { font-family: "Source Code Pro", "DejaVu Sans Mono", monospace; }
+
+.masthead {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 32px;
+  padding: 24px 28px; margin-bottom: 32px;
+  background: var(--panel); border-radius: 16px; box-shadow: 0 0 0 1px var(--hair);
+}
+.masthead .kicker {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-2); margin-bottom: 8px;
+}
+.masthead .kicker i { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); display: inline-block; }
+.masthead h1 { margin: 0 0 8px; font-size: 26px; line-height: 1.2; font-weight: 800; letter-spacing: -0.01em; }
+.masthead p { margin: 0; font-size: 14px; color: var(--text-2); max-width: 780px; }
+.masthead .side { flex: none; }
+.side-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); margin: 0 0 8px; }
+
+.scene { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.sc-head { display: flex; align-items: center; gap: 8px; height: 24px; }
+.sc-head .num {
+  flex: none; width: 20px; height: 20px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 11px; font-weight: 800; display: grid; place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.sc-head h3 { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.scene figcaption { font-size: 12px; line-height: 1.45; color: var(--text-2); padding: 0 2px; text-wrap: pretty; }
+
+.footer {
+  margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--hair);
+  display: flex; justify-content: space-between; gap: 24px;
+  font-size: 12px; color: var(--text-2);
+}
+.footer span:last-child { flex: none; white-space: nowrap; }
+
+/* ---------- Desktop tile ---------- */
+.desk {
+  position: relative; overflow: hidden; border-radius: 12px;
+  background:
+    radial-gradient(110% 75% at 88% 112%, var(--desk-glow-2), transparent 62%),
+    radial-gradient(85% 65% at 6% 0%, var(--desk-glow-1), transparent 60%),
+    linear-gradient(160deg, var(--desk-a) 0%, var(--desk-b) 100%);
+  box-shadow: 0 0 0 1px var(--tile-ring), 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.gbar {
+  position: absolute; left: 0; top: 0; right: 0; height: 28px; z-index: 1;
+  background: rgba(10, 10, 12, 0.92); color: #f2f2f2;
+  display: flex; align-items: center; justify-content: space-between; padding: 0 10px;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.gbar .ws { display: flex; gap: 4px; align-items: center; }
+.gbar .ws i { display: block; width: 5px; height: 5px; border-radius: 999px; background: rgba(242, 242, 242, 0.5); }
+.gbar .ws i:first-child { width: 16px; background: #f2f2f2; }
+.gbar .clock { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.gbar .tray { display: flex; gap: 7px; align-items: center; }
+.gbar .tray svg { display: block; width: 12px; height: 12px; }
+
+/* ---------- Mochi sprite ---------- */
+.mochi {
+  position: absolute; width: 128px; height: 128px;
+  background-repeat: no-repeat; background-size: 128px 128px;
+  image-rendering: pixelated; image-rendering: crisp-edges; image-rendering: pixelated;
+}
+
+/* Anchor: a zero-size point at Mochi's visible top-centre; floaters hang off it. */
+.anchor { position: absolute; width: 0; height: 0; }
+.anchor > .above { position: absolute; left: 0; transform: translateX(-50%); }
+.anchor > .below { position: absolute; left: 0; transform: translateX(-50%); }
+
+/* ---------- Speech bubble (bubble.py + app.py runtime CSS) ---------- */
+.bubble {
+  display: flex; align-items: center; gap: 8px; width: max-content;
+  background: rgb(var(--bg-rgb) / 0.96); color: var(--fg);
+  border: 1px solid rgb(var(--accent-rgb) / 0.30);
+  border-radius: 999px; box-shadow: var(--shadow-bubble);
+  padding: 8px 12px 8px 10px;
+}
+.bubble .dot { flex: none; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); }
+.bubble .txt { font-size: 12px; font-weight: 500; line-height: 1.32; max-width: 30ch; }
+
+/* ---------- Nameplate (nameplate.py) ---------- */
+.nameplate {
+  display: inline-block; background: rgb(var(--bg-rgb) / 0.96); color: var(--fg);
+  border: 1px solid rgb(var(--accent-rgb) / 0.30); border-radius: 999px;
+  box-shadow: var(--shadow-bubble); padding: 2px 10px; font-size: 11px; font-weight: 700; line-height: 1.35;
+}
+
+/* ---------- Context menu (app.py / buddy_menu.py runtime CSS) ---------- */
+.menu {
+  position: absolute; width: 244px; z-index: 2;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid rgb(var(--fg-rgb) / 0.12); border-radius: 18px;
+  box-shadow: var(--shadow-menu);
+  padding: 11px; display: flex; flex-direction: column; gap: 8px;
+}
+.menu .mhead { display: flex; align-items: center; gap: 8px; padding: 0 2px; }
+.menu .sprout { font-size: 20px; line-height: 1; }
+.menu .mtitle { font-size: 16px; font-weight: 700; line-height: 1.2; }
+.menu .msub { font-size: 11px; color: var(--fg-2); line-height: 1.3; }
+.menu .sep { height: 1px; background: rgb(var(--fg-rgb) / 0.09); }
+.menu .rows { display: flex; flex-direction: column; gap: 2px; }
+.mrow {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  min-height: 36px; padding: 4px 9px; border-radius: 10px;
+  font-size: 13.5px; line-height: 1.25;
+}
+.mrow .ico { flex: none; width: 16px; height: 16px; display: block; }
+.mrow .lbl { flex: 1; min-width: 0; white-space: nowrap; }
+.mrow .lbl small { display: block; font-size: 11px; color: var(--fg-2); margin-top: 1px; }
+.mrow.hover { background: rgb(var(--fg-rgb) / 0.07); }
+.mrow.new { background: rgb(var(--fg-rgb) / 0.07); box-shadow: inset 0 0 0 1.5px rgb(var(--accent-rgb) / 0.85); }
+/* "Dimmed" context rows: icon recedes, label stays >= 4.5:1. */
+.mrow.dim .lbl { color: var(--fg-2); }
+.mrow.dim .ico { opacity: 0.5; }
+.mrow.disabled .lbl { color: var(--fg-2); }
+.mrow.disabled .ico { opacity: 0.38; }
+
+.switch {
+  flex: none; position: relative; width: 44px; height: 24px; border-radius: 999px;
+  background: rgb(var(--fg-rgb) / 0.16); box-shadow: inset 0 0 0 1px rgb(var(--fg-rgb) / 0.18);
+}
+.switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 999px;
+  background: var(--bg); box-shadow: 0 0 0 1px rgb(var(--fg-rgb) / 0.18), 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+.switch.on { background: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.switch.on::after { left: 23px; background: #ffffff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.22); }
+
+/* Mockup annotation chip ("new") */
+.note {
+  position: absolute; z-index: 3; display: inline-flex; align-items: center;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; line-height: 1.2; white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+.note.left::before {
+  content: ""; position: absolute; left: -4px; top: 50%; width: 8px; height: 8px;
+  background: var(--accent); transform: translateY(-50%) rotate(45deg); border-radius: 1px;
+}
+
+/* Mouse pointer */
+.pointer { position: absolute; z-index: 5; width: 14px; height: 21px; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35)); }
+
+
+.row2 { display: flex; gap: 24px; align-items: flex-start; }
+.rows2 { display: flex; flex-direction: column; gap: 32px; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; max-width: 360px; justify-content: flex-end; }
+.fact { font-size: 12px; font-weight: 600; color: var(--text); padding: 4px 10px; border-radius: 999px;
+  background: var(--page); box-shadow: 0 0 0 1px var(--hair); white-space: nowrap; }
+.fact i { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: var(--accent); margin-right: 6px; vertical-align: 1px; }
+
+/* ---------- Quick terminal window (header after FOCUS_CSS) ---------- */
+.twin {
+  position: absolute; width: 560px; height: 300px; z-index: 2;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid rgb(var(--fg-rgb) / 0.12); border-radius: 12px;
+  box-shadow: var(--shadow-window); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.thead {
+  flex: none; height: 36px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 6px 0 12px; background: var(--bg);
+  border-bottom: 1px solid rgb(var(--fg-rgb) / 0.09);
+}
+.thead .ttl { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
+.thead .ttl .sprout { font-size: 14px; line-height: 1; }
+.tclose { width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center;
+  background: rgb(var(--fg-rgb) / 0.08); color: var(--fg); }
+.tclose svg { width: 12px; height: 12px; display: block; }
+.tbody {
+  position: relative; flex: 1; background: var(--term-bg); color: var(--term-fg);
+  font-family: "Source Code Pro", "DejaVu Sans Mono", monospace; font-size: 12px; line-height: 17px;
+  padding: 8px 12px; white-space: pre; overflow: hidden;
+}
+.tbody .p { color: var(--prompt); font-weight: 700; }
+.tbody .cmd { font-weight: 700; }
+.tbody .dimt { color: rgb(var(--fg-rgb) / 0.74); }
+.cur { display: inline-block; width: 1ch; height: 15px; vertical-align: -3px; background: var(--accent); }
+
+.scrim { position: absolute; inset: 0; background: var(--scrim); z-index: 3; }
+.dialog {
+  position: absolute; z-index: 4; width: 316px; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: var(--bg); color: var(--fg); border-radius: 14px; box-shadow: var(--shadow-dialog);
+  border: 1px solid rgb(var(--fg-rgb) / 0.10);
+  padding: 20px 20px 16px; text-align: center;
+  font-family: "Cantarell", "Inter", "Noto Sans", system-ui, sans-serif;
+}
+.dialog h4 { margin: 0 0 6px; font-size: 15px; font-weight: 800; line-height: 1.3; }
+.dialog p { margin: 0 0 16px; font-size: 12.5px; line-height: 1.45; color: var(--fg-2); }
+.dialog .btns { display: flex; gap: 8px; }
+.btn { flex: 1; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.btn.neutral { background: rgb(var(--fg-rgb) / 0.10); color: var(--fg); }
+.btn.suggested { background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgb(var(--accent-rgb) / 0.55); }
+
+.page { width: 1272px; }
+.spr-idle { background-image: url(data:image/png;base64,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); }
+.spr-wave { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAEVElEQVR42u1bPUgcQRR+uzuNFmcl0cCJks5GjjRmIU1KhQsHFjYhIVfGJiEgWESwCAQEm0t5QUhjIQiCKdPl3E62sQgExYNEuUoLbe7YFDLr7NzM7uzOzO6I++Bgb29/5n3vez/79h1AKaWUUkoppTxYsYpegFOrBEnHDI6utK0T6VBE54KNAEDEaqLX+Lj/nnvMZn3LTAAEFh5kZcLG5Bp8+vc5NwbYshfYmFyLtTKLLU6tEritRiyIRruAKDtEKNw5OwUAgA9PX8ICWgytj/cbDwBJ1zSLdqem728QlA18bqsRAcudmgav54MHfghkZ2Uvl2ySOQZs1reGKE5b1W01wG01YrMGfU5e1FfGgM7ZaUQJvJ1WEXydzsqe+QAMjq6stLUA73gSKHI7r2JKngErewCtRrbzci57lQKAF+rUKkGSMs9/vQ5YSt+nkllKHtergVOrBKvd9WC1ux6oKKWNqQRF5O9+11hL2/DABRV1Y5YbFBETUF7KmSpWUQDsHm5Hvns9n/nwpJsVli7FaQWTxOv53GaIThAs1dZOq3jRQFhFWl0UBJ1AWDoUX0CL4faP/oEWRqgCQaopSipOKq1CcaOzgFOrBFh5WnFdAJBMUOkOtgz185T58TmYH58DgNueI+478hqvWgBgUZ9leZ30xyBgIHKLAbTymPqm+LpTqwRZ3MFWZfmihHQHrS5gkvKkG8jGJ+s+W59VI6R1A2Si9Zdmmnf3Pmkry1IscGwTU9519xyuu+chGMuzzUzX2T3cTjSeJVrw6LYcluXZJlz9vlV+tDpx98PEgKsMdoXN+hb3mKVnb5hMUNIQWZ5tQv8GQquNVidgaaYJaARg5zgdEP0bSnFBiVMes4EEIdEFaPrzSl5T5FF1LLJWvF5y3ax0iVQGP9py/bFB+sps5JYFQ/sSznv19S3zOYRVqJFFk1AdsIAWYys+esEyQrsMdqM4Y/DqAmWFUFK5i0bSxwzWNnk9/CEDHflRJUhF+ts5boeBMGI5wmr07zhjsMCjWeD1/KHZIa/nh5bHgJD7pBkQRznaGl7Ph53jdsRytBLkdzJFimYJXYNTmdIga5ILgxAbVE/a0nWCSHlMs4B2GbIOsLPcIM8xNl6Qo/d1zk7D+QJSYbqTRJfDiOf/+ESZCJvHEyAvIMa116VaYryFmAIUPZrz/d232E6yxYr8OACSKJqiIG1h1izSny8/4aJ7GfsUyHSBoTb3eDTFmAgES56svoALwTE7W4TypNIqi5CslifXwBq4TDNphrKUvkV2fXKpA5KUz8MdeIrz5g/dqelML0xQWsXIwUjWIrOCImJplvKswcw0fUGUVE2xFoZvxvK/PNhB31fmVRkzDfL67HEWyFobiPo4j/o44GV9R4ho5NI+CYqwQUVBw4vwsi9HLV4pTLMgMtPLSDMuY1xW5j8BNABkcaN9QCLtX9nSsAZdOsMdpbEBoEsnbKGR23H3LUWB/AdoOZAtes5slQAAAABJRU5ErkJggg==); }
+.spr-computer { background-image: url(data:image/png;base64,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); }
+</style>
+</head>
+<body>
+<main class="page">
+<header class="masthead"><div><div class="kicker"><i></i>Mochi · feature mockup</div><h1>Quick Terminal — mockup</h1><p>A real shell in a tiny Mochi-styled window. Mochi never reads what you type.</p></div><div class="side"><div class="side-title" style="text-align:right">Behaviour</div><div class="facts"><span class="fact"><i></i>Real shell (VTE)</span><span class="fact"><i></i>Opens beside Mochi</span><span class="fact"><i></i>One at a time</span><span class="fact"><i></i>Closes when the shell exits</span><span class="fact"><i></i>Optional: vte291-gtk4</span></div></div></header><section class="rows2"><div class="row2"><figure class="scene " style="width:400px"><header class="sc-head"><span class="num">1</span><h3>Open from the menu</h3></header><div class="desk" style="width:400px;height:392px"><div class="gbar"><div class="ws"><i></i><i></i><i></i></div><div class="clock">Tue 6 Oct  14:32</div><div class="tray"><svg viewBox="0 0 16 16" fill="#f2f2f2"><path d="M8 13.5 1 6.2a10 10 0 0 1 14 0z"/></svg><svg viewBox="0 0 16 16" fill="#f2f2f2"><path d="M2 6h3l4-3.5v11L5 10H2z"/><path d="M11 5.2a4 4 0 0 1 0 5.6" stroke="#f2f2f2" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><svg viewBox="0 0 16 16" fill="#f2f2f2"><rect x="1" y="4.5" width="12" height="7" rx="1.5" fill="none" stroke="#f2f2f2" stroke-width="1.4"/><rect x="2.6" y="6.1" width="7.6" height="3.8" rx=".6"/><rect x="13.6" y="6.5" width="1.6" height="3" rx=".5"/></svg></div></div><div class="mochi spr-idle" style="left:14px;top:252px"></div><div class="menu" style="left:144px;bottom:14px;width:244px"><div class="mhead"><span class="sprout">🌱</span><div><div class="mtitle">Mochi</div><div class="msub">your tiny desktop buddy</div></div></div><div class="sep"></div><div class="rows"><div class="mrow dim"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 4.25v8a1 1 0 0 0 1 1h10.5a1 1 0 0 0 1-1v-6.5a1 1 0 0 0-1-1H8L6.5 3.25H2.75a1 1 0 0 0-1 1z"/><path d="M8 7v4.25M6.25 9.5 8 11.25 9.75 9.5"/></svg><span class="lbl">Pocket</span></div><div class="mrow dim"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8.75" r="5.25"/><path d="M8 6.25v2.75l1.75 1.25M2 3.5 3.75 2M14 3.5 12.25 2"/></svg><span class="lbl">Focus</span></div><div class="mrow new" id="qt-new-row"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"/><path d="M4.5 6.25 6.75 8 4.5 9.75M8.25 10h3"/></svg><span class="lbl">Quick terminal</span><svg class="pointer" style="left:120px;top:17px" viewBox="0 0 14 21" aria-hidden="true"><path d="M1 1v16.2l4.1-3.9 2.7 6.2 2.6-1.1-2.7-6.1H13.4z" fill="#111" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg></div><div class="mrow dim"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 1 1 6.4 2.75a4.5 4.5 0 0 0 6.85 6.85z" fill="currentColor" stroke="none"/></svg><span class="lbl">Sleep</span></div><div class="mrow dim"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.75 3.75l8.5 8.5M12.25 3.75l-8.5 8.5"/></svg><span class="lbl">Close</span></div></div></div></div><figcaption>One click. Opening is direct interaction, so quiet mode never blocks it.</figcaption></figure><figure class="scene " style="width:752px"><header class="sc-head"><span class="num">2</span><h3>Beside Mochi</h3></header><div class="desk" style="width:752px;height:392px"><div class="gbar"><div class="ws"><i></i><i></i><i></i></div><div class="clock">Tue 6 Oct  14:32</div><div class="tray"><svg viewBox="0 0 16 16" fill="#f2f2f2"><path d="M8 13.5 1 6.2a10 10 0 0 1 14 0z"/></svg><svg viewBox="0 0 16 16" fill="#f2f2f2"><path d="M2 6h3l4-3.5v11L5 10H2z"/><path d="M11 5.2a4 4 0 0 1 0 5.6" stroke="#f2f2f2" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><svg viewBox="0 0 16 16" fill="#f2f2f2"><rect x="1" y="4.5" width="12" height="7" rx="1.5" fill="none" stroke="#f2f2f2" stroke-width="1.4"/><rect x="2.6" y="6.1" width="7.6" height="3.8" rx=".6"/><rect x="13.6" y="6.5" width="1.6" height="3" rx=".5"/></svg></div></div><div class="mochi spr-wave" style="left:608px;top:252px"></div><div class="twin" id="qt-term-2" style="left:40px;top:78px"><div class="thead"><span class="ttl"><span class="sprout">🌱</span>Quick terminal</span><span class="tclose" aria-label="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></div><div class="tbody"><span class="p">~</span> $ <span class="cmd">dnf check-update --refresh</span>
+Updating and loading repositories:
+ Fedora 42 - x86_64 - Updates   100% |  12.3 KiB/s |  23.4 KiB |  00m02s
+Repositories loaded.
+
+flatpak.x86_64            1.16.1-1.fc42      updates
+flatpak-libs.x86_64       1.16.1-1.fc42      updates
+mesa-dri-drivers.x86_64   25.0.7-1.fc42      updates
+<span class="p">~</span> $ <span class="cur"></span></div></div></div><figcaption>Placed next to Mochi on open; doesn’t follow Mochi afterwards. Closes when the shell exits.</figcaption></figure></div><div class="row2"><figure class="scene " style="width:752px"><header class="sc-head"><span class="num">3</span><h3>Still running?</h3></header><div class="desk" style="width:752px;height:392px"><div class="gbar"><div class="ws"><i></i><i></i><i></i></div><div class="clock">Tue 6 Oct  14:32</div><div class="tray"><svg viewBox="0 0 16 16" fill="#f2f2f2"><path d="M8 13.5 1 6.2a10 10 0 0 1 14 0z"/></svg><svg viewBox="0 0 16 16" fill="#f2f2f2"><path d="M2 6h3l4-3.5v11L5 10H2z"/><path d="M11 5.2a4 4 0 0 1 0 5.6" stroke="#f2f2f2" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><svg viewBox="0 0 16 16" fill="#f2f2f2"><rect x="1" y="4.5" width="12" height="7" rx="1.5" fill="none" stroke="#f2f2f2" stroke-width="1.4"/><rect x="2.6" y="6.1" width="7.6" height="3.8" rx=".6"/><rect x="13.6" y="6.5" width="1.6" height="3" rx=".5"/></svg></div></div><div class="mochi spr-computer" style="left:608px;top:252px"></div><div class="twin" id="qt-term-3" style="left:40px;top:78px"><div class="thead"><span class="ttl"><span class="sprout">🌱</span>Quick terminal</span><span class="tclose" aria-label="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span></div><div class="tbody"><span class="p">~</span> $ <span class="cmd">sudo dnf upgrade</span>
+Updating and loading repositories:
+Repositories loaded.
+Package                Arch    Version         Repository     Size
+Upgrading:
+ flatpak               x86_64  1.16.1-1.fc42   updates     4.4 MiB
+ mesa-dri-drivers      x86_64  25.0.7-1.fc42   updates    41.2 MiB
+
+Transaction Summary:
+ Upgrading:        2 packages
+Is this ok [y/N]: y
+[1/2] flatpak-0:1.16.1-1.fc42.x86_64  100% |   3.1 MiB/s |   1.7 MiB
+[2/2] mesa-dri-drivers-0:25.0.7-1.fc   38% |   8.4 MiB/s |   4.0 MiB
+<span class="cur"></span></div><div class="scrim"></div><div class="dialog" role="alertdialog"><h4>Something’s still running</h4><p>Close the terminal anyway? The running command will be stopped.</p><div class="btns"><span class="btn neutral">Close anyway</span><span class="btn suggested">Keep open</span></div></div></div></div><figcaption>Only asks when a foreground job is running.</figcaption></figure><figure class="scene " style="width:400px"><header class="sc-head"><span class="num">4</span><h3>VTE not installed</h3></header><div class="desk" style="width:400px;height:392px"><div class="gbar"><div class="ws"><i></i><i></i><i></i></div><div class="clock">Tue 6 Oct  14:32</div><div class="tray"><svg viewBox="0 0 16 16" fill="#f2f2f2"><path d="M8 13.5 1 6.2a10 10 0 0 1 14 0z"/></svg><svg viewBox="0 0 16 16" fill="#f2f2f2"><path d="M2 6h3l4-3.5v11L5 10H2z"/><path d="M11 5.2a4 4 0 0 1 0 5.6" stroke="#f2f2f2" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><svg viewBox="0 0 16 16" fill="#f2f2f2"><rect x="1" y="4.5" width="12" height="7" rx="1.5" fill="none" stroke="#f2f2f2" stroke-width="1.4"/><rect x="2.6" y="6.1" width="7.6" height="3.8" rx=".6"/><rect x="13.6" y="6.5" width="1.6" height="3" rx=".5"/></svg></div></div><div class="mochi spr-idle" style="left:14px;top:252px"></div><div class="menu" style="left:144px;bottom:14px;width:244px"><div class="mhead"><span class="sprout">🌱</span><div><div class="mtitle">Mochi</div><div class="msub">your tiny desktop buddy</div></div></div><div class="sep"></div><div class="rows"><div class="mrow "><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 4.25v8a1 1 0 0 0 1 1h10.5a1 1 0 0 0 1-1v-6.5a1 1 0 0 0-1-1H8L6.5 3.25H2.75a1 1 0 0 0-1 1z"/><path d="M8 7v4.25M6.25 9.5 8 11.25 9.75 9.5"/></svg><span class="lbl">Pocket</span></div><div class="mrow "><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8.75" r="5.25"/><path d="M8 6.25v2.75l1.75 1.25M2 3.5 3.75 2M14 3.5 12.25 2"/></svg><span class="lbl">Focus</span></div><div class="mrow disabled" id="qt-dis-row"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"/><path d="M4.5 6.25 6.75 8 4.5 9.75M8.25 10h3"/></svg><span class="lbl">Quick terminal<small>Needs vte291-gtk4</small></span></div><div class="mrow "><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.25 9.6A5.5 5.5 0 1 1 6.4 2.75a4.5 4.5 0 0 0 6.85 6.85z" fill="currentColor" stroke="none"/></svg><span class="lbl">Sleep</span></div><div class="mrow "><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.75 3.75l8.5 8.5M12.25 3.75l-8.5 8.5"/></svg><span class="lbl">Close</span></div></div></div></div><figcaption>Detected at runtime; Mochi works normally without it.</figcaption></figure></div></section><footer class="footer"><span>Mockup, not a screenshot. Sprites are real Mochi art; window header follows focus_session.py FOCUS_CSS, menu follows app.py runtime CSS.</span><span>Sprites shown at 128 px (app default 112 px) for crisp pixels.</span></footer>
+</main>
+</body>
+</html>
