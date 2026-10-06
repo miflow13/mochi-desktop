@@ -1326,6 +1326,10 @@ def _tiny_texture(_path: str) -> Gdk.Texture:
     )
 
 
+def _mime_types(formats: Gdk.ContentFormats) -> list[str]:
+    return list(formats.union_serialize_mime_types().get_mime_types())
+
+
 class _Dwell:
     def __init__(self) -> None:
         self.calls: list[str] = []
@@ -1394,7 +1398,9 @@ def make_tray(monkeypatch):
 
     yield build
     for tray in created:
+        owner = tray._owner
         tray.destroy()
+        owner.destroy()
 
 
 def _file(tmp_path: Path, name: str = "invoice-september.pdf"):
@@ -1488,6 +1494,9 @@ def test_drag_offers_files_urls_and_text_in_native_formats(tmp_path: Path) -> No
     assert url_formats.contain_mime_type("text/uri-list")
     assert url_formats.contain_gtype(GObject.TYPE_STRING)
     assert text_formats.contain_gtype(GObject.TYPE_STRING)
+    # What another application can actually receive:
+    assert "text/uri-list" in _mime_types(file_formats)
+    assert "text/plain;charset=utf-8" in _mime_types(text_formats)
 
 
 def test_clipboard_copies_text_links_and_images_but_not_files(tmp_path: Path) -> None:
@@ -1504,6 +1513,8 @@ def test_clipboard_copies_text_links_and_images_but_not_files(tmp_path: Path) ->
     assert text.ref_formats().contain_gtype(GObject.TYPE_STRING)
     assert link.ref_formats().contain_gtype(GObject.TYPE_STRING)
     assert image.ref_formats().contain_gtype(Gdk.Texture)
+    # A bare GdkMemoryTexture value has no serializers; other apps could not paste it.
+    assert "image/png" in _mime_types(image.ref_formats())
     with pytest.raises(ValueError):
         clipboard_content_for(document)
 
@@ -1735,12 +1746,13 @@ def test_destroy_releases_detail_windows_and_sources(make_tray) -> None:
     built.tray.show_peek(1, 1400)
     built.tray.open(focus=False)
     built.tray.activate_quick(note.id)
-    destroyed: list[bool] = []
-    built.tray.detail_windows[0].connect("destroy", lambda *_args: destroyed.append(True))
+    detail = built.tray.detail_windows[0]
 
     built.tray.destroy()
 
-    assert destroyed == [True]
+    # gtk_window_destroy() removes the window from the toplevel list at once;
+    # the "destroy" signal itself waits for the last reference to drop.
+    assert detail not in list(Gtk.Window.get_toplevels())
     assert built.tray.detail_windows == []
     assert built.tray._position_sources == set()
     assert built.tray._fill_tick_id is None
@@ -1987,7 +1999,10 @@ def clipboard_content_for(
     if item.kind in (PocketItemKind.TEXT, PocketItemKind.URL):
         return Gdk.ContentProvider.new_for_value(item.value)
     if item.kind is PocketItemKind.SAVED_IMAGE:
-        return Gdk.ContentProvider.new_for_value(load_texture(item.value))
+        # Type the value as Gdk.Texture: GTK finds clipboard serializers by
+        # exact type, and a bare GdkMemoryTexture would offer nothing to paste.
+        texture = GObject.Value(Gdk.Texture, load_texture(item.value))
+        return Gdk.ContentProvider.new_for_value(texture)
     raise ValueError("Local Pocket files are opened or dragged, not copied")
 
 

@@ -122,6 +122,20 @@ def request_keep_above(window: Gtk.Window) -> bool:
     finally:
         x11.XCloseDisplay(display)
 
+def request_no_focus_on_map(window: Gtk.Window) -> bool:
+    """Ask the X11 window manager not to focus this window when it maps.
+
+    EWMH: a _NET_WM_USER_TIME of 0 means "do not give this window focus on
+    map". Pocket's hover tray uses it so resting on Mochi never steals typing.
+    Call it after realize() and before the window is shown.
+    """
+    surface = window.get_surface()
+    if GdkX11 is None or not isinstance(surface, GdkX11.X11Surface):
+        return False
+    surface.set_user_time(0)
+    return True
+
+
 def _send_wm_state_client_message(
     x11,
     display,
