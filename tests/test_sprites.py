@@ -111,6 +111,20 @@ class SpriteDefinitionsTests(unittest.TestCase):
         self.assertFalse(finish.looping)
         self.assertEqual(finish.next_state, "idle")
 
+    def test_pocket_offer_opens_and_closes_the_mouth_once(self) -> None:
+        offer = ANIMATIONS["pocket_offer"]
+
+        self.assertEqual(
+            tuple(frame.sprite for frame in offer.frames),
+            tuple(
+                f"pocket_grab/mochi_pocket_grab_{index:04}.png"
+                for index in (4, 5, 6, 7, 8)
+            ),
+        )
+        self.assertEqual(offer.frame_duration_ms, 120)
+        self.assertFalse(offer.looping)
+        self.assertEqual(offer.next_state, "idle")
+
     def test_pocket_glow_paints_a_translucent_effect_for_the_current_frame(self) -> None:
         atlas = SpriteAtlas()
         frame = ANIMATIONS["pocket_hover"].frames[0]

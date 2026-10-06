@@ -236,6 +236,27 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertEqual(path.read_text(encoding="utf-8"), contents)
             self.assertEqual(list(path.parent.glob("config.json.corrupt-*")), [])
 
+    def test_pocket_hover_delay_defaults_and_round_trips(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConfigStore(Path(directory) / "config.json")
+            self.assertEqual(store.load_pocket_hover_delay_ms(), 2000)
+            for delay in (0, 1500, 2000, 3000):
+                store.save_pocket_hover_delay_ms(delay)
+                self.assertEqual(store.load_pocket_hover_delay_ms(), delay)
+
+    def test_unsupported_pocket_hover_delay_reads_as_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            for raw in (2500, -1, True, "2000", None):
+                path.write_text(json.dumps({"pocket_hover_delay_ms": raw}))
+                self.assertEqual(ConfigStore(path).load_pocket_hover_delay_ms(), 2000)
+
+    def test_saving_an_unsupported_delay_stores_the_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            ConfigStore(path).save_pocket_hover_delay_ms(2500)
+            self.assertEqual(json.loads(path.read_text())["pocket_hover_delay_ms"], 2000)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -276,3 +276,37 @@ def test_unsupported_string_drop_reports_rejection_without_receiving() -> None:
     assert controller.received == []
     assert controller.hover_starts == 1
     assert controller.hover_ends == 1
+
+
+class _Drop:
+    def __init__(self, drag) -> None:
+        self._drag = drag
+
+    def get_drag(self):
+        return self._drag
+
+
+class _OwnDragTarget(_Target):
+    def get_current_drop(self):
+        return _Drop(drag=object())
+
+
+def test_drags_that_start_inside_mochi_are_refused_silently(tmp_path: Path) -> None:
+    from gi.repository import Gdk
+
+    controller = _Controller()
+    adapter = PocketDropAdapter(
+        _Widget(), controller, target_factory=_OwnDragTarget
+    )
+    file_target = adapter.targets[0]
+    document = tmp_path / "report.pdf"
+    document.write_bytes(b"%PDF")
+
+    assert file_target.callbacks["enter"](file_target, 1.0, 2.0) == Gdk.DragAction(0)
+    assert file_target.callbacks["motion"](file_target, 1.0, 2.0) == Gdk.DragAction(0)
+    assert file_target.callbacks["drop"](file_target, [_File(str(document))], 1.0, 2.0) is False
+
+    assert controller.hover_starts == 0
+    assert controller.received == []
+    assert controller.rejections == 0
+    assert controller.busy_rejections == 0

@@ -14,7 +14,16 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
 from mochi.pocket import PocketItem, PocketItemKind, item_is_available
+from mochi.pocket_actions import folder_uri_for, launch_uri_for
 from mochi.pocket_controller import PocketController
+from mochi.pocket_hover import (
+    DEFAULT_POCKET_HOVER_DELAY_MS,
+    POCKET_HOVER_DELAY_CHOICES_MS,
+    normalize_hover_delay_ms,
+)
+
+
+HOVER_DELAY_LABELS = ("Off", "1.5 s", "2 s", "3 s")
 
 
 POCKET_WINDOW_CSS = """
@@ -202,6 +211,8 @@ class PocketWindow(Gtk.Window):
         controller: PocketController,
         *,
         launcher: Callable[[str], None] = _launch_default,
+        hover_delay_ms: int = DEFAULT_POCKET_HOVER_DELAY_MS,
+        on_hover_delay_changed: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__(title="Mochi Pocket")
         self.set_default_size(500, 520)
@@ -210,6 +221,7 @@ class PocketWindow(Gtk.Window):
         self.add_css_class("mochi-pocket-window")
         self._controller = controller
         self._launcher = launcher
+        self._on_hover_delay_changed = on_hover_delay_changed
         self.rows: dict[str, PocketRowWidgets] = {}
         self.detail_windows: list[PocketTextWindow] = []
         self.clear_dialog: PocketClearDialog | None = None
@@ -242,6 +254,30 @@ class PocketWindow(Gtk.Window):
         subtitle.set_wrap(True)
         subtitle.add_css_class("mochi-pocket-subtitle")
         card.append(subtitle)
+
+        hover_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        hover_label = Gtk.Label(label="Open by resting on Mochi")
+        hover_label.set_xalign(0)
+        hover_label.set_hexpand(True)
+        hover_row.append(hover_label)
+        self.hover_delay_dropdown = Gtk.DropDown.new_from_strings(
+            list(HOVER_DELAY_LABELS)
+        )
+        self.hover_delay_dropdown.set_selected(
+            POCKET_HOVER_DELAY_CHOICES_MS.index(
+                normalize_hover_delay_ms(hover_delay_ms)
+            )
+        )
+        self.hover_delay_dropdown.update_property(
+            [Gtk.AccessibleProperty.LABEL],
+            ["Open Pocket by resting on Mochi"],
+        )
+        # Connect after the initial selection so construction never reports a change.
+        self.hover_delay_dropdown.connect(
+            "notify::selected", self._on_hover_delay_selected
+        )
+        hover_row.append(self.hover_delay_dropdown)
+        card.append(hover_row)
 
         self._error = Gtk.Label()
         self._error.set_xalign(0)
@@ -320,7 +356,7 @@ class PocketWindow(Gtk.Window):
             self._show_error("That item is no longer available.")
             return False
 
-        uri = item.value if item.kind is PocketItemKind.URL else Path(item.value).as_uri()
+        uri = launch_uri_for(item)
         try:
             self._launcher(uri)
         except (GLib.Error, OSError, ValueError) as error:
@@ -337,7 +373,7 @@ class PocketWindow(Gtk.Window):
             self._show_error("That item is no longer available.")
             return False
 
-        folder_uri = Path(item.value).parent.as_uri()
+        folder_uri = folder_uri_for(item)
         try:
             self._launcher(folder_uri)
         except (GLib.Error, OSError, ValueError) as error:
@@ -353,6 +389,13 @@ class PocketWindow(Gtk.Window):
         self._clear_error()
         self._sync_rows_if_needed()
         return True
+
+    def _on_hover_delay_selected(self, dropdown: Gtk.DropDown, _pspec) -> None:
+        index = dropdown.get_selected()
+        if not 0 <= index < len(POCKET_HOVER_DELAY_CHOICES_MS):
+            return
+        if self._on_hover_delay_changed is not None:
+            self._on_hover_delay_changed(POCKET_HOVER_DELAY_CHOICES_MS[index])
 
     def _request_clear_all(self, _button: Gtk.Button) -> None:
         if not self._controller.items or self.clear_dialog is not None:

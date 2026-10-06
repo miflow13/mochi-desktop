@@ -63,6 +63,41 @@ def can_start_pocket_receive(state: MochiState) -> bool:
     return state in POCKET_RECEIVE_STATES
 
 
+# Resting the pointer on Mochi may open the Pocket tray from calm, ambient,
+# and sleep-adjacent states. Hover already wakes a sleeping Mochi, so the tray
+# never waits for the wake animation. Movement, held, Fedora, another direct
+# reaction, and an in-progress Pocket receive keep ownership.
+POCKET_HOVER_ARM_STATES = frozenset(
+    (
+        MochiState.IDLE,
+        MochiState.BLINKING,
+        MochiState.IDLE_EMOTE,
+        MochiState.HEART,
+        MochiState.COMPUTER,
+        MochiState.TYPING,
+        MochiState.WATCHING,
+        MochiState.DANCING,
+        MochiState.SEARCHING,
+        MochiState.SLEEPING,
+        MochiState.WAKING,
+    )
+)
+
+# The tray's mouth animation may interrupt everything Pocket receive may, plus
+# the hover heart, which is usually still playing when a 2 s dwell completes.
+POCKET_OFFER_STATES = POCKET_RECEIVE_STATES | {MochiState.HEART}
+
+
+def can_arm_pocket_hover(state: MochiState) -> bool:
+    """Return whether resting on Mochi may start counting toward the tray."""
+    return state in POCKET_HOVER_ARM_STATES
+
+
+def can_start_pocket_offer(state: MochiState) -> bool:
+    """Return whether the tray-opening mouth animation may claim presentation."""
+    return state in POCKET_OFFER_STATES
+
+
 def can_transition(current: MochiState, requested: MochiState) -> bool:
     """Allow state changes that respect Mochi's behavior priority."""
     if current is requested or requested is MochiState.IDLE:

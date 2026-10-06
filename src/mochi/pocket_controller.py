@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 import logging
 
-from mochi.behavior import can_start_pocket_receive
+from mochi.behavior import can_start_pocket_offer, can_start_pocket_receive
 from mochi.pocket import PocketItem
 from mochi.pocket_store import PocketStore
 from mochi.state import MochiState
@@ -100,6 +100,31 @@ class PocketController:
             return
         self._hover_active = False
         self._resume_normal_presentation()
+
+    def begin_offer(self) -> bool:
+        """Play the short mouth-open reaction as the Pocket tray comes out.
+
+        Presentation only: the caller opens the tray whether or not this
+        succeeds, and nothing is written.
+        """
+        if self._busy or self._hover_active:
+            return False
+        state = self._current_state()
+        if not can_start_pocket_offer(state):
+            return False
+        if state is MochiState.WALKING:
+            self._cancel_walk()
+        else:
+            self._cancel_ambient()
+        if not self._transition(MochiState.EXCITED):
+            self._logger.warning(
+                "Pocket offer presentation was rejected from %s",
+                self._current_state().name,
+            )
+            return False
+        self._mark_interaction()
+        self._play_animation("pocket_offer", "idle")
+        return True
 
     def receive(self, incoming: Iterable[PocketItem]) -> bool:
         candidates = tuple(incoming)

@@ -49,6 +49,9 @@ through the time you naturally spend together.
 
 ## What's new lately
 
+-  **Pocket tray** — rest your pointer on Mochi for two seconds and the things
+  he's holding pop out in a little tray. Click to open, or drag them straight
+  into another app.
 -  **Agent Companion** — Mochi can cowork with **Claude Code** and **Codex**:
   he sips from his mug beside a little monitor while your agent works, waves
   once if it's been waiting on you, and bounces when a long run finishes. Opt in by adding a few agent
@@ -367,6 +370,7 @@ If `~/.local/bin` is not on `PATH`, use `~/.local/bin/mochi`.
 | Double-click | Heart emote |
 | Three quick clicks | Short playful dialogue |
 | Drag | Pick up and reposition Mochi |
+| Rest the pointer on Mochi (2 s) | Open the Pocket tray when he's holding something |
 | Right-click | Bond, Feed, Focus, size/audio, sleep/wake, movement, and app controls |
 | `Ctrl + Alt + E` | Open the Emote Catalogue |
 | `Ctrl + Alt + Shift + M` | Open Mochi Lab developer controls |

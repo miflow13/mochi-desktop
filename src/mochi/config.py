@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from mochi.care import BondState
+from mochi.pocket_hover import DEFAULT_POCKET_HOVER_DELAY_MS, normalize_hover_delay_ms
 from mochi.update.constants import DEFAULT_UPDATE_CHANNEL, UPDATE_CHANNELS
 
 
@@ -118,6 +119,19 @@ class ConfigStore:
         self._save(data)
         self._logger.debug("Edge roam: %s", bool(enabled))
 
+    def load_pocket_hover_delay_ms(self) -> int:
+        """Return how long resting on Mochi takes to open Pocket; 0 is off."""
+        try:
+            value = self._load()["pocket_hover_delay_ms"]
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return DEFAULT_POCKET_HOVER_DELAY_MS
+        return normalize_hover_delay_ms(value)
+
+    def save_pocket_hover_delay_ms(self, delay_ms: int) -> None:
+        data = self._load_or_empty()
+        data["pocket_hover_delay_ms"] = normalize_hover_delay_ms(delay_ms)
+        self._save(data)
+        self._logger.debug("Pocket hover delay: %s ms", data["pocket_hover_delay_ms"])
 
     def load_update_checks_enabled(self) -> bool:
         try:

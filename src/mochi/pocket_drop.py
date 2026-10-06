@@ -129,15 +129,32 @@ class PocketDropAdapter:
         target.connect("enter", self._on_enter)
         target.connect("motion", self._on_motion)
         target.connect("leave", self._on_leave)
-        target.connect("drop", lambda _target, value, _x, _y: self._on_drop(value, receive))
+        target.connect(
+            "drop",
+            lambda target, value, _x, _y: (
+                False if self._is_own_drag(target) else self._on_drop(value, receive)
+            ),
+        )
         self._widget.add_controller(target)
         self._targets.append(target)
 
-    def _on_enter(self, _target, _x: float, _y: float) -> Gdk.DragAction:
+    def _on_enter(self, target, _x: float, _y: float) -> Gdk.DragAction:
+        if self._is_own_drag(target):
+            return Gdk.DragAction(0)
         return self._drag_action()
 
-    def _on_motion(self, _target, _x: float, _y: float) -> Gdk.DragAction:
+    def _on_motion(self, target, _x: float, _y: float) -> Gdk.DragAction:
+        if self._is_own_drag(target):
+            return Gdk.DragAction(0)
         return self._drag_action()
+
+    @staticmethod
+    def _is_own_drag(target) -> bool:
+        """A drag out of Mochi's own Pocket tray must never re-enter it."""
+        get_drop = getattr(target, "get_current_drop", None)
+        drop = get_drop() if callable(get_drop) else None
+        get_drag = getattr(drop, "get_drag", None)
+        return callable(get_drag) and get_drag() is not None
 
     def _on_leave(self, _target) -> None:
         self._controller.end_hover()
