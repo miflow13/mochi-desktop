@@ -286,3 +286,20 @@ def test_clear_all_avoids_duplicate_refresh_when_change_callback_already_synced(
 
     assert window.refresh.call_count == 1
     assert window.rows == {}
+
+
+def test_hover_setting_shows_the_stored_delay() -> None:
+    assert PocketWindow(_Controller(), hover_delay_ms=3000).hover_delay_dropdown.get_selected() == 3
+    assert PocketWindow(_Controller(), hover_delay_ms=0).hover_delay_dropdown.get_selected() == 0
+    assert PocketWindow(_Controller(), hover_delay_ms=2500).hover_delay_dropdown.get_selected() == 2
+
+
+def test_choosing_a_hover_delay_reports_milliseconds() -> None:
+    changes: list[int] = []
+    window = PocketWindow(_Controller(), on_hover_delay_changed=changes.append)
+    assert changes == []
+
+    window.hover_delay_dropdown.set_selected(0)
+    window.hover_delay_dropdown.set_selected(1)
+
+    assert changes == [0, 1500]
