@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from mochi.behavior import can_start_pocket_receive, can_transition
+from mochi.behavior import (
+    can_arm_pocket_hover,
+    can_start_pocket_offer,
+    can_start_pocket_receive,
+    can_transition,
+)
 from mochi.pocket import PocketMutation, make_saved_image_item, make_text_item
 from mochi.pocket_controller import PocketController
 from mochi.state import MochiState
@@ -487,3 +492,112 @@ def test_failed_clear_all_preserves_live_items_and_reports_feedback() -> None:
     assert controller.clear_all() is False
     assert controller.items == (item,)
     assert interaction.feedback == ["I couldn't update Pocket"]
+
+
+HOVER_ARM_STATES = {
+    MochiState.IDLE,
+    MochiState.BLINKING,
+    MochiState.IDLE_EMOTE,
+    MochiState.HEART,
+    MochiState.COMPUTER,
+    MochiState.TYPING,
+    MochiState.WATCHING,
+    MochiState.DANCING,
+    MochiState.SEARCHING,
+    MochiState.SLEEPING,
+    MochiState.WAKING,
+}
+
+
+@pytest.mark.parametrize("state", tuple(MochiState))
+def test_hover_tray_arms_only_from_calm_ambient_or_sleep_states(
+    state: MochiState,
+) -> None:
+    assert can_arm_pocket_hover(state) is (state in HOVER_ARM_STATES)
+
+
+@pytest.mark.parametrize("state", tuple(MochiState))
+def test_offer_may_replace_receive_states_and_the_hover_heart(
+    state: MochiState,
+) -> None:
+    expected = can_start_pocket_receive(state) or state is MochiState.HEART
+    assert can_start_pocket_offer(state) is expected
+
+
+def test_offer_cancels_the_hover_heart_before_claiming_excited() -> None:
+    store = _Store()
+    interaction = _Interaction(MochiState.HEART)
+    controller = _controller(store, interaction)
+
+    assert controller.begin_offer() is True
+
+    assert interaction.events == [
+        "cancel-ambient",
+        "transition:EXCITED",
+        "mark-interaction",
+        "play:pocket_offer:idle",
+    ]
+    assert interaction.state is MochiState.EXCITED
+    assert store.events == []
+    assert interaction.feedback == []
+
+
+def test_offer_cancels_a_walk_instead_of_an_emote() -> None:
+    interaction = _Interaction(MochiState.WALKING)
+    controller = _controller(_Store(), interaction)
+
+    assert controller.begin_offer() is True
+
+    assert interaction.events[0] == "cancel-walk"
+    assert "cancel-ambient" not in interaction.events
+
+
+@pytest.mark.parametrize(
+    "state",
+    (
+        MochiState.SLEEPING,
+        MochiState.WAKING,
+        MochiState.PICKUP,
+        MochiState.DRAGGED,
+        MochiState.DROPPING,
+        MochiState.FEDORA,
+        MochiState.EATING,
+        MochiState.EXCITED,
+        MochiState.BOUNCING,
+        MochiState.SQUISHING,
+    ),
+)
+def test_offer_never_claims_protected_or_direct_owned_states(
+    state: MochiState,
+) -> None:
+    interaction = _Interaction(state)
+    controller = _controller(_Store(), interaction)
+
+    assert controller.begin_offer() is False
+
+    assert interaction.events == []
+    assert interaction.state is state
+
+
+def test_offer_is_skipped_while_a_drag_in_owns_pocket() -> None:
+    interaction = _Interaction(MochiState.IDLE)
+    controller = _controller(_Store(), interaction)
+    assert controller.begin_hover() is True
+    interaction.events.clear()
+
+    assert controller.begin_offer() is False
+    assert interaction.events == []
+
+
+def test_rejected_offer_transition_plays_nothing() -> None:
+    interaction = _Interaction(MochiState.IDLE)
+
+    def reject(state: MochiState) -> bool:
+        interaction.events.append(f"transition:{state.name}")
+        return False
+
+    interaction.transition = reject
+    controller = _controller(_Store(), interaction)
+
+    assert controller.begin_offer() is False
+    assert interaction.events == ["cancel-ambient", "transition:EXCITED"]

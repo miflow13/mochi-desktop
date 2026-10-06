@@ -139,6 +139,14 @@ ANIMATIONS["pocket_finish"] = replace(
     looping=False,
     next_state="idle",
 )
+# The Pocket tray comes out of Mochi's mouth: open, then close, once.
+ANIMATIONS["pocket_offer"] = replace(
+    ANIMATIONS["pocket_grab"],
+    name="pocket_offer",
+    frames=tuple(pocket_grab_frames[index - 1] for index in (4, 5, 6, 7, 8)),
+    looping=False,
+    next_state="idle",
+)
 
 
 class SpriteAtlas:
