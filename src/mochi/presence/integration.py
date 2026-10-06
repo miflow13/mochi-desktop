@@ -805,16 +805,14 @@ class PresenceBuddyMixin:
             ),
             mochi_state=self.state.current.name.lower(),
             context_menu_open=self._context_menu_open,
-            interaction_active=(self._press is not None or self._drag_started),
+            interaction_active=self._presence_interaction_active(),
             transition_active=self.state.current
             in {
                 MochiState.PICKUP,
                 MochiState.DROPPING,
                 MochiState.WAKING,
             },
-            overlay_visible=bool(
-                self._presence_bubble is not None and self._presence_bubble.visible
-            ),
+            overlay_visible=self.presence_speech_visible(),
             application_shutting_down=self._presence_shutting_down,
         )
         action = self._ambient_presence_engine.evaluate(context, now=now)
@@ -830,6 +828,16 @@ class PresenceBuddyMixin:
         if self._show_presence_action(action):
             self._ambient_presence_engine.record_delivered(action, now=now)
         return GLib.SOURCE_CONTINUE
+
+    def _presence_interaction_active(self) -> bool:
+        """Extension seam: direct interaction that ambient speech must wait for."""
+        return self._press is not None or self._drag_started
+
+    def presence_speech_visible(self) -> bool:
+        """Whether Mochi's speech bubble is on screen right now."""
+        return bool(
+            self._presence_bubble is not None and self._presence_bubble.visible
+        )
 
     def _focus_allows_presence_action(self, _action) -> bool:
         """Extension seam for Focus With Mochi without changing AmbiSense rules."""

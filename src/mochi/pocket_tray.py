@@ -71,7 +71,9 @@ row.mochi-tray-row:focus-within .mochi-tray-verb { opacity: 1; }
 row.mochi-tray-missing { opacity: 0.6; }
 button.mochi-tray-quick { min-width: 44px; min-height: 44px; }
 .mochi-tray-error { color: #c01c28; }
-progressbar.mochi-tray-fill > trough > progress { background-color: #79c98b; }
+/* Shorthand: the theme paints progress with a background-image that would
+   cover a background-color alone. */
+progressbar.mochi-tray-fill > trough > progress { background: #79c98b; }
 """
 
 # Primary verb, quick-action label, quick-action icon.
