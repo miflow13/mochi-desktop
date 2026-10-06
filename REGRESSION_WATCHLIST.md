@@ -118,6 +118,9 @@ Use this checklist for interaction/state changes and before release checkpoints.
 - [ ] Passing over Mochi without stopping never shows the peek bar or the tray
 - [ ] Resting on Mochi shows the peek at about 0.6 s and opens the tray at the chosen dwell, with the mouth animation when he is free
 - [ ] Leaving before the dwell ends hides the peek and changes nothing
+- [ ] Resting on the top, middle, or bottom of Mochi opens the tray equally reliably, near every screen edge, and it stays open until the pointer leaves
+- [ ] The peek and tray never flash over Mochi while they are being placed
+- [ ] Mochi does not start an ambient speech bubble while you are resting on him or while the tray is open
 - [ ] The hover tray does not take keyboard focus from the app being typed in
 - [ ] Moving from Mochi into the tray keeps it open; leaving both closes it after about half a second
 - [ ] Closing the tray while still resting on Mochi does not reopen it until the pointer leaves

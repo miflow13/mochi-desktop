@@ -17,6 +17,7 @@ from mochi.pocket_controller import PocketController
 from mochi.pocket_drop import PocketDropAdapter
 from mochi.pocket_hover import (
     DEFAULT_POCKET_HOVER_DELAY_MS,
+    DwellPhase,
     PocketHoverDwell,
     normalize_hover_delay_ms,
 )
@@ -140,11 +141,14 @@ class PocketBuddyMixin:
         )
 
     def _presence_interaction_active(self) -> bool:
-        # Ambient speech waits while the peek or tray is on screen, the same
-        # way it waits for a press or a drag.
+        # Ambient speech waits from the moment the dwell starts counting until
+        # the tray is gone, the same way it waits for a press or a drag.
+        # Otherwise a bubble can start mid-dwell and cancel it.
         tray = self._pocket_tray
-        return super()._presence_interaction_active() or (
-            tray is not None and tray.view is not None
+        return (
+            super()._presence_interaction_active()
+            or self._pocket_dwell.phase is not DwellPhase.IDLE
+            or (tray is not None and tray.view is not None)
         )
 
     # Tray -------------------------------------------------------------------

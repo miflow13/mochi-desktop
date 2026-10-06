@@ -7,6 +7,7 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
+from mochi.pocket_hover import DwellPhase
 from mochi.pocket_integration import PocketBuddyMixin
 from mochi.presence.click_dialogue import PresenceBuddy, PresenceX11Buddy
 from mochi.presence.integration import PresenceBuddyMixin
@@ -471,21 +472,23 @@ class _SpeechHarness(PocketBuddyMixin, _SpeechBase):
 
 
 @pytest.mark.parametrize(
-    ("base_active", "tray", "expected"),
+    ("base_active", "phase", "tray", "expected"),
     (
-        (False, None, False),
-        (False, SimpleNamespace(view=None), False),
-        (False, SimpleNamespace(view="peek"), True),
-        (False, SimpleNamespace(view="tray"), True),
-        (True, None, True),
+        (False, DwellPhase.IDLE, None, False),
+        (False, DwellPhase.IDLE, SimpleNamespace(view=None), False),
+        (False, DwellPhase.ARMED, None, True),
+        (False, DwellPhase.PEEK, SimpleNamespace(view="peek"), True),
+        (False, DwellPhase.OPEN, SimpleNamespace(view="tray"), True),
+        (True, DwellPhase.IDLE, None, True),
     ),
-    ids=("no-tray", "tray-hidden", "peek", "tray", "press"),
+    ids=("idle", "tray-hidden", "counting", "peek", "tray", "press"),
 )
-def test_ambient_speech_waits_while_the_peek_or_tray_is_showing(
-    base_active: bool, tray, expected: bool
+def test_ambient_speech_waits_while_resting_on_mochi_or_the_tray_shows(
+    base_active: bool, phase, tray, expected: bool
 ) -> None:
     harness = object.__new__(_SpeechHarness)
     harness.base_active = base_active
+    harness._pocket_dwell = SimpleNamespace(phase=phase)
     harness._pocket_tray = tray
 
     assert harness._presence_interaction_active() is expected

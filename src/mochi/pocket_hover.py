@@ -15,6 +15,10 @@ POCKET_HOVER_DELAY_CHOICES_MS = (0, 1500, 2000, 3000)
 DEFAULT_POCKET_HOVER_DELAY_MS = 2000
 POCKET_PEEK_DELAY_MS = 600
 POCKET_TRAY_CLOSE_GRACE_MS = 450
+# A leave only counts once it has lasted this long. Mochi's own small windows
+# (the nameplate, the peek) can flash over a resting pointer while the window
+# manager places them, delivering a leave and an enter milliseconds apart.
+POCKET_LEAVE_CONFIRM_MS = 150
 
 TimeoutAdd = Callable[[int, Callable[[], bool]], int]
 SourceRemove = Callable[[int], object]
@@ -84,6 +88,7 @@ class PocketHoverDwell:
     def pointer_entered(self) -> None:
         self._over_mochi = True
         self._cancel("close")
+        self._cancel("leave")
 
     def pointer_moved(self) -> None:
         """Arm on real motion only: a window moving under a still pointer is not a reach."""
@@ -103,20 +108,21 @@ class PocketHoverDwell:
 
     def pointer_left(self) -> None:
         self._over_mochi = False
-        self._needs_leave = False
-        if self._phase in (DwellPhase.ARMED, DwellPhase.PEEK):
-            self._reset_arming()
-        elif self._phase is DwellPhase.OPEN and not self._pinned:
+        if self._phase is DwellPhase.OPEN and not self._pinned:
             self._schedule_close()
+        self._schedule("leave", POCKET_LEAVE_CONFIRM_MS, self._on_leave_confirmed)
 
     def tray_entered(self) -> None:
         self._over_tray = True
         self._cancel("close")
+        self._cancel("leave")
 
     def tray_left(self) -> None:
         self._over_tray = False
         if self._phase is DwellPhase.OPEN and not self._pinned:
             self._schedule_close()
+        elif self._phase in (DwellPhase.ARMED, DwellPhase.PEEK) and not self._over_mochi:
+            self._schedule("leave", POCKET_LEAVE_CONFIRM_MS, self._on_leave_confirmed)
 
     def interrupt(self) -> None:
         """A press, right-click, or drag on Mochi wins over the Pocket."""
@@ -202,6 +208,16 @@ class PocketHoverDwell:
             return False
         self._phase = DwellPhase.OPEN
         self._pinned = False
+        return False
+
+    def _on_leave_confirmed(self) -> bool:
+        self._sources.pop("leave", None)
+        if self._over_mochi:
+            return False
+        self._needs_leave = False
+        # Moving from Mochi onto the peek bar is still reaching for the Pocket.
+        if self._phase in (DwellPhase.ARMED, DwellPhase.PEEK) and not self._over_tray:
+            self._reset_arming()
         return False
 
     def _on_close_due(self) -> bool:

@@ -482,3 +482,97 @@ def test_no_focus_request_needs_an_x11_surface() -> None:
         assert request_no_focus_on_map(window) is True
     finally:
         window.destroy()
+
+
+# Placing without catching the pointer -----------------------------------------
+# Mutter centres a newly mapped transient window over its parent, and a resize
+# grows the window before it can be moved. While the tray is being placed it is
+# pointer-transparent and invisible, so a resting pointer stays on Mochi.
+
+
+@pytest.fixture
+def transparency(monkeypatch):
+    calls: list[bool] = []
+
+    def spy(tray):
+        monkeypatch.setattr(tray, "_set_pointer_transparent", calls.append)
+        return calls
+
+    return spy
+
+
+def test_peek_is_placed_before_it_can_catch_the_pointer(make_tray, transparency) -> None:
+    built = make_tray((make_text_item("one"),))
+    calls = transparency(built.tray)
+
+    built.tray.show_peek(1, 1400)
+
+    assert calls == [True]
+    assert built.tray._settling is True
+    assert built.tray._settle_source is not None
+
+
+def test_settling_ends_once_the_window_has_its_natural_size(make_tray, transparency, monkeypatch) -> None:
+    built = make_tray((make_text_item("one"),))
+    calls = transparency(built.tray)
+    built.tray.show_peek(1, 1400)
+    monkeypatch.setattr(built.tray, "_natural_size", lambda: (176, 45))
+
+    built.tray._maybe_finish_settle(150, 30)
+    assert built.tray._settling is True
+
+    built.tray._maybe_finish_settle(176, 45)
+    assert built.tray._settling is False
+    assert calls == [True, False]
+    assert built.tray._settle_source is None
+
+
+def test_settling_has_a_fallback_so_the_tray_never_stays_hidden(make_tray, transparency) -> None:
+    built = make_tray((make_text_item("one"),))
+    calls = transparency(built.tray)
+    built.tray.show_peek(1, 1400)
+
+    assert built.tray._on_settle_timeout() is GLib.SOURCE_REMOVE
+
+    assert built.tray._settling is False
+    assert calls == [True, False]
+
+
+def test_growing_from_peek_to_tray_settles_again(make_tray, transparency) -> None:
+    built = make_tray((make_text_item("one"),))
+    calls = transparency(built.tray)
+    built.tray.show_peek(1, 1400)
+    built.tray._finish_settle()
+
+    built.tray.open(focus=False)
+
+    assert calls == [True, False, True]
+    assert built.tray._settling is True
+
+
+def test_closing_mid_settle_restores_the_pointer_and_drops_the_timer(make_tray, transparency) -> None:
+    built = make_tray((make_text_item("one"),))
+    calls = transparency(built.tray)
+    built.tray.show_peek(1, 1400)
+
+    built.tray.close()
+
+    assert calls == [True, False]
+    assert built.tray._settling is False
+    assert built.tray._settle_source is None
+
+
+def test_size_changes_reposition_the_tray(make_tray) -> None:
+    built = make_tray((make_text_item("one"),))
+    built.tray.show_peek(1, 1400)
+
+    assert built.tray._layout_handler is not None
+
+
+def test_real_pointer_transparency_toggles_input_and_opacity(make_tray) -> None:
+    built = make_tray((make_text_item("one"),))
+
+    built.tray._set_pointer_transparent(True)
+    assert built.tray.window.get_opacity() == 0.0
+    built.tray._set_pointer_transparent(False)
+    assert built.tray.window.get_opacity() == 1.0

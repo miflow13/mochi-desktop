@@ -8,6 +8,7 @@ import pytest
 
 from mochi.pocket_hover import (
     DEFAULT_POCKET_HOVER_DELAY_MS,
+    POCKET_LEAVE_CONFIRM_MS,
     DwellPhase,
     PocketHoverDwell,
     normalize_hover_delay_ms,
@@ -230,6 +231,7 @@ def test_no_reopen_loop_until_the_pointer_leaves() -> None:
     assert harness.events == ["close"]
 
     harness.dwell.pointer_left()
+    harness.clock.advance(200)
     harness.rest()
     harness.clock.advance(2000)
     assert harness.events == ["close", "peek:1400", "open:hover"]
@@ -287,6 +289,7 @@ def test_press_resets_arming_and_waits_for_leave() -> None:
     assert harness.events == ["peek:1400", "hide-peek"]
 
     harness.dwell.pointer_left()
+    harness.clock.advance(200)
     harness.rest()
     harness.clock.advance(2000)
     assert harness.events[-1] == "open:hover"
@@ -387,3 +390,81 @@ def test_shutdown_cancels_every_timer() -> None:
 )
 def test_only_supported_delays_survive_normalization(raw, expected: int) -> None:
     assert normalize_hover_delay_ms(raw) == expected
+
+
+# Stray crossing events -------------------------------------------------------
+# Mochi's own small windows (the nameplate, the peek) can flash over a resting
+# pointer while the window manager places them, which delivers a leave and an
+# enter a few milliseconds apart. That must never count as the user leaving.
+
+
+def test_leave_confirmation_is_short() -> None:
+    assert 100 <= POCKET_LEAVE_CONFIRM_MS <= 200
+
+
+def test_a_stray_leave_and_enter_does_not_reset_arming() -> None:
+    harness = _Harness()
+    harness.rest()
+    harness.clock.advance(300)
+
+    harness.dwell.pointer_left()
+    harness.clock.advance(20)
+    harness.dwell.pointer_entered()
+    harness.clock.advance(1700)
+
+    assert harness.events == ["peek:1400", "open:hover"]
+
+
+def test_a_stray_leave_during_the_peek_keeps_it() -> None:
+    harness = _Harness()
+    harness.rest()
+    harness.clock.advance(700)
+
+    harness.dwell.pointer_left()
+    harness.clock.advance(20)
+    harness.dwell.pointer_entered()
+    harness.clock.advance(1300)
+
+    assert harness.events == ["peek:1400", "open:hover"]
+
+
+def test_moving_onto_the_peek_bar_keeps_counting() -> None:
+    harness = _Harness()
+    harness.rest()
+    harness.clock.advance(700)
+
+    harness.dwell.pointer_left()
+    harness.dwell.tray_entered()
+    harness.clock.advance(1300)
+
+    assert harness.events == ["peek:1400", "open:hover"]
+
+
+def test_leaving_the_peek_bar_for_elsewhere_resets_after_confirmation() -> None:
+    harness = _Harness()
+    harness.rest()
+    harness.clock.advance(700)
+    harness.dwell.pointer_left()
+    harness.dwell.tray_entered()
+
+    harness.dwell.tray_left()
+    harness.clock.advance(POCKET_LEAVE_CONFIRM_MS - 1)
+    assert harness.events == ["peek:1400"]
+    harness.clock.advance(1)
+
+    assert harness.events == ["peek:1400", "hide-peek"]
+    assert harness.dwell.phase is DwellPhase.IDLE
+
+
+def test_a_stray_leave_does_not_count_as_leaving_for_the_rearm_rule() -> None:
+    harness = _Harness()
+    harness.open_by_hover()
+    harness.dwell.close()
+
+    harness.dwell.pointer_left()
+    harness.clock.advance(20)
+    harness.dwell.pointer_entered()
+    harness.dwell.pointer_moved()
+    harness.clock.advance(5000)
+
+    assert harness.events == ["close"]

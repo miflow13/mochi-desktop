@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import logging
 
+import cairo
 import gi
 
 gi.require_version("Gdk", "4.0")
@@ -35,6 +36,7 @@ TRAY_GAP_PX = 8
 TRAY_MAX_LIST_HEIGHT = 480
 TRAY_FEEDBACK_MS = 1500
 PEEK_WIDTH = 150
+TRAY_SETTLE_FALLBACK_MS = 300
 EMPTY_TRAY_TEXT = "Nothing in here yet. Drag a file, link, image, or text onto Mochi."
 LAUNCH_FAILED_TEXT = "Couldn't open it. It's still here."
 
@@ -75,6 +77,11 @@ button.mochi-tray-quick { min-width: 44px; min-height: 44px; }
    cover a background-color alone. */
 progressbar.mochi-tray-fill > trough > progress { background: #79c98b; }
 """
+
+# While being placed the tray takes no pointer input; afterwards it takes all
+# of it. X clips the "everything" region to the window, whatever its size.
+_NO_INPUT = cairo.Region()
+_ALL_INPUT = cairo.Region(cairo.RectangleInt(0, 0, 32767, 32767))
 
 # Primary verb, quick-action label, quick-action icon.
 _ROW_ACTIONS = {
@@ -213,8 +220,9 @@ class PocketTray:
     """One small window: a filling peek bar that becomes the Pocket tray.
 
     The dwell decides when it opens and closes. The tray owns every source it
-    creates (positioning, fill tick, inline feedback) and the text windows it
-    opened, and releases them in close() and destroy().
+    creates (positioning, settling, fill tick, inline feedback), its surface
+    layout handler, and the text windows it opened, and releases them in
+    close() and destroy().
     """
 
     def __init__(
@@ -250,6 +258,9 @@ class PocketTray:
         self._fill_tick_id: int | None = None
         self._feedback_sources: dict[str, int] = {}
         self._position_sources: set[int] = set()
+        self._settling = False
+        self._settle_source: int | None = None
+        self._layout_handler: int | None = None
 
         self.window = Gtk.Window()
         self.window.set_title("Mochi's Pocket")
@@ -299,6 +310,9 @@ class PocketTray:
 
     def open(self, *, focus: bool) -> None:
         self._stop_fill()
+        if self.window.get_visible():
+            # Growing from the small peek happens before the window can move.
+            self._begin_settle()
         self.refresh(force=True)
         self._stack.set_visible_child_name("tray")
         self.view = "tray"
@@ -331,6 +345,10 @@ class PocketTray:
 
     def destroy(self) -> None:
         self._hide()
+        surface = self.window.get_surface()
+        if surface is not None and self._layout_handler is not None:
+            surface.disconnect(self._layout_handler)
+        self._layout_handler = None
         details = tuple(self.detail_windows)
         self.detail_windows.clear()
         for detail in details:
@@ -627,16 +645,22 @@ class PocketTray:
     # Window lifecycle -------------------------------------------------------
 
     def _present(self, *, focus: bool) -> None:
-        if focus:
-            self.window.present()
-        elif not self.window.get_visible():
+        if not self.window.get_visible():
             self.window.realize()
-            request_no_focus_on_map(self.window)
-            self.window.set_visible(True)
+            self._watch_surface_layout()
+            self._begin_settle()
+            if focus:
+                self.window.present()
+            else:
+                request_no_focus_on_map(self.window)
+                self.window.set_visible(True)
+        elif focus:
+            self.window.present()
         self._schedule_position()
 
     def _hide(self) -> None:
         self._stop_fill()
+        self._finish_settle()
         self._cancel_position()
         self._cancel_all_feedback()
         self.view = None
@@ -664,6 +688,70 @@ class PocketTray:
             return
         if self._was_active and not self._dragging and window.get_visible():
             self._dwell.close()
+
+    # Placing ------------------------------------------------------------------
+    # Mutter centres a newly mapped transient window over its parent, and a
+    # resize grows the window before it can be moved. Either puts the tray under
+    # a resting pointer for a moment, and the crossing events read as the user
+    # leaving Mochi. Until the tray sits at its natural size in its final spot
+    # it takes no pointer input and is not drawn.
+
+    def _set_pointer_transparent(self, transparent: bool) -> None:
+        self.window.realize()
+        surface = self.window.get_surface()
+        if surface is not None:
+            surface.set_input_region(_NO_INPUT if transparent else _ALL_INPUT)
+        self.window.set_opacity(0.0 if transparent else 1.0)
+
+    def _begin_settle(self) -> None:
+        self._cancel_settle_timer()
+        self._settling = True
+        self._set_pointer_transparent(True)
+        self._settle_source = GLib.timeout_add(
+            TRAY_SETTLE_FALLBACK_MS, self._on_settle_timeout
+        )
+
+    def _finish_settle(self) -> None:
+        self._cancel_settle_timer()
+        if not self._settling:
+            return
+        self._settling = False
+        self._set_pointer_transparent(False)
+
+    def _maybe_finish_settle(self, width: int, height: int) -> None:
+        if not self._settling:
+            return
+        natural_width, natural_height = self._natural_size()
+        if abs(width - natural_width) <= 1 and abs(height - natural_height) <= 1:
+            self._finish_settle()
+
+    def _on_settle_timeout(self) -> bool:
+        # Never leave the tray hidden because a size never matched exactly.
+        self._settle_source = None
+        self._position_now()
+        self._finish_settle()
+        return GLib.SOURCE_REMOVE
+
+    def _cancel_settle_timer(self) -> None:
+        source_id = self._settle_source
+        self._settle_source = None
+        if source_id is not None:
+            GLib.source_remove(source_id)
+
+    def _natural_size(self) -> tuple[int, int]:
+        _minimum, natural = self.window.get_preferred_size()
+        return natural.width, natural.height
+
+    def _watch_surface_layout(self) -> None:
+        if self._layout_handler is not None:
+            return
+        surface = self.window.get_surface()
+        if surface is not None:
+            self._layout_handler = surface.connect("layout", self._on_surface_layout)
+
+    def _on_surface_layout(self, _surface, width: int, height: int) -> None:
+        if self.window.get_visible():
+            self._position_now(width, height)
 
     def _start_fill(self) -> None:
         self._stop_fill()
@@ -713,7 +801,7 @@ class PocketTray:
             GLib.source_remove(source_id)
         self._position_sources.clear()
 
-    def _position_now(self) -> None:
+    def _position_now(self, width: int | None = None, height: int | None = None) -> None:
         if not self.window.get_visible():
             return
         owner_position = get_window_position(self._owner)
@@ -721,8 +809,8 @@ class PocketTray:
             return
         scale = _window_coordinate_scale(self._owner)
         owner_x, owner_y = owner_position
-        width = self.window.get_width()
-        height = self.window.get_height()
+        width = self.window.get_width() if width is None else width
+        height = self.window.get_height() if height is None else height
         if width <= 1:
             width = TRAY_WIDTH if self.view == "tray" else PEEK_WIDTH
         if height <= 1:
@@ -743,3 +831,4 @@ class PocketTray:
             coordinate_scale=scale,
         )
         move_window(self.window, x, y)
+        self._maybe_finish_settle(width, height)
