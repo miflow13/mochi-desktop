@@ -10,6 +10,7 @@ from mochi.sound import SoundEvent
 from mochi.state import MochiState
 
 
+
 class BuddyDragReleaseTests(unittest.TestCase):
     def test_drag_release_plays_authored_drop_animation(self) -> None:
         buddy = SimpleNamespace(
@@ -45,10 +46,12 @@ class BuddyDragReleaseTests(unittest.TestCase):
             _cancel_active_emote=Mock(),
             _transition_to=Mock(return_value=False),
             _play_animation=Mock(),
+            _sound=Mock()
         )
 
         self.assertFalse(Buddy._begin_pickup(buddy))
 
+        buddy._sound.play.assert_not_called()
         buddy._play_animation.assert_not_called()
 
     def test_drag_visual_setup_does_not_replace_active_pickup(self) -> None:
@@ -348,6 +351,7 @@ class BuddyRefactorRegressionTests(unittest.TestCase):
             _transition_to=Mock(),
             _play_animation=Mock(),
             _logger=Mock(),
+            _sound=Mock(),
         )
 
         Buddy._begin_sleep(buddy)
@@ -358,6 +362,7 @@ class BuddyRefactorRegressionTests(unittest.TestCase):
         buddy._click_reactions.clear.assert_not_called()
         buddy._transition_to.assert_not_called()
         buddy._play_animation.assert_not_called()
+        buddy._sound.play.assert_not_called()
 
     def test_accepted_sleep_cleans_up_then_transitions(self) -> None:
         buddy = SimpleNamespace(
@@ -369,6 +374,7 @@ class BuddyRefactorRegressionTests(unittest.TestCase):
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),
             _logger=Mock(),
+            _sound=Mock(),
         )
 
         Buddy._begin_sleep(buddy)
@@ -378,6 +384,7 @@ class BuddyRefactorRegressionTests(unittest.TestCase):
         buddy._cancel_walk.assert_called_once_with()
         buddy._click_reactions.clear.assert_called_once_with()
         buddy._transition_to.assert_called_once_with(MochiState.SLEEPING)
+        buddy._sound.play.assert_called_once_with(SoundEvent.SLEEP)
         buddy._play_animation.assert_called_once_with("sleep")
 
     def test_developer_quit_closes_menu_before_quitting(self) -> None:
@@ -451,6 +458,7 @@ class BuddyEmoteTests(unittest.TestCase):
             _transition_to=Mock(return_value=True),
             _play_animation=Mock(),
             _is_idle_visual_active=Mock(return_value=True),
+            _sound=Mock(),
         )
 
         with patch("mochi.ambient_activity.time.monotonic", return_value=10.0):
@@ -458,8 +466,13 @@ class BuddyEmoteTests(unittest.TestCase):
         buddy.state.current = MochiState.DRAGGED
         with patch("mochi.ambient_activity.time.monotonic", return_value=12.0):
             self.assertFalse(Buddy._start_heart_emote(buddy))
+        buddy.state.current = MochiState.IDLE
+        buddy._last_heart_started = 0.0
+        with patch("mochi.ambient_activity.time.monotonic", return_value=10.0):
+            self.assertTrue(Buddy._start_heart_emote(buddy))
 
-        buddy._play_animation.assert_not_called()
+        buddy._sound.play.assert_called_once_with(SoundEvent.HEART)
+        buddy._play_animation.assert_called_once_with("heart")
 
     def test_computer_emote_plays_single_animation(self) -> None:
         buddy = SimpleNamespace(

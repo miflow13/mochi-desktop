@@ -68,6 +68,13 @@ Use this checklist for interaction/state changes and before release checkpoints.
 - [ ] Rain audio does not create duplicate playback channels
 - [ ] Focus/rain sources are removed on stop and shutdown
 
+## Interaction Audio
+
+- [ ] Rapid clicks do not create stacked audio
+- [ ] Sleep, wake, and heart sounds match their animation timing
+- [ ] Muting disables interaction sounds cleanly
+- [ ] Missing optional sound files do not break interactions
+
 ## Bond Progression
 
 - [ ] Bond state restores after restart

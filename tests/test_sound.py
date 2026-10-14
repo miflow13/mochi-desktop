@@ -13,6 +13,11 @@ class FakeBackend:
         self.calls.append((path, volume))
 
 
+class FailingBackend(FakeBackend):
+    def play(self, path: Path, volume: float) -> None:
+        raise OSError("Audio unavailable")
+
+
 class SoundManagerTests(unittest.TestCase):
     def test_missing_placeholder_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -79,6 +84,48 @@ class SoundManagerTests(unittest.TestCase):
         self.assertEqual(manager.volume, 1.0)
         manager.set_volume(-1)
         self.assertEqual(manager.volume, 0.0)
+
+    def test_click_sound_respects_cooldown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "mochi_chirp_01.ogg").touch()
+            backend = FakeBackend()
+            manager = SoundManager(asset_root=root, backend=backend)
+
+            current_time = 10.0
+            manager._clock = lambda: current_time
+
+            self.assertTrue(manager.play(SoundEvent.CLICK))
+
+            current_time = 10.05
+            self.assertFalse(manager.play(SoundEvent.CLICK))
+            self.assertEqual(len(backend.calls), 1)
+
+            current_time = 10.11
+            self.assertTrue(manager.play(SoundEvent.CLICK))
+            self.assertEqual(len(backend.calls), 2)
+
+    def test_lifecycle_event_files_are_mapped(self) -> None:
+        self.assertEqual(SoundManager.EVENT_FILES[SoundEvent.SLEEP], "sleep.ogg")
+        self.assertEqual(SoundManager.EVENT_FILES[SoundEvent.WAKE], "wake.ogg")
+        self.assertEqual(SoundManager.EVENT_FILES[SoundEvent.HEART], "heart.ogg")
+
+    def test_failed_playback_does_not_start_cooldown(self) -> None:
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    (root / "mochi_chirp_01.ogg").touch()
+                    backend = FailingBackend()
+                    manager = SoundManager(asset_root=root, backend=backend)
+
+                    current_time = 10.0
+                    manager._clock = lambda: current_time
+
+                    self.assertFalse(manager.play(SoundEvent.CLICK))
+
+                    current_time = 10.01
+                    self.assertFalse(manager.play(SoundEvent.CLICK))
+
+                    self.assertEqual(manager._last_played, {})
 
 
 if __name__ == "__main__":

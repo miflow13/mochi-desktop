@@ -19,6 +19,10 @@ Mochi is still in early public alpha, so behavior, configuration, and compatibil
   files, commands, or its replies, and Mochi makes no network requests. See
   [Agent Companion](docs/agent-companion.md) for setup.
 
+- Mochi's interaction audio now supports click, pickup/drop, sleep, wake, and
+  heart feedback, with mute support, safe handling of missing optional files,
+  and a short delay that prevents repeated sounds from stacking.
+
 ## 0.4.1 — Stabilization & Portability
 
 Mochi notices where your attention goes, and stays animated and updatable

@@ -489,6 +489,7 @@ class Buddy(Gtk.DrawingArea):
         if not self._transition_to(MochiState.HEART):
             return False
         self._last_heart_started = now
+        self._sound.play(SoundEvent.HEART)
         self._play_animation("heart")
         return True
 
@@ -892,6 +893,7 @@ class Buddy(Gtk.DrawingArea):
         self._click_reactions.clear()
         if not self._transition_to(MochiState.SLEEPING):
             return
+        self._sound.play(SoundEvent.SLEEP)
         self._play_animation("sleep")
         self._logger.debug("Mochi sleeping")
 
@@ -907,6 +909,7 @@ class Buddy(Gtk.DrawingArea):
         self._transition_to(MochiState.WAKING)
         self._user_idle = False
         self._mark_interaction()
+        self._sound.play(SoundEvent.WAKE)
         self._play_animation("wake", after="idle")
         self._logger.debug("Mochi awakened")
 

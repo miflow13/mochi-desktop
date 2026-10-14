@@ -10,6 +10,8 @@ import subprocess
 import sys
 from enum import StrEnum
 from typing import Protocol
+import time
+from collections.abc import Callable
 
 
 class AudioBackend(Protocol):
@@ -40,6 +42,9 @@ class SoundEvent(StrEnum):
     SPAWN = "spawn"
     EXIT = "exit"
     MENU_OPEN = "menu_open"
+    SLEEP = "sleep"
+    WAKE = "wake"
+    HEART = "heart"
 
 
 @dataclass(frozen=True)
@@ -287,6 +292,9 @@ class SoundManager:
         SoundEvent.SPAWN: "spawn.ogg",
         SoundEvent.EXIT: "exit.ogg",
         SoundEvent.MENU_OPEN: "menu_open.ogg",
+        SoundEvent.SLEEP: "sleep.ogg",
+        SoundEvent.WAKE: "wake.ogg",
+        SoundEvent.HEART: "heart.ogg",
     }
 
     # Keep lifecycle cues quieter than direct interaction sounds.
@@ -294,6 +302,12 @@ class SoundManager:
         SoundEvent.SPAWN: 0.35,
         SoundEvent.EXIT: 0.28,
         SoundEvent.MENU_OPEN: 0.22,
+    }
+
+    EVENT_COOLDOWNS = {
+        SoundEvent.CLICK: 0.10,
+        SoundEvent.PET: 0.10,
+        SoundEvent.PICKUP: 0.20,
     }
 
     def __init__(
@@ -309,6 +323,8 @@ class SoundManager:
         self.volume = self._clamp_volume(volume)
         self.muted = bool(muted)
         self._missing_logged: set[SoundEvent] = set()
+        self._clock: Callable[[], float] = time.monotonic
+        self._last_played: dict[SoundEvent, float] = {}
 
     def play(self, event: SoundEvent) -> bool:
         filename = self.EVENT_FILES.get(event)
@@ -316,6 +332,13 @@ class SoundManager:
             self._logger.warning("Unknown sound event: %s", event)
             return False
         if self.muted or self.volume <= 0:
+            return False
+
+        now = self._clock()
+        cooldown = self.EVENT_COOLDOWNS.get(event, 0.0)
+        last_played = self._last_played.get(event, float("-inf"))
+
+        if now - last_played < cooldown:
             return False
 
         path = self.asset_root / filename
@@ -331,10 +354,12 @@ class SoundManager:
         effective_volume = self.volume * self.EVENT_GAINS.get(event, 1.0)
         try:
             self.backend.play(path, effective_volume)
+            self._last_played[event] = now
+            return True
         except OSError as error:
             self._logger.warning("Could not play sound %s: %s", path, error)
             return False
-        return True
+
 
     def play_level_up(self) -> bool:
         """Public hook for the future progression system."""

@@ -5,7 +5,8 @@ from types import SimpleNamespace
 from mochi.buddy import Buddy
 from mochi.behavior import ClickReactionBuffer
 from mochi.state import MochiState, StateMachine
-
+from mochi.sound import SoundEvent
+from unittest.mock import Mock
 
 class Lifecycle:
     def __init__(self):
@@ -24,6 +25,7 @@ class Lifecycle:
         self.player = SimpleNamespace(animation=None, play=self.play)
         self.played = []
         self._play_animation("idle")
+        self._sound = SimpleNamespace(play=Mock())
 
     def __getattr__(self, name):
         attribute = getattr(Buddy, name)
@@ -74,6 +76,13 @@ def test_direct_activity_clears_deferred_idle_and_repeats_cycles():
         assert buddy.state.current is MochiState.IDLE
     assert buddy.played.count("sleep") == 2
     assert buddy.played.count("wake") == 2
+    assert buddy._sound.play.call_count == 4
+    assert [call.args[0] for call in buddy._sound.play.call_args_list] == [
+        SoundEvent.SLEEP,
+        SoundEvent.WAKE,
+        SoundEvent.SLEEP,
+        SoundEvent.WAKE,
+    ]
 
 
 def test_idle_defers_context_and_retries_after_context_ends():

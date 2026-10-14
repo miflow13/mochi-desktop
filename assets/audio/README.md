@@ -7,7 +7,14 @@ Audio files in this directory are optional interaction cues loaded by `SoundMana
 - `spawn.ogg` — launch cue
 - `exit.ogg` — shutdown cue
 - `menu_open.ogg` — context-menu cue
+- `sleep.ogg` — sleep transition
+- `wake.ogg` — wake transition
+- `heart.ogg` — heart emote
+- `pickup.ogg` — pickup interaction
+- `drop.ogg` — drop interaction
+- `pet.wav` — click/squish reaction
 
+Repeated sounds have a short delay between plays to prevent audio spam.
 Missing optional sounds are skipped safely.
 
 ## Focus soundscapes
