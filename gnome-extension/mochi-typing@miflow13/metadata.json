@@ -4,7 +4,8 @@
   "description": "Sends privacy-safe activity signals to Mochi and owns Mochi's privacy-safe global shortcuts. No typed content, key identity, file name, or path is transmitted.",
   "shell-version": [
     "50"
-  ],
+     "51"
+   ],
   "version": 5,
   "settings-schema": "org.gnome.shell.extensions.mochi-activity"
 }
